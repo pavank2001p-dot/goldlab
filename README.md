@@ -8,6 +8,16 @@ web/   Next.js site (Vercel). Proxies /api/* to the API so the session cookie is
 api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news and the assistant.
 ```
 
+## What's built
+
+- **Chart**: hourly and daily XAU/USD candles back to 2010, refreshing every minute.
+- **Accounts**: email and password sign-up, cookie sessions.
+- **Backtests** (`api/app/backtest.py`): moving-average crossover, channel breakout, RSI mean reversion and
+  Bollinger band reversion. Signals on each close fill at the next open; spread, overnight swap,
+  stop loss and take profit are modelled, and a test stops if the account reaches zero. Results are saved per user.
+- **Trade log** (`api/app/trades.py`): manual entry or CSV import (MetaTrader 4/5 and most broker exports; gold
+  rows only; re-imports skip known tickets). Produces the same report as a backtest (`api/app/report.py`).
+
 ## Run locally
 
 Needs Node 22, Python 3.13 and Postgres 16.
