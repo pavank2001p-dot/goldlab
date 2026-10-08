@@ -18,18 +18,20 @@ export default function Header() {
 
   return (
     <header className="border-b border-border">
-      <div className="mx-auto flex max-w-6xl items-center gap-6 px-4 py-3">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
         <Link href="/" className="flex items-center gap-2 font-semibold">
           <span className="inline-block h-3 w-3 rounded-sm bg-gold" />
           GoldLab
         </Link>
-        <nav className="flex gap-4 text-sm text-muted">
+        <nav className="order-last flex w-full gap-4 text-sm text-muted sm:order-none sm:w-auto">
           <Link href="/chart" className="hover:text-foreground">Chart</Link>
+          <Link href="/backtest" className="hover:text-foreground">Backtest</Link>
+          <Link href="/trades" className="hover:text-foreground">Trade log</Link>
         </nav>
         <div className="ml-auto flex items-center gap-3 text-sm">
           {user === undefined ? null : user ? (
             <>
-              <Link href="/account" className="text-muted hover:text-foreground">{user.name || user.email}</Link>
+              <Link href="/account" className="max-w-40 truncate text-muted hover:text-foreground">{user.name || user.email}</Link>
               <button onClick={logout} className="rounded-md border border-border px-3 py-1.5 hover:bg-surface">
                 Log out
               </button>

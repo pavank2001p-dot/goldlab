@@ -4,10 +4,10 @@ import PriceTicker from "@/components/PriceTicker";
 
 const features = [
   { title: "Live gold chart", body: "Hourly and daily XAU/USD candles back to 2010.", ready: true },
-  { title: "Strategy backtests", body: "Test moving-average, breakout and other strategies with real spreads and swaps.", ready: false },
+  { title: "Strategy backtests", body: "Test moving-average, breakout and other strategies with real spreads and swaps.", ready: true },
   { title: "News that moves gold", body: "Headlines tagged as good or bad for gold, plus the Fed and inflation calendar.", ready: false },
   { title: "Fits your risk appetite", body: "A short quiz sets your profile; every backtest says whether it fits you.", ready: false },
-  { title: "Trade log", body: "Log your own trades and get the same report as a backtest.", ready: false },
+  { title: "Trade log", body: "Log your own trades and get the same report as a backtest.", ready: true },
   { title: "AI assistant", body: "Ask questions about your trades, backtests and the news, in plain language.", ready: false },
 ];
 
