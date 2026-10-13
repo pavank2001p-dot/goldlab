@@ -125,6 +125,39 @@ export type Trade = {
 export type TradeInput = Omit<Trade, "id" | "source" | "pnl">;
 export type ImportResult = { imported: number; duplicates: number; skipped: string[]; skipped_count: number };
 
+export type NewsItem = {
+  id: number;
+  headline: string;
+  summary: string;
+  url: string;
+  publisher: string;
+  published_at: string;
+  relevance: number;
+  impact: "bullish" | "bearish" | "neutral" | null;
+  reason: string | null;
+};
+export type NewsFeed = { configured: boolean; tagging: boolean; items: NewsItem[] };
+export type CalendarEvent = {
+  id: number;
+  ts: string;
+  country: string;
+  title: string;
+  impact: string;
+  forecast: string;
+  previous: string;
+  source: string;
+  why: string;
+};
+export type RiskQuestion = { key: string; text: string; options: string[] };
+export type RiskLimits = { label: string; summary: string; max_risk_per_trade_pct: number; max_drawdown_pct: number; max_leverage: number };
+export type RiskProfile = RiskLimits & {
+  profile: "conservative" | "moderate" | "aggressive";
+  score: number;
+  max_score: number;
+  answers: Record<string, number>;
+  updated_at: string;
+};
+
 export const api = {
   me: () => call<User>("/auth/me"),
   signup: (email: string, password: string, name: string) =>
@@ -148,6 +181,12 @@ export const api = {
   addTrade: (t: TradeInput) => call<Trade>("/trades", { method: "POST", body: JSON.stringify(t) }),
   deleteTrade: (id: number) => call<void>(`/trades/${id}`, { method: "DELETE" }),
   tradeReport: (capital: number) => call<Report>(`/trades/report?capital=${capital}`),
+  news: (goldOnly = false) => call<NewsFeed>(`/news?limit=100${goldOnly ? "&gold_only=true" : ""}`),
+  calendar: (days = 14) => call<CalendarEvent[]>(`/calendar?days=${days}`),
+  riskQuiz: () => call<{ questions: RiskQuestion[]; profiles: Record<string, RiskLimits> }>("/risk/quiz"),
+  riskProfile: () => call<RiskProfile>("/risk/profile"),
+  saveRiskProfile: (answers: Record<string, number>) =>
+    call<RiskProfile>("/risk/profile", { method: "POST", body: JSON.stringify({ answers }) }),
   importTrades: (file: File, contractSize: number) => {
     const f = new FormData();
     f.append("file", file);

@@ -18,6 +18,14 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
 - **Trade log** (`api/app/trades.py`): manual entry or CSV import (MetaTrader 4/5 and most broker exports; gold
   rows only; re-imports skip known tickets). Produces the same report as a backtest (`api/app/report.py`).
 
+- **News** (`api/app/news.py`): Finnhub headlines filtered to gold and its macro drivers, each tagged by
+  Claude (structured JSON output, model set by `NEWS_MODEL`) as bullish, bearish or neutral for gold with a
+  one-line reason. Needs `FINNHUB_API_KEY` and `ANTHROPIC_API_KEY`; without them the page says it isn't connected.
+- **US event calendar** (`api/app/calendar.py`): 2026 FOMC decisions seeded from the Fed's calendar, plus
+  this week's USD high/medium-impact releases from the public ForexFactory JSON feed (`CALENDAR_FEED_URL`).
+- **Risk quiz** (`api/app/risk.py`): eight questions place a user as conservative, moderate or aggressive,
+  with risk-per-trade, drawdown and leverage limits that week 4's fit verdicts will check against.
+
 ## Run locally
 
 Needs Node 22, Python 3.13 and Postgres 16.
@@ -57,7 +65,8 @@ latest bars; set `ENABLE_SCHEDULER=true` to have the API do this every `UPDATE_I
 **API on Railway**
 1. New project from this GitHub repo, root directory `api` (uses `api/Dockerfile`), and add a Postgres plugin.
 2. Variables: `DATABASE_URL=${{Postgres.DATABASE_URL}}`, `JWT_SECRET=<long random string>`,
-   `COOKIE_SECURE=true`, `PRICE_SOURCE=dukascopy`, `ENABLE_SCHEDULER=true`.
+   `COOKIE_SECURE=true`, `PRICE_SOURCE=dukascopy`, `ENABLE_SCHEDULER=true`, and for news
+   `FINNHUB_API_KEY` and `ANTHROPIC_API_KEY`.
 3. First boot starts the backfill from 2010 in the background; the chart fills in as it runs.
 
 **Site on Vercel**

@@ -6,3 +6,4 @@ PyJWT==2.15.1
 pydantic[email]==2.13.5
 httpx==0.28.1
 python-multipart==0.0.32
+anthropic==1.13.0

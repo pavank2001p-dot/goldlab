@@ -13,5 +13,5 @@ from app.main import app
 def client():
     with TestClient(app) as c:
         with db.conn() as conn:
-            conn.execute("TRUNCATE users, candles, meta, backtests, trades RESTART IDENTITY CASCADE")
+            conn.execute("TRUNCATE users, candles, meta, backtests, trades, news, events, risk_profiles RESTART IDENTITY CASCADE")
         yield c

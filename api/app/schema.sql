@@ -57,3 +57,43 @@ CREATE TABLE IF NOT EXISTS trades (
 );
 CREATE INDEX IF NOT EXISTS trades_user_idx ON trades (user_id, open_time DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS trades_external_idx ON trades (user_id, external_id) WHERE external_id IS NOT NULL;
+
+-- Gold-relevant headlines, tagged by Claude with their likely effect on gold.
+CREATE TABLE IF NOT EXISTS news (
+    id           BIGSERIAL PRIMARY KEY,
+    source       TEXT NOT NULL,
+    external_id  TEXT NOT NULL,
+    headline     TEXT NOT NULL,
+    summary      TEXT NOT NULL DEFAULT '',
+    url          TEXT NOT NULL DEFAULT '',
+    publisher    TEXT NOT NULL DEFAULT '',
+    published_at TIMESTAMPTZ NOT NULL,
+    relevance    SMALLINT NOT NULL DEFAULT 1,  -- 2 = mentions gold directly, 1 = macro driver
+    impact       TEXT CHECK (impact IN ('bullish', 'bearish', 'neutral')),
+    reason       TEXT,
+    tagged_at    TIMESTAMPTZ,
+    UNIQUE (source, external_id)
+);
+CREATE INDEX IF NOT EXISTS news_published_idx ON news (published_at DESC);
+
+-- Scheduled market-moving events (Fed meetings, inflation, jobs...).
+CREATE TABLE IF NOT EXISTS events (
+    id       BIGSERIAL PRIMARY KEY,
+    ts       TIMESTAMPTZ NOT NULL,
+    country  TEXT NOT NULL DEFAULT 'USD',
+    title    TEXT NOT NULL,
+    impact   TEXT NOT NULL DEFAULT 'High',
+    forecast TEXT NOT NULL DEFAULT '',
+    previous TEXT NOT NULL DEFAULT '',
+    source   TEXT NOT NULL,
+    UNIQUE (title, ts)
+);
+CREATE INDEX IF NOT EXISTS events_ts_idx ON events (ts);
+
+CREATE TABLE IF NOT EXISTS risk_profiles (
+    user_id    BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    answers    JSONB NOT NULL,
+    score      INTEGER NOT NULL,
+    profile    TEXT NOT NULL CHECK (profile IN ('conservative', 'moderate', 'aggressive')),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
