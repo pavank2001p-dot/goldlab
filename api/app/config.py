@@ -17,5 +17,13 @@ ENABLE_SCHEDULER = _bool("ENABLE_SCHEDULER", False)
 UPDATE_INTERVAL_MIN = int(os.getenv("UPDATE_INTERVAL_MIN", "15"))
 SYMBOL = "XAUUSD"
 
+# Week 3: news and calendar. Both features stay quiet (empty, no errors) until keys are set.
+FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+NEWS_MODEL = os.getenv("NEWS_MODEL", "claude-opus-5-5")
+NEWS_INTERVAL_MIN = int(os.getenv("NEWS_INTERVAL_MIN", "30"))
+# Free weekly calendar feed (ForexFactory's public JSON). Set to "" to rely on the seeded Fed dates only.
+CALENDAR_FEED_URL = os.getenv("CALENDAR_FEED_URL", "https://nfs.faireconomy.media/ff_calendar_thisweek.json")
+
 if COOKIE_SECURE and JWT_SECRET.startswith("dev-only"):
     raise RuntimeError("Set JWT_SECRET to a long random value in production")

@@ -27,6 +27,8 @@ export default function Header() {
           <Link href="/chart" className="hover:text-foreground">Chart</Link>
           <Link href="/backtest" className="hover:text-foreground">Backtest</Link>
           <Link href="/trades" className="hover:text-foreground">Trade log</Link>
+          <Link href="/news" className="hover:text-foreground">News</Link>
+          <Link href="/risk" className="hover:text-foreground">Risk quiz</Link>
         </nav>
         <div className="ml-auto flex items-center gap-3 text-sm">
           {user === undefined ? null : user ? (
