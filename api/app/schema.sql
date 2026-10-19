@@ -97,3 +97,18 @@ CREATE TABLE IF NOT EXISTS risk_profiles (
     profile    TEXT NOT NULL CHECK (profile IN ('conservative', 'moderate', 'aggressive')),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- AI assistant questions. Answers are produced in the background and polled by the page;
+-- rows also count each user's questions toward the daily limit.
+CREATE TABLE IF NOT EXISTS assistant_questions (
+    id          BIGSERIAL PRIMARY KEY,
+    user_id     BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    question    TEXT NOT NULL,
+    history     JSONB NOT NULL DEFAULT '[]',
+    status      TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'done', 'error')),
+    answer      TEXT,
+    tools_used  JSONB NOT NULL DEFAULT '[]',
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    finished_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS assistant_user_day_idx ON assistant_questions (user_id, created_at DESC);

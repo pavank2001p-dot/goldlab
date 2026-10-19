@@ -101,12 +101,11 @@ def delete(tid: int, user: UserOut = Depends(current_user)):
         c.execute("DELETE FROM trades WHERE id = %s AND user_id = %s", (tid, user.id))
 
 
-@router.get("/report")
-def report(capital: float = Query(10_000, gt=0, le=100_000_000), user: UserOut = Depends(current_user)):
+def log_report(user_id: int, capital: float) -> dict:
     with db.conn() as c:
         rows = c.execute(
             f"SELECT {COLUMNS} FROM trades WHERE user_id = %s AND close_time IS NOT NULL ORDER BY close_time",
-            (user.id,),
+            (user_id,),
         ).fetchall()
     trades, equity, cash = [], [], capital
     for r in rows:
@@ -123,6 +122,11 @@ def report(capital: float = Query(10_000, gt=0, le=100_000_000), user: UserOut =
             "stop_loss": r["stop_loss"], "take_profit": r["take_profit"],
         })
     return build_report(trades, equity, capital)
+
+
+@router.get("/report")
+def report(capital: float = Query(10_000, gt=0, le=100_000_000), user: UserOut = Depends(current_user)):
+    return log_report(user.id, capital)
 
 
 # ---------------------------------------------------------------------------

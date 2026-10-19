@@ -100,12 +100,17 @@ def save(body: AnswersIn, user: UserOut = Depends(current_user)):
     return _out(row)
 
 
-@router.get("/profile")
-def get(user: UserOut = Depends(current_user)):
+def profile_of(user_id: int) -> dict | None:
     with db.conn() as c:
         row = c.execute(
-            "SELECT answers, score, profile, updated_at FROM risk_profiles WHERE user_id = %s", (user.id,)
+            "SELECT answers, score, profile, updated_at FROM risk_profiles WHERE user_id = %s", (user_id,)
         ).fetchone()
-    if not row:
+    return _out(row) if row else None
+
+
+@router.get("/profile")
+def get(user: UserOut = Depends(current_user)):
+    p = profile_of(user.id)
+    if not p:
         raise HTTPException(404, "No risk profile yet")
-    return _out(row)
+    return p

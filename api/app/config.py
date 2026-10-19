@@ -25,5 +25,9 @@ NEWS_INTERVAL_MIN = int(os.getenv("NEWS_INTERVAL_MIN", "30"))
 # Free weekly calendar feed (ForexFactory's public JSON). Set to "" to rely on the seeded Fed dates only.
 CALENDAR_FEED_URL = os.getenv("CALENDAR_FEED_URL", "https://nfs.faireconomy.media/ff_calendar_thisweek.json")
 
+# Week 4: AI assistant. Uses ANTHROPIC_API_KEY; each user gets a fixed number of questions per UTC day.
+ASSISTANT_MODEL = os.getenv("ASSISTANT_MODEL", "claude-opus-5-5")
+ASSISTANT_DAILY_LIMIT = int(os.getenv("ASSISTANT_DAILY_LIMIT", "20"))
+
 if COOKIE_SECURE and JWT_SECRET.startswith("dev-only"):
     raise RuntimeError("Set JWT_SECRET to a long random value in production")
