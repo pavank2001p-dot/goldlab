@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import FitPanel from "@/components/FitPanel";
 import ReportView from "@/components/ReportView";
 import SignInPrompt from "@/components/SignInPrompt";
 import { api, fmtUsd, type ImportResult, type Report, type Trade, type TradeInput } from "@/lib/api";
@@ -170,7 +171,12 @@ export default function TradesPage() {
             <input type="number" min="1" className={`${input} w-32`} value={capital} onChange={(e) => setCapital(Number(e.target.value) || 10000)} />
           </label>
         </div>
-        {report && <ReportView report={report} kind="log" />}
+        {report && (
+          <div className="space-y-4">
+            <FitPanel load={() => api.tradeFit(capital)} deps={[report]} />
+            <ReportView report={report} kind="log" />
+          </div>
+        )}
       </section>
 
       {trades.length > 0 && (

@@ -8,7 +8,7 @@ const features = [
   { title: "News that moves gold", body: "Headlines tagged as good or bad for gold, plus the Fed and inflation calendar.", ready: true },
   { title: "Fits your risk appetite", body: "A short quiz sets your profile and the risk limits to measure your trading against.", ready: true },
   { title: "Trade log", body: "Log your own trades and get the same report as a backtest.", ready: true },
-  { title: "AI assistant", body: "Ask questions about your trades, backtests and the news, in plain language.", ready: false },
+  { title: "AI assistant", body: "Ask questions about your trades, backtests and the news, in plain language.", ready: true },
 ];
 
 export default function Home() {
@@ -19,8 +19,8 @@ export default function Home() {
           Understand gold before you trade it.
         </h1>
         <p className="mt-3 max-w-2xl text-muted">
-          Chart XAU/USD, backtest strategies on 15+ years of data, and see how the news and your own risk appetite
-          should shape what you do. Free, and built for learning.
+          Chart XAU/USD, backtest strategies on 15+ years of data, and see how the news and your own risk limits
+          relate to it. Free, and built for learning.
         </p>
         <div className="mt-6 flex gap-3">
           <Link href="/signup" className="rounded-md bg-gold px-4 py-2 font-medium text-black hover:opacity-90">

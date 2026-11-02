@@ -24,7 +24,15 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
 - **US event calendar** (`api/app/calendar.py`): 2026 FOMC decisions seeded from the Fed's calendar, plus
   this week's USD high/medium-impact releases from the public ForexFactory JSON feed (`CALENDAR_FEED_URL`).
 - **Risk quiz** (`api/app/risk.py`): eight questions place a user as conservative, moderate or aggressive,
-  with risk-per-trade, drawdown and leverage limits that week 4's fit verdicts will check against.
+  with risk-per-trade, drawdown and leverage limits.
+- **Profile fit** (`api/app/fit.py`): every backtest and the trade log are checked against the user's
+  limits (drawdown, risk per trade from the stop distance or the largest loss, and position size against
+  the account), with a trade size that would have stayed inside them.
+- **AI assistant** (`api/app/assistant.py`): Claude with tools over the site's own data (prices, backtests,
+  the trade log, risk profile, news, calendar), so numbers come from the database rather than the model.
+  Answers run in the background and the page polls for them. Each user gets `ASSISTANT_DAILY_LIMIT`
+  questions per UTC day (default 20; failed answers don't count). Model set by `ASSISTANT_MODEL`.
+- **Disclaimer** page at `/disclaimer`, linked from the footer and the assistant.
 
 ## Run locally
 
@@ -65,8 +73,8 @@ latest bars; set `ENABLE_SCHEDULER=true` to have the API do this every `UPDATE_I
 **API on Railway**
 1. New project from this GitHub repo, root directory `api` (uses `api/Dockerfile`), and add a Postgres plugin.
 2. Variables: `DATABASE_URL=${{Postgres.DATABASE_URL}}`, `JWT_SECRET=<long random string>`,
-   `COOKIE_SECURE=true`, `PRICE_SOURCE=dukascopy`, `ENABLE_SCHEDULER=true`, and for news
-   `FINNHUB_API_KEY` and `ANTHROPIC_API_KEY`.
+   `COOKIE_SECURE=true`, `PRICE_SOURCE=dukascopy`, `ENABLE_SCHEDULER=true`, and for news and the
+   assistant `FINNHUB_API_KEY` and `ANTHROPIC_API_KEY`. Optional: `ASSISTANT_DAILY_LIMIT` (default 20).
 3. First boot starts the backfill from 2010 in the background; the chart fills in as it runs.
 
 **Site on Vercel**

@@ -23,12 +23,13 @@ export default function Header() {
           <span className="inline-block h-3 w-3 rounded-sm bg-gold" />
           GoldLab
         </Link>
-        <nav className="order-last flex w-full gap-4 text-sm text-muted sm:order-none sm:w-auto">
+        <nav className="order-last -mx-4 flex w-[calc(100%+2rem)] gap-4 overflow-x-auto whitespace-nowrap px-4 text-sm text-muted sm:order-none sm:mx-0 sm:w-auto sm:px-0">
           <Link href="/chart" className="hover:text-foreground">Chart</Link>
           <Link href="/backtest" className="hover:text-foreground">Backtest</Link>
           <Link href="/trades" className="hover:text-foreground">Trade log</Link>
           <Link href="/news" className="hover:text-foreground">News</Link>
           <Link href="/risk" className="hover:text-foreground">Risk quiz</Link>
+          <Link href="/assistant" className="hover:text-foreground">Assistant</Link>
         </nav>
         <div className="ml-auto flex items-center gap-3 text-sm">
           {user === undefined ? null : user ? (

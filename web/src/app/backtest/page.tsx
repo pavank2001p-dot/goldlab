@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import FitPanel from "@/components/FitPanel";
 import ReportView from "@/components/ReportView";
 import SignInPrompt from "@/components/SignInPrompt";
 import { api, fmtPct, type Backtest, type BacktestParams, type BacktestSummary, type Strategy } from "@/lib/api";
@@ -187,7 +188,10 @@ export default function BacktestPage() {
         {result ? (
           <div>
             <h2 className="mb-3 font-medium">{label(strategies, result.params)}</h2>
-            <ReportView report={result} kind="backtest" />
+            <div className="space-y-4">
+              <FitPanel load={() => api.backtestFit(result.id)} deps={[result.id]} />
+              <ReportView report={result} kind="backtest" />
+            </div>
           </div>
         ) : (
           <div className="rounded-lg border border-dashed border-border p-10 text-center text-sm text-muted">

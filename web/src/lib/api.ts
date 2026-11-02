@@ -158,6 +158,22 @@ export type RiskProfile = RiskLimits & {
   updated_at: string;
 };
 
+export type FitCheck = { key: string; label: string; value: number | null; limit: number; unit: "%" | "x"; level: "fits" | "close" | "over" };
+export type Fit = {
+  profile: RiskProfile["profile"];
+  profile_label: string;
+  verdict: FitCheck["level"];
+  verdict_label: string;
+  checks: FitCheck[];
+  notes: string[];
+  trades_checked: number;
+  units: number | null;
+  suggested_units: number | null;
+};
+export type Turn = { role: "user" | "assistant"; content: string };
+export type AssistantStatus = { configured: boolean; limit: number; used_today: number; remaining: number };
+export type AssistantAnswer = { id: number; question: string; status: "pending" | "done" | "error"; answer: string | null; tools_used: string[] };
+
 export const api = {
   me: () => call<User>("/auth/me"),
   signup: (email: string, password: string, name: string) =>
@@ -187,6 +203,12 @@ export const api = {
   riskProfile: () => call<RiskProfile>("/risk/profile"),
   saveRiskProfile: (answers: Record<string, number>) =>
     call<RiskProfile>("/risk/profile", { method: "POST", body: JSON.stringify({ answers }) }),
+  backtestFit: (id: number) => call<Fit>(`/fit/backtests/${id}`),
+  tradeFit: (capital: number) => call<Fit>(`/fit/trades?capital=${capital}`),
+  assistantStatus: () => call<AssistantStatus>("/assistant/status"),
+  ask: (question: string, history: Turn[]) =>
+    call<{ id: number }>("/assistant/questions", { method: "POST", body: JSON.stringify({ question, history }) }),
+  answer: (id: number) => call<AssistantAnswer>(`/assistant/questions/${id}`),
   importTrades: (file: File, contractSize: number) => {
     const f = new FormData();
     f.append("file", file);
