@@ -16,7 +16,6 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
   Dukascopy. Other timeframes are aggregated on request. Live quotes stream from Finnhub's websocket
   (OANDA:XAU_USD) when `FINNHUB_API_KEY` is set (turn off with `LIVE_PRICES=false`); they move the newest
   candle and are saved as 1s/1m/1h bars until Dukascopy's data for that hour replaces them.
-- **Chart**: hourly and daily XAU/USD candles back to 2010, refreshing every minute.
 - **Accounts**: email and password sign-up, cookie sessions.
 - **Backtests** (`api/app/backtest.py`): moving-average crossover, channel breakout, RSI mean reversion and
   Bollinger band reversion. Signals on each close fill at the next open; spread, overnight swap,
