@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import FitPanel from "@/components/FitPanel";
 import ReportView from "@/components/ReportView";
 import SignInPrompt from "@/components/SignInPrompt";
+import { Empty, Icon, PageHeader, SidePill } from "@/components/ui";
 import { api, fmtUsd, type ImportResult, type Report, type Trade, type TradeInput } from "@/lib/api";
 import { useUser } from "@/lib/useUser";
 
@@ -33,6 +34,7 @@ export default function TradesPage() {
   const [busy, setBusy] = useState(false);
   const [contract, setContract] = useState(100);
   const [imported, setImported] = useState<ImportResult | null>(null);
+  const [dragging, setDragging] = useState(false);
 
   const refresh = useCallback(async () => {
     const [t, r] = await Promise.all([api.trades(), api.tradeReport(capital)]);
@@ -81,7 +83,10 @@ export default function TradesPage() {
   async function upload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
-    if (!file) return;
+    if (file) await importFile(file);
+  }
+
+  async function importFile(file: File) {
     setError(null);
     try {
       setImported(await api.importTrades(file, contract));
@@ -98,23 +103,24 @@ export default function TradesPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 px-4 py-8">
-      <div>
-        <h1 className="text-xl font-semibold">Your trade log</h1>
-        <p className="mt-1 text-sm text-muted">
-          Log your gold trades by hand or import your broker&apos;s history, and get the same report as a backtest.
-        </p>
-      </div>
+      <PageHeader icon="trades" title="Your trade log"
+        subtitle="Log your gold trades by hand or import your broker's history, and get the same report as a backtest." />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-        <form onSubmit={add} className="rounded-lg border border-border p-4">
-          <h2 className="font-medium">Add a trade</h2>
+        <form onSubmit={add} className="rounded-xl border border-border bg-surface/50 p-4">
+          <h2 className="flex items-center gap-2 font-medium"><Icon name="trades" className="h-4 w-4 text-gold" /> Add a trade</h2>
           <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Field label="Side">
-              <select className={input} value={f.side} onChange={set("side")}>
-                <option value="long">Long (buy)</option>
-                <option value="short">Short (sell)</option>
-              </select>
-            </Field>
+            <div className="text-sm">
+              <span className="text-muted">Side</span>
+              <div className="mt-1 grid grid-cols-2 gap-1 rounded-md border border-border bg-background p-0.5">
+                {(["long", "short"] as const).map((side) => (
+                  <button key={side} type="button" onClick={() => setF({ ...f, side })} aria-pressed={f.side === side}
+                    className={`rounded py-1 text-xs font-medium transition-colors ${f.side === side ? (side === "long" ? "bg-up text-black" : "bg-down text-black") : "text-muted hover:text-foreground"}`}>
+                    {side === "long" ? "Buy" : "Sell"}
+                  </button>
+                ))}
+              </div>
+            </div>
             <Field label="Ounces (1 lot = 100)"><input required type="number" step="any" min="0.01" className={input} value={f.units} onChange={set("units")} /></Field>
             <Field label="Opened (UTC)"><input required type="datetime-local" className={input} value={f.open_time} onChange={set("open_time")} /></Field>
             <Field label="Open price"><input required type="number" step="any" min="0" className={input} value={f.open_price} onChange={set("open_price")} /></Field>
@@ -132,8 +138,8 @@ export default function TradesPage() {
           </div>
         </form>
 
-        <div className="rounded-lg border border-border p-4">
-          <h2 className="font-medium">Import from your broker</h2>
+        <div className="rounded-xl border border-border bg-surface/50 p-4">
+          <h2 className="flex items-center gap-2 font-medium"><Icon name="upload" className="h-4 w-4 text-gold" /> Import from your broker</h2>
           <p className="mt-1 text-xs text-muted">
             Upload a CSV of your trade history. MetaTrader 4/5 and most broker exports work. Only gold (XAU) rows are
             imported, and re-importing the same file skips trades you already have.
@@ -142,8 +148,13 @@ export default function TradesPage() {
             <Field label="Ounces per lot at your broker">
               <input type="number" min="1" className={input} value={contract} onChange={(e) => setContract(Number(e.target.value) || 100)} />
             </Field>
-            <label className="block cursor-pointer rounded-md border border-dashed border-border px-3 py-3 text-center text-sm hover:border-gold">
-              Choose CSV file
+            <label
+              onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => { e.preventDefault(); setDragging(false); const file = e.dataTransfer.files?.[0]; if (file) importFile(file); }}
+              className={`flex cursor-pointer flex-col items-center gap-1.5 rounded-lg border-2 border-dashed px-3 py-5 text-center text-sm transition-colors ${dragging ? "border-gold bg-gold/10" : "border-border hover:border-gold"}`}>
+              <Icon name="upload" className={`h-6 w-6 ${dragging ? "text-gold" : "text-muted"}`} />
+              <span><span className="text-gold">Choose a CSV file</span> or drop it here</span>
               <input type="file" accept=".csv,.txt,text/csv" className="hidden" onChange={upload} />
             </label>
             <a href="/trade-log-template.csv" className="block text-xs text-gold">Download a template</a>
@@ -165,13 +176,15 @@ export default function TradesPage() {
 
       <section>
         <div className="mb-3 flex flex-wrap items-center gap-3">
-          <h2 className="font-medium">Report</h2>
+          <h2 className="flex items-center gap-2 font-medium"><Icon name="backtest" className="h-4 w-4 text-gold" /> Report</h2>
           <label className="ml-auto flex items-center gap-2 text-sm text-muted">
             Starting balance ($)
             <input type="number" min="1" className={`${input} w-32`} value={capital} onChange={(e) => setCapital(Number(e.target.value) || 10000)} />
           </label>
         </div>
-        {report && (
+        {report && report.stats.trades === 0 && trades.length === 0 ? (
+          <Empty icon="trades" title="Your log is empty">Add a trade above or import your broker&apos;s history to see your report.</Empty>
+        ) : report && (
           <div className="space-y-4">
             <FitPanel load={() => api.tradeFit(capital)} deps={[report]} />
             <ReportView report={report} kind="log" />
@@ -182,7 +195,7 @@ export default function TradesPage() {
       {trades.length > 0 && (
         <section>
           <h2 className="mb-2 font-medium">All trades ({trades.length})</h2>
-          <div className="overflow-x-auto rounded-lg border border-border">
+          <div className="overflow-x-auto rounded-xl border border-border">
             <table className="w-full text-sm tabular-nums">
               <thead className="bg-surface text-left text-xs text-muted">
                 <tr>
@@ -198,11 +211,11 @@ export default function TradesPage() {
               </thead>
               <tbody>
                 {trades.map((t) => (
-                  <tr key={t.id} className="border-t border-border">
-                    <td className={`px-3 py-1.5 ${t.side === "long" ? "text-up" : "text-down"}`}>{t.side}</td>
+                  <tr key={t.id} className="border-t border-border transition-colors hover:bg-surface">
+                    <td className="px-3 py-1.5"><SidePill side={t.side} /></td>
                     <td className="whitespace-nowrap px-3 py-1.5">{t.open_time.slice(0, 16).replace("T", " ")}</td>
                     <td className="px-3 py-1.5 text-right">{t.open_price.toFixed(2)}</td>
-                    <td className="px-3 py-1.5 text-right">{t.close_price?.toFixed(2) ?? <span className="text-muted">open</span>}</td>
+                    <td className="px-3 py-1.5 text-right">{t.close_price?.toFixed(2) ?? <span className="rounded-full bg-gold/15 px-2 py-0.5 text-[11px] text-gold">open</span>}</td>
                     <td className="px-3 py-1.5 text-right">{t.units}</td>
                     <td className={`px-3 py-1.5 text-right ${(t.pnl ?? 0) >= 0 ? "text-up" : "text-down"}`}>{fmtUsd(t.pnl)}</td>
                     <td className="max-w-48 truncate px-3 py-1.5 text-muted">{t.notes}</td>

@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import PriceChart from "@/components/PriceChart";
 import PriceTicker from "@/components/PriceTicker";
+import { PageHeader } from "@/components/ui";
 
 export const metadata: Metadata = { title: "XAU/USD chart · GoldLab" };
 
 export default function ChartPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-4 px-4 py-8">
+      <PageHeader icon="candles" title="Gold chart" subtitle="XAU/USD from 1-second to 1-month candles, updating live." />
       <PriceTicker />
       <PriceChart height={620} />
       <p className="text-xs text-muted">

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import SignInPrompt from "@/components/SignInPrompt";
+import { PageHeader } from "@/components/ui";
 import { api, type Scenario, type ScenarioInput } from "@/lib/api";
 import { useUser } from "@/lib/useUser";
 
@@ -245,10 +246,7 @@ export default function ScenariosPage() {
   return (
     <div className="mx-auto grid max-w-6xl grid-cols-1 gap-6 px-4 py-8 lg:grid-cols-[320px_minmax(0,1fr)]">
       <form onSubmit={run} className="space-y-4">
-        <div>
-          <h1 className="text-xl font-semibold">Trade scenarios</h1>
-          <p className="mt-1 text-sm text-muted">See the range of outcomes gold&apos;s past moves make possible for a trade you open today.</p>
-        </div>
+        <PageHeader icon="scenarios" title="Trade scenarios" subtitle="See the range of outcomes gold's past moves make possible for a trade you open today." />
 
         <div className="grid grid-cols-2 gap-1 rounded-lg border border-border p-1">
           {(["long", "short"] as const).map((side) => (
