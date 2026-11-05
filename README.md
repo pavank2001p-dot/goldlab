@@ -10,6 +10,12 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
 
 ## What's built
 
+- **Chart** (`web/src/components/PriceChart.tsx`, `api/app/prices.py`, `api/app/live.py`): 13 timeframes
+  from 1 second to 1 month, zoom, full screen and a live price. Hourly and daily bars go back to 2010;
+  minute bars cover the last `MINUTE_DAYS` (60) and one-second bars the last `SECOND_DAYS` (2), from
+  Dukascopy. Other timeframes are aggregated on request. Live quotes stream from Finnhub's websocket
+  (OANDA:XAU_USD) when `FINNHUB_API_KEY` is set (turn off with `LIVE_PRICES=false`); they move the newest
+  candle and are saved as 1s/1m/1h bars until Dukascopy's data for that hour replaces them.
 - **Chart**: hourly and daily XAU/USD candles back to 2010, refreshing every minute.
 - **Accounts**: email and password sign-up, cookie sessions.
 - **Backtests** (`api/app/backtest.py`): moving-average crossover, channel breakout, RSI mean reversion and

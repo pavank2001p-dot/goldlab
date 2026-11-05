@@ -4,7 +4,8 @@
     python -m app.ingest update   [--source dukascopy|sample]
 
 Hourly bars are the stored source of truth; daily bars are rebuilt from them so the
-two timeframes always agree. A daily bar runs from 17:00 New York to 17:00 New York
+two timeframes always agree. Minute bars (last MINUTE_DAYS) and one-second bars (last
+SECOND_DAYS) are kept for short-term charts; other timeframes are aggregated on request. A daily bar runs from 17:00 New York to 17:00 New York
 (the usual forex/gold convention), stamped with the date it closes on.
 """
 
@@ -97,6 +98,21 @@ def parse_ticks_to_bar(raw: bytes, hour: datetime) -> Bar | None:
     return Bar(hour, prices[0], max(prices), min(prices), prices[-1], sum(v for _, v in bids))
 
 
+def parse_ticks_to_bars(raw: bytes, hour: datetime, step: int) -> list[Bar]:
+    """Bid ticks for one hour grouped into bars of `step` seconds."""
+    out: dict[int, Bar] = {}
+    for ms, _, bid, _, bv in _TICK.iter_unpack(raw):
+        k = ms // 1000 // step * step
+        p = bid / DUKA_POINT
+        cur = out.get(k)
+        if cur is None:
+            out[k] = Bar(hour + timedelta(seconds=k), p, p, p, p, bv)
+        else:
+            cur.high, cur.low, cur.close = max(cur.high, p), min(cur.low, p), p
+            cur.volume += bv
+    return [out[k] for k in sorted(out)]
+
+
 def resample_hourly(bars: Iterable[Bar]) -> list[Bar]:
     out: dict[datetime, Bar] = {}
     for b in bars:
@@ -152,6 +168,49 @@ def dukascopy_hourly(start: datetime, end: datetime) -> Iterator[list[Bar]]:
                     day += timedelta(days=1)
             log.info("dukascopy %s done", month.isoformat()[:7])
             month = nxt
+
+
+def _hours(start: datetime, end: datetime) -> Iterator[datetime]:
+    """Completed hours in [start, end)."""
+    h = start.replace(minute=0, second=0, microsecond=0)
+    last = min(end, datetime.now(UTC)).replace(minute=0, second=0, microsecond=0)
+    while h < last:
+        yield h
+        h += timedelta(hours=1)
+
+
+def dukascopy_minutes(start: datetime, end: datetime) -> Iterator[list[Bar]]:
+    """Minute bars in [start, end): a daily minute file for past days, hourly tick files for today."""
+    today = datetime.now(UTC).date()
+    headers = {"User-Agent": "goldlab-ingest/1.0"}
+    with httpx.Client(timeout=30, headers=headers, follow_redirects=True) as client:
+        day = start.date()
+        while day <= min(today, end.date()):
+            day_start = datetime(day.year, day.month, day.day, tzinfo=UTC)
+            y, m = _ym(day)
+            raw = None
+            if day < today:
+                raw = _get(client, _duka_url(y, m, f"{day.day:02d}", "BID_candles_min_1.bi5"))
+            if raw is not None:
+                bars = parse_candles(raw, day_start)
+            else:  # today, or a day whose minute file isn't published yet
+                bars = []
+                for hour in _hours(max(start, day_start), min(end, day_start + timedelta(days=1))):
+                    raw = _get(client, _duka_url(y, m, f"{day.day:02d}", f"{hour.hour:02d}h_ticks.bi5"))
+                    bars += parse_ticks_to_bars(raw, hour, 60) if raw else []
+            yield [b for b in bars if start <= b.ts < end]
+            day += timedelta(days=1)
+
+
+def dukascopy_seconds(start: datetime, end: datetime) -> Iterator[list[Bar]]:
+    """One-second bars from hourly tick files. The feed publishes each hour once it has ended."""
+    headers = {"User-Agent": "goldlab-ingest/1.0"}
+    with httpx.Client(timeout=30, headers=headers, follow_redirects=True) as client:
+        for hour in _hours(start, end):
+            y, m = _ym(hour.date())
+            raw = _get(client, _duka_url(y, m, f"{hour.day:02d}", f"{hour.hour:02d}h_ticks.bi5"))
+            if raw:
+                yield [b for b in parse_ticks_to_bars(raw, hour, 1) if start <= b.ts < end]
 
 
 # ---------------------------------------------------------------------------
@@ -219,6 +278,37 @@ def sample_hourly(start: datetime, end: datetime) -> Iterator[list[Bar]]:
         yield chunk
 
 
+def subdivide(bar: Bar, n: int, step: int, rng: random.Random) -> list[Bar]:
+    """Split one bar into n bars of `step` seconds along a random path from its open to its
+    close, kept inside the bar's high and low."""
+    scale = (bar.high - bar.low) / math.sqrt(n) * 0.6
+    steps = [rng.gauss(0, scale) for _ in range(n)]
+    pull = (sum(steps) - (bar.close - bar.open)) / n  # bridge: the path ends at the close
+    path, x = [bar.open], bar.open
+    for z in steps:
+        x += z - pull
+        path.append(min(max(x, bar.low), bar.high))
+    path[-1] = bar.close
+    out = []
+    for i in range(n):
+        o, c = path[i], path[i + 1]
+        w = abs(rng.gauss(0, scale * 0.3))
+        out.append(Bar(bar.ts + timedelta(seconds=i * step), round(o, 3), round(min(max(o, c) + w, bar.high), 3),
+                       round(max(min(o, c) - w, bar.low), 3), round(c, 3), round(bar.volume / n, 2)))
+    return out
+
+
+def sample_fine(start: datetime, end: datetime, step: int) -> Iterator[list[Bar]]:
+    """Demo minute (step=60) or second (step=1) bars, split from the sample hours."""
+    for chunk in sample_hourly(start.replace(minute=0, second=0, microsecond=0), end):
+        out = []
+        for h in chunk:
+            rng = random.Random(int(h.ts.timestamp()) * 7 + step)
+            minutes = subdivide(h, 60, 60, rng)
+            out += minutes if step == 60 else [s for m in minutes for s in subdivide(m, 60, 1, rng)]
+        yield [b for b in out if start <= b.ts < end]
+
+
 # ---------------------------------------------------------------------------
 # Storage
 # ---------------------------------------------------------------------------
@@ -268,6 +358,40 @@ def _last_hour() -> datetime | None:
     return row["ts"]
 
 
+def load_fine(source: str) -> int:
+    """Bring minute and second bars up to date and drop those past their retention window."""
+    now = datetime.now(UTC)
+    total = 0
+    for tf, days, step, fetch in (
+        ("1m", config.MINUTE_DAYS, 60, dukascopy_minutes),
+        ("1s", config.SECOND_DAYS, 1, dukascopy_seconds),
+    ):
+        if days <= 0:
+            continue
+        floor = now - timedelta(days=days)
+        # Track how far this feed has got separately from what is stored: live quotes also
+        # write recent bars, and must not make this skip hours it hasn't fetched yet.
+        key = f"fine_{source}_{tf}"
+        done = db.get_meta(key)
+        # Re-fetch the hour before too, in case the feed published it late.
+        start = max(floor, datetime.fromisoformat(done) - timedelta(hours=1)) if done else floor
+        chunks = fetch(start, now) if source == "dukascopy" else sample_fine(start, now, step)
+        for chunk in chunks:
+            total += upsert(chunk, tf)
+        db.set_meta(key, now.replace(minute=0, second=0, microsecond=0).isoformat())
+        with db.conn() as c:
+            c.execute("DELETE FROM candles WHERE symbol = %s AND tf = %s AND ts < %s", (config.SYMBOL, tf, floor))
+    return total
+
+
+def _load_fine_safely(source: str) -> None:
+    # Short-timeframe data is a bonus; a feed hiccup there must not stop hourly updates.
+    try:
+        load_fine(source)
+    except Exception:
+        log.exception("minute/second update failed")
+
+
 def load(source: str, start: datetime, end: datetime) -> int:
     fetch = dukascopy_hourly if source == "dukascopy" else sample_hourly
     previous = db.get_meta("price_source")
@@ -286,7 +410,9 @@ def load(source: str, start: datetime, end: datetime) -> int:
 
 def backfill(source: str, since: date) -> int:
     start = datetime(since.year, since.month, since.day, tzinfo=UTC)
-    return load(source, start, datetime.now(UTC))
+    n = load(source, start, datetime.now(UTC))
+    _load_fine_safely(source)
+    return n
 
 
 def update(source: str) -> int:
@@ -294,7 +420,9 @@ def update(source: str) -> int:
     last = _last_hour()
     if last is None or db.get_meta("price_source") != source:
         return backfill(source, date(2010, 1, 1))
-    return load(source, last - timedelta(days=1), datetime.now(UTC))
+    n = load(source, last - timedelta(days=1), datetime.now(UTC))
+    _load_fine_safely(source)
+    return n
 
 
 def main() -> None:

@@ -1,6 +1,8 @@
 export type User = { id: number; email: string; name: string };
 export type Bar = { t: number; o: number; h: number; l: number; c: number; v: number };
 export type Timeframe = "1h" | "1d";
+export type ChartTf = "1s" | "5s" | "15s" | "30s" | "1m" | "5m" | "15m" | "30m" | "1h" | "4h" | "1d" | "1w" | "1mo";
+export type LiveQuote = { price: number | null; t: number | null; age_seconds: number | null; connected: boolean; configured: boolean };
 export type Summary = {
   symbol: string;
   price: number | null;
@@ -182,7 +184,8 @@ export const api = {
     call<User>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   logout: () => call<void>("/auth/logout", { method: "POST" }),
   summary: () => call<Summary>("/prices/summary"),
-  candles: (tf: Timeframe, opts: { start?: number; end?: number; limit?: number } = {}) => {
+  live: () => call<LiveQuote>("/prices/live"),
+  candles: (tf: ChartTf, opts: { start?: number; end?: number; limit?: number } = {}) => {
     const q = new URLSearchParams({ tf, limit: String(opts.limit ?? 1000) });
     if (opts.start !== undefined) q.set("start", String(opts.start));
     if (opts.end !== undefined) q.set("end", String(opts.end));

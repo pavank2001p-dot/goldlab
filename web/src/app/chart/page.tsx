@@ -10,8 +10,10 @@ export default function ChartPage() {
       <PriceTicker />
       <PriceChart height={620} />
       <p className="text-xs text-muted">
-        Chart times are in UTC. Daily candles close at 5pm New York time. Scroll left to load older
-        data, back to 2010. The chart refreshes every minute.
+        Chart times are in UTC. Daily candles close at 5pm New York time. Live prices are OANDA quotes via
+        Finnhub. Hourly and daily history goes back to 2010, minute history covers the last 60 days and
+        second history the last 2 days. Scroll left to load older data, pinch or use the zoom buttons, and
+        press full screen to expand the chart.
       </p>
     </div>
   );
