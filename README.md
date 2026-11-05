@@ -17,8 +17,9 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
   (OANDA:XAU_USD) when `FINNHUB_API_KEY` is set (turn off with `LIVE_PRICES=false`); they move the newest
   candle and are saved as 1s/1m/1h bars until Dukascopy's data for that hour replaces them.
 - **Accounts**: email and password sign-up, cookie sessions.
-- **Backtests** (`api/app/backtest.py`): moving-average crossover, channel breakout, RSI mean reversion and
-  Bollinger band reversion. Signals on each close fill at the next open; spread, overnight swap,
+- **Backtests** (`api/app/backtest.py`): 15 strategies. Trend following: moving-average crossover, price vs
+  moving average, channel breakout, MACD, Supertrend, Parabolic SAR, ADX, Keltner breakout and momentum. Mean
+  reversion: RSI, Bollinger bands, stochastic, CCI and Williams %R. Plus buy and hold as a benchmark. Signals on each close fill at the next open; spread, overnight swap,
   stop loss and take profit are modelled, and a test stops if the account reaches zero. Results are saved per user.
 - **Trade log** (`api/app/trades.py`): manual entry or CSV import (MetaTrader 4/5 and most broker exports; gold
   rows only; re-imports skip known tickets). Produces the same report as a backtest (`api/app/report.py`).
@@ -28,7 +29,7 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
   one-line reason. Needs `FINNHUB_API_KEY` and `ANTHROPIC_API_KEY`; without them the page says it isn't connected.
 - **US event calendar** (`api/app/calendar.py`): 2026 FOMC decisions seeded from the Fed's calendar, plus
   this week's USD high/medium-impact releases from the public ForexFactory JSON feed (`CALENDAR_FEED_URL`).
-- **Risk quiz** (`api/app/risk.py`): eight questions place a user as conservative, moderate or aggressive,
+- **Risk quiz** (`api/app/risk.py`): 17 questions in five parts place a user as conservative, moderate or aggressive,
   with risk-per-trade, drawdown and leverage limits.
 - **Profile fit** (`api/app/fit.py`): every backtest and the trade log are checked against the user's
   limits (drawdown, risk per trade from the stop distance or the largest loss, and position size against

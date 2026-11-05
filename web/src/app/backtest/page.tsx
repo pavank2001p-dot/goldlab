@@ -44,7 +44,8 @@ function Num({ value, onChange, step = "any", min, max, placeholder }: {
 
 const label = (strategies: Strategy[], p: BacktestParams) => {
   const s = strategies.find((x) => x.key === p.strategy);
-  return `${s?.label ?? p.strategy} (${Object.values(p.params).join("/")}) · ${p.tf === "1h" ? "hourly" : "daily"}`;
+  const vals = Object.values(p.params);
+  return `${s?.label ?? p.strategy}${vals.length ? ` (${vals.join("/")})` : ""} · ${p.tf === "1h" ? "hourly" : "daily"}`;
 };
 
 export default function BacktestPage() {
@@ -114,10 +115,17 @@ export default function BacktestPage() {
         <h1 className="text-xl font-semibold">Backtest a strategy</h1>
         <Field label="Strategy">
           <select className={input} value={form.strategy} onChange={(e) => pick(e.target.value)}>
-            {strategies.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+            {[...new Set(strategies.map((s) => s.kind_label))].map((kind) => (
+              <optgroup key={kind} label={kind}>
+                {strategies.filter((s) => s.kind_label === kind).map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+              </optgroup>
+            ))}
           </select>
         </Field>
-        <p className="text-xs text-muted">{strategy.summary}</p>
+        <p className="text-xs text-muted">
+          <span className="mr-1.5 rounded bg-surface px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-gold">{strategy.kind_label}</span>
+          {strategy.summary}
+        </p>
         {strategy.params.map((p) =>
           p.min === 0 && p.max === 1 && p.step === 1 ? (
             <label key={p.key} className="flex items-center gap-2 text-sm text-muted">

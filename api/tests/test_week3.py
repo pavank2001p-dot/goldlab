@@ -105,3 +105,25 @@ def test_risk_quiz(client):
 def test_risk_thresholds():
     assert risk.place(0) == "conservative"
     assert risk.place(risk.MAX_SCORE) == "aggressive"
+
+
+def test_risk_breakdown_and_old_profiles(client):
+    from app import db, risk
+
+    client.post("/auth/signup", json={"email": "b@example.com", "password": "longenough"})
+    quiz = client.get("/risk/quiz").json()
+    assert len(quiz["questions"]) >= 16 and set(quiz["categories"]) == {q["category"] for q in quiz["questions"]}
+    answers = {q["key"]: (3 if q["category"] == "behaviour" else 0) for q in quiz["questions"]}
+    p = client.post("/risk/profile", json={"answers": answers}).json()
+    pct = {b["key"]: b["pct"] for b in p["breakdown"]}
+    assert pct["behaviour"] == 100 and pct["experience"] == 0 and p["complete"]
+    assert p["max_score"] == 3 * len(quiz["questions"])
+
+    # A profile saved with the original eight questions still loads, scored out of those.
+    old = {k: 1 for k in ("experience", "goal", "drawdown", "loss_limit", "money", "horizon", "leverage", "stops")}
+    with db.conn() as c:
+        c.execute("UPDATE risk_profiles SET answers = %s, score = 8, profile = 'conservative'",
+                  (__import__("psycopg").types.json.Jsonb(old),))
+    got = client.get("/risk/profile").json()
+    assert got["max_score"] == 24 and not got["complete"] and got["profile"] == "conservative"
+    assert risk.place(8) == "conservative"

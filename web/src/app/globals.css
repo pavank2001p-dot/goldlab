@@ -27,3 +27,22 @@ body {
   color: var(--foreground);
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
+
+@keyframes quiz-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes needle-in {
+  from { transform: rotate(-70deg); }
+  to { transform: none; }
+}
+@keyframes bar-grow {
+  from { transform: scaleX(0); }
+  to { transform: none; }
+}
+.quiz-card { animation: quiz-in 0.25s ease-out; }
+.gauge-needle { animation: needle-in 0.9s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
+.bar-grow { transform-origin: left; animation: bar-grow 0.7s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .quiz-card, .gauge-needle, .bar-grow { animation: none; }
+}

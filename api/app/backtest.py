@@ -27,6 +27,7 @@ router = APIRouter(prefix="/backtests", tags=["backtests"])
 STRATEGIES = {
     "ma_cross": {
         "label": "Moving-average crossover",
+        "kind": "trend",
         "summary": "Long when the fast average is above the slow one, short when it is below. A trend follower.",
         "params": [
             {"key": "fast", "label": "Fast average (bars)", "default": 20, "min": 2, "max": 200, "step": 1},
@@ -35,7 +36,8 @@ STRATEGIES = {
         ],
     },
     "breakout": {
-        "label": "Channel breakout",
+        "label": "Channel breakout (Donchian)",
+        "kind": "trend",
         "summary": "Buys a close above the highest high of the last N bars, sells a close below the lowest low. "
         "Exits when price breaks the shorter opposite channel.",
         "params": [
@@ -43,8 +45,81 @@ STRATEGIES = {
             {"key": "exit", "label": "Exit channel (bars)", "default": 10, "min": 2, "max": 200, "step": 1},
         ],
     },
+    "ma_trend": {
+        "label": "Price vs moving average",
+        "kind": "trend",
+        "summary": "Long while the close is above one moving average, short while it is below. "
+        "The classic 200-day trend filter.",
+        "params": [
+            {"key": "period", "label": "Average length (bars)", "default": 200, "min": 2, "max": 400, "step": 1},
+            {"key": "ema", "label": "Use an exponential average (1 = yes)", "default": 0, "min": 0, "max": 1, "step": 1},
+        ],
+    },
+    "macd": {
+        "label": "MACD crossover",
+        "kind": "trend",
+        "summary": "Long when the MACD line is above its signal line, short when it is below. "
+        "MACD is the gap between a fast and a slow exponential average.",
+        "params": [
+            {"key": "fast", "label": "Fast average (bars)", "default": 12, "min": 2, "max": 100, "step": 1},
+            {"key": "slow", "label": "Slow average (bars)", "default": 26, "min": 5, "max": 200, "step": 1},
+            {"key": "signal", "label": "Signal line (bars)", "default": 9, "min": 2, "max": 50, "step": 1},
+        ],
+    },
+    "supertrend": {
+        "label": "Supertrend",
+        "kind": "trend",
+        "summary": "Follows a trailing line set a few ATRs (average true ranges) from price. "
+        "Flips long or short when the close crosses it, so it is always in the market.",
+        "params": [
+            {"key": "period", "label": "ATR period (bars)", "default": 10, "min": 2, "max": 100, "step": 1},
+            {"key": "mult", "label": "ATR multiple", "default": 3, "min": 0.5, "max": 10, "step": 0.1},
+        ],
+    },
+    "parabolic_sar": {
+        "label": "Parabolic SAR",
+        "kind": "trend",
+        "summary": "A stop that trails price and speeds up as the trend extends. "
+        "When price touches it the position reverses.",
+        "params": [
+            {"key": "step", "label": "Acceleration step", "default": 0.02, "min": 0.005, "max": 0.2, "step": 0.005},
+            {"key": "max_af", "label": "Maximum acceleration", "default": 0.2, "min": 0.05, "max": 1, "step": 0.01},
+        ],
+    },
+    "adx_trend": {
+        "label": "ADX trend strength",
+        "kind": "trend",
+        "summary": "Trades only when ADX says a trend is strong, in the direction of the stronger "
+        "directional line (+DI or -DI). Flat when the trend fades.",
+        "params": [
+            {"key": "period", "label": "ADX period (bars)", "default": 14, "min": 2, "max": 100, "step": 1},
+            {"key": "threshold", "label": "Minimum ADX to trade", "default": 25, "min": 5, "max": 60, "step": 1},
+        ],
+    },
+    "keltner": {
+        "label": "Keltner channel breakout",
+        "kind": "trend",
+        "summary": "Buys a close above the upper Keltner band and sells a close below the lower one, "
+        "exiting when price returns to the middle average.",
+        "params": [
+            {"key": "period", "label": "Middle average (bars)", "default": 20, "min": 5, "max": 200, "step": 1},
+            {"key": "atr", "label": "ATR period (bars)", "default": 10, "min": 2, "max": 100, "step": 1},
+            {"key": "mult", "label": "Band width (ATRs)", "default": 2, "min": 0.5, "max": 6, "step": 0.1},
+        ],
+    },
+    "momentum": {
+        "label": "Momentum (rate of change)",
+        "kind": "trend",
+        "summary": "Long when price is up more than the threshold over the lookback, short when it is down "
+        "more than the threshold, flat in between.",
+        "params": [
+            {"key": "lookback", "label": "Lookback (bars)", "default": 60, "min": 2, "max": 400, "step": 1},
+            {"key": "threshold", "label": "Threshold (%)", "default": 0, "min": 0, "max": 50, "step": 0.1},
+        ],
+    },
     "rsi_reversion": {
         "label": "RSI mean reversion",
+        "kind": "reversion",
         "summary": "Buys when RSI is oversold and sells when it is overbought, exiting as RSI returns to 50.",
         "params": [
             {"key": "period", "label": "RSI period (bars)", "default": 14, "min": 2, "max": 100, "step": 1},
@@ -54,6 +129,7 @@ STRATEGIES = {
     },
     "bollinger": {
         "label": "Bollinger band reversion",
+        "kind": "reversion",
         "summary": "Buys a close below the lower band and sells a close above the upper band, "
         "exiting at the middle band.",
         "params": [
@@ -61,7 +137,49 @@ STRATEGIES = {
             {"key": "width", "label": "Band width (standard deviations)", "default": 2, "min": 0.5, "max": 4, "step": 0.1},
         ],
     },
+    "stochastic": {
+        "label": "Stochastic oscillator reversion",
+        "kind": "reversion",
+        "summary": "Buys when the stochastic %K is oversold and sells when it is overbought, "
+        "exiting as it returns to 50. %K shows where the close sits in the recent high-low range.",
+        "params": [
+            {"key": "period", "label": "Range period (bars)", "default": 14, "min": 2, "max": 100, "step": 1},
+            {"key": "smooth", "label": "Smoothing (bars)", "default": 3, "min": 1, "max": 20, "step": 1},
+            {"key": "lower", "label": "Oversold level", "default": 20, "min": 1, "max": 50, "step": 1},
+            {"key": "upper", "label": "Overbought level", "default": 80, "min": 50, "max": 99, "step": 1},
+        ],
+    },
+    "cci": {
+        "label": "CCI reversion",
+        "kind": "reversion",
+        "summary": "Buys when the Commodity Channel Index drops below minus the level and sells when it rises "
+        "above it, exiting as CCI crosses zero.",
+        "params": [
+            {"key": "period", "label": "CCI period (bars)", "default": 20, "min": 5, "max": 200, "step": 1},
+            {"key": "level", "label": "Extreme level", "default": 100, "min": 50, "max": 300, "step": 5},
+        ],
+    },
+    "williams_r": {
+        "label": "Williams %R reversion",
+        "kind": "reversion",
+        "summary": "Buys when Williams %R is below the oversold level and sells when it is above the overbought "
+        "level, exiting at the midpoint (-50).",
+        "params": [
+            {"key": "period", "label": "Range period (bars)", "default": 14, "min": 2, "max": 100, "step": 1},
+            {"key": "lower", "label": "Oversold level", "default": -80, "min": -99, "max": -50, "step": 1},
+            {"key": "upper", "label": "Overbought level", "default": -20, "min": -50, "max": -1, "step": 1},
+        ],
+    },
+    "buy_and_hold": {
+        "label": "Buy and hold",
+        "kind": "benchmark",
+        "summary": "Buys on the first bar and holds to the end. A yardstick for every other strategy, "
+        "with the same costs and position size.",
+        "params": [],
+    },
 }
+
+KINDS = {"trend": "Trend following", "reversion": "Mean reversion", "benchmark": "Benchmark"}
 
 
 def _sma(xs: list[float], n: int) -> list[float | None]:
@@ -110,6 +228,163 @@ def _rolling(xs: list[float], n: int, fn) -> list[float | None]:
     for x in xs:
         out.append(fn(win) if len(win) == n else None)  # uses the previous n values only
         win.append(x)
+    return out
+
+
+def _ema_opt(xs: list[float | None], n: int) -> list[float | None]:
+    """EMA of a series that starts with None values (e.g. another indicator)."""
+    first = next((i for i, x in enumerate(xs) if x is not None), len(xs))
+    tail = _ema([x for x in xs[first:]], n)  # type: ignore[misc]
+    return [None] * first + tail
+
+
+def _sma_opt(xs: list[float | None], n: int) -> list[float | None]:
+    first = next((i for i, x in enumerate(xs) if x is not None), len(xs))
+    return [None] * first + _sma([x for x in xs[first:]], n)  # type: ignore[misc]
+
+
+def _true_range(bars: list[dict]) -> list[float]:
+    tr = [bars[0]["h"] - bars[0]["l"]]
+    for i in range(1, len(bars)):
+        h, l, pc = bars[i]["h"], bars[i]["l"], bars[i - 1]["c"]
+        tr.append(max(h - l, abs(h - pc), abs(l - pc)))
+    return tr
+
+
+def _wilder(xs: list[float], n: int, start: int = 0) -> list[float | None]:
+    """Wilder's smoothing (an EMA with k = 1/n), seeded with the mean of the first n values from start."""
+    out: list[float | None] = [None] * len(xs)
+    if len(xs) < start + n:
+        return out
+    v = sum(xs[start : start + n]) / n
+    out[start + n - 1] = v
+    for i in range(start + n, len(xs)):
+        v = (v * (n - 1) + xs[i]) / n
+        out[i] = v
+    return out
+
+
+def _atr(bars: list[dict], n: int) -> list[float | None]:
+    return _wilder(_true_range(bars), n)
+
+
+def _range_position(bars: list[dict], n: int) -> list[float | None]:
+    """Where each close sits in the high-low range of the last n bars (including it), 0 to 100."""
+    out: list[float | None] = []
+    for i, b in enumerate(bars):
+        if i < n - 1:
+            out.append(None)
+            continue
+        win = bars[i - n + 1 : i + 1]
+        hh, ll = max(x["h"] for x in win), min(x["l"] for x in win)
+        out.append(50.0 if hh == ll else (b["c"] - ll) / (hh - ll) * 100)
+    return out
+
+
+def _adx(bars: list[dict], n: int) -> tuple[list, list, list]:
+    """ADX, +DI and -DI (Wilder)."""
+    m = len(bars)
+    pdm, mdm = [0.0] * m, [0.0] * m
+    for i in range(1, m):
+        up = bars[i]["h"] - bars[i - 1]["h"]
+        down = bars[i - 1]["l"] - bars[i]["l"]
+        pdm[i] = up if up > down and up > 0 else 0.0
+        mdm[i] = down if down > up and down > 0 else 0.0
+    tr = _true_range(bars)
+    s_tr, s_p, s_m = _wilder(tr, n, 1), _wilder(pdm, n, 1), _wilder(mdm, n, 1)
+    pdi: list[float | None] = [None] * m
+    mdi: list[float | None] = [None] * m
+    dx: list[float] = [0.0] * m
+    first = None
+    for i in range(m):
+        if s_tr[i] is None:
+            continue
+        first = i if first is None else first
+        pdi[i] = 0.0 if not s_tr[i] else 100 * s_p[i] / s_tr[i]
+        mdi[i] = 0.0 if not s_tr[i] else 100 * s_m[i] / s_tr[i]
+        tot = pdi[i] + mdi[i]
+        dx[i] = 0.0 if tot == 0 else 100 * abs(pdi[i] - mdi[i]) / tot
+    adx = _wilder(dx, n, first) if first is not None else [None] * m
+    return adx, pdi, mdi
+
+
+def _supertrend(bars: list[dict], n: int, mult: float) -> list[int]:
+    atr = _atr(bars, n)
+    out, trend = [], 0
+    fub = flb = None
+    for i, b in enumerate(bars):
+        if atr[i] is None:
+            out.append(0)
+            continue
+        hl2 = (b["h"] + b["l"]) / 2
+        ub, lb = hl2 + mult * atr[i], hl2 - mult * atr[i]
+        pc = bars[i - 1]["c"]
+        fub = ub if fub is None or ub < fub or pc > fub else fub
+        flb = lb if flb is None or lb > flb or pc < flb else flb
+        if trend == 0:
+            trend = 1 if b["c"] >= hl2 else -1
+        elif trend == 1 and b["c"] < flb:
+            trend = -1
+        elif trend == -1 and b["c"] > fub:
+            trend = 1
+        out.append(trend)
+    return out
+
+
+def _psar(bars: list[dict], step: float, max_af: float) -> list[int]:
+    if len(bars) < 3:
+        return [0] * len(bars)
+    up = bars[1]["c"] >= bars[0]["c"]
+    sar = bars[0]["l"] if up else bars[0]["h"]
+    ep = bars[1]["h"] if up else bars[1]["l"]
+    af = step
+    out = [0, 1 if up else -1]
+    for i in range(2, len(bars)):
+        b = bars[i]
+        sar = sar + af * (ep - sar)
+        if up:
+            sar = min(sar, bars[i - 1]["l"], bars[i - 2]["l"])
+            if b["l"] < sar:
+                up, sar, ep, af = False, ep, b["l"], step
+            elif b["h"] > ep:
+                ep, af = b["h"], min(af + step, max_af)
+        else:
+            sar = max(sar, bars[i - 1]["h"], bars[i - 2]["h"])
+            if b["h"] > sar:
+                up, sar, ep, af = True, ep, b["h"], step
+            elif b["l"] < ep:
+                ep, af = b["l"], min(af + step, max_af)
+        out.append(1 if up else -1)
+    return out
+
+
+def _cci(bars: list[dict], n: int) -> list[float | None]:
+    tp = [(b["h"] + b["l"] + b["c"]) / 3 for b in bars]
+    mid = _sma(tp, n)
+    out: list[float | None] = []
+    for i, m in enumerate(mid):
+        if m is None:
+            out.append(None)
+            continue
+        md = sum(abs(x - m) for x in tp[i - n + 1 : i + 1]) / n
+        out.append(0.0 if md == 0 else (tp[i] - m) / (0.015 * md))
+    return out
+
+
+def _oscillator(vals: list[float | None], lower: float, upper: float, mid: float) -> list[int]:
+    """Mean reversion on an oscillator: buy below lower, sell above upper, exit when it crosses mid."""
+    pos, out = 0, []
+    for v in vals:
+        if v is None:
+            out.append(0)
+            continue
+        if pos == 1 and v >= mid or pos == -1 and v <= mid:
+            pos = 0
+        if v < lower:
+            pos = 1
+        elif v > upper:
+            pos = -1
+        out.append(pos)
     return out
 
 
@@ -176,6 +451,60 @@ def signals(strategy: str, p: dict, bars: list[dict]) -> list[int]:
                 pos = -1
             out.append(pos)
         return out
+    if strategy == "ma_trend":
+        avg = (_ema if p["ema"] else _sma)(c, int(p["period"]))
+        return [0 if a is None else 1 if x > a else -1 if x < a else 0 for x, a in zip(c, avg)]
+    if strategy == "macd":
+        f, s = _ema(c, int(p["fast"])), _ema(c, int(p["slow"]))
+        line = [None if a is None or b is None else a - b for a, b in zip(f, s)]
+        sig = _ema_opt(line, int(p["signal"]))
+        for a, b in zip(line, sig):
+            if a is not None and b is not None and a != b:
+                pos = 1 if a > b else -1
+            out.append(pos)
+        return out
+    if strategy == "supertrend":
+        return _supertrend(bars, int(p["period"]), p["mult"])
+    if strategy == "parabolic_sar":
+        return _psar(bars, p["step"], p["max_af"])
+    if strategy == "adx_trend":
+        adx, pdi, mdi = _adx(bars, int(p["period"]))
+        for a, up, dn in zip(adx, pdi, mdi):
+            out.append(0 if a is None or a < p["threshold"] or up == dn else 1 if up > dn else -1)
+        return out
+    if strategy == "keltner":
+        mid, atr = _ema(c, int(p["period"])), _atr(bars, int(p["atr"]))
+        for x, m, a in zip(c, mid, atr):
+            if m is None or a is None:
+                out.append(0)
+                continue
+            if pos == 1 and x <= m or pos == -1 and x >= m:
+                pos = 0
+            if x > m + p["mult"] * a:
+                pos = 1
+            elif x < m - p["mult"] * a:
+                pos = -1
+            out.append(pos)
+        return out
+    if strategy == "momentum":
+        n, th = int(p["lookback"]), p["threshold"]
+        for i, x in enumerate(c):
+            if i < n:
+                out.append(0)
+                continue
+            roc = (x / c[i - n] - 1) * 100
+            out.append(1 if roc > th else -1 if roc < -th else 0)
+        return out
+    if strategy == "stochastic":
+        k = _sma_opt(_range_position(bars, int(p["period"])), int(p["smooth"]))
+        return _oscillator(k, p["lower"], p["upper"], 50)
+    if strategy == "cci":
+        return _oscillator(_cci(bars, int(p["period"])), -p["level"], p["level"], 0)
+    if strategy == "williams_r":
+        wr = [None if v is None else v - 100 for v in _range_position(bars, int(p["period"]))]
+        return _oscillator(wr, p["lower"], p["upper"], -50)
+    if strategy == "buy_and_hold":
+        return [1] * len(bars)
     raise ValueError(f"unknown strategy {strategy}")
 
 
@@ -185,7 +514,7 @@ def signals(strategy: str, p: dict, bars: list[dict]) -> list[int]:
 
 
 class BacktestIn(BaseModel):
-    strategy: Literal["ma_cross", "breakout", "rsi_reversion", "bollinger"]
+    strategy: Literal[tuple(STRATEGIES)]  # type: ignore[valid-type]
     params: dict[str, float] = {}
     tf: Literal["1h", "1d"] = "1d"
     start: date = date(2015, 1, 1)
@@ -211,7 +540,9 @@ class BacktestIn(BaseModel):
                 raise ValueError(f"{spec[k]['label']} must be between {spec[k]['min']} and {spec[k]['max']}")
         if self.strategy == "ma_cross" and full["fast"] >= full["slow"]:
             raise ValueError("The fast average must be shorter than the slow average")
-        if self.strategy == "rsi_reversion" and full["lower"] >= full["upper"]:
+        if self.strategy == "macd" and full["fast"] >= full["slow"]:
+            raise ValueError("The fast average must be shorter than the slow average")
+        if "lower" in full and full["lower"] >= full["upper"]:
             raise ValueError("The oversold level must be below the overbought level")
         if self.end and self.end <= self.start:
             raise ValueError("The end date must be after the start date")
@@ -346,7 +677,7 @@ def load_bars(tf: str, start: date, end: date | None) -> list[dict]:
 
 @router.get("/strategies")
 def strategies():
-    return [{"key": k, **v} for k, v in STRATEGIES.items()]
+    return [{"key": k, "kind_label": KINDS[v["kind"]], **v} for k, v in STRATEGIES.items()]
 
 
 @router.post("", status_code=201)

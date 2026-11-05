@@ -41,7 +41,14 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export type StrategyParam = { key: string; label: string; default: number; min: number; max: number; step: number };
-export type Strategy = { key: string; label: string; summary: string; params: StrategyParam[] };
+export type Strategy = {
+  key: string;
+  label: string;
+  summary: string;
+  kind: "trend" | "reversion" | "benchmark";
+  kind_label: string;
+  params: StrategyParam[];
+};
 
 export type ReportTrade = {
   id?: number;
@@ -150,7 +157,9 @@ export type CalendarEvent = {
   source: string;
   why: string;
 };
-export type RiskQuestion = { key: string; text: string; options: string[] };
+export type RiskQuestion = { key: string; category: string; text: string; options: string[]; visual?: "range" };
+export type RiskCategory = { label: string; summary: string };
+export type RiskBreakdown = RiskCategory & { key: string; pct: number };
 export type RiskLimits = { label: string; summary: string; max_risk_per_trade_pct: number; max_drawdown_pct: number; max_leverage: number };
 export type RiskProfile = RiskLimits & {
   profile: "conservative" | "moderate" | "aggressive";
@@ -158,6 +167,8 @@ export type RiskProfile = RiskLimits & {
   max_score: number;
   answers: Record<string, number>;
   updated_at: string;
+  breakdown: RiskBreakdown[];
+  complete: boolean;
 };
 
 export type FitCheck = { key: string; label: string; value: number | null; limit: number; unit: "%" | "x"; level: "fits" | "close" | "over" };
@@ -202,7 +213,7 @@ export const api = {
   tradeReport: (capital: number) => call<Report>(`/trades/report?capital=${capital}`),
   news: (goldOnly = false) => call<NewsFeed>(`/news?limit=100${goldOnly ? "&gold_only=true" : ""}`),
   calendar: (days = 14) => call<CalendarEvent[]>(`/calendar?days=${days}`),
-  riskQuiz: () => call<{ questions: RiskQuestion[]; profiles: Record<string, RiskLimits> }>("/risk/quiz"),
+  riskQuiz: () => call<{ questions: RiskQuestion[]; categories: Record<string, RiskCategory>; profiles: Record<string, RiskLimits> }>("/risk/quiz"),
   riskProfile: () => call<RiskProfile>("/risk/profile"),
   saveRiskProfile: (answers: Record<string, number>) =>
     call<RiskProfile>("/risk/profile", { method: "POST", body: JSON.stringify({ answers }) }),

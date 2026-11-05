@@ -11,25 +11,66 @@ from .auth import UserOut, current_user
 router = APIRouter(prefix="/risk", tags=["risk"])
 
 # Each option scores 0 (most cautious) to 3 (most risk-seeking).
+CATEGORIES = {
+    "experience": {"label": "Experience", "summary": "What you already know about trading and losing money."},
+    "goals": {"label": "Goals", "summary": "What you want from trading, and the swings you will accept for it."},
+    "capacity": {"label": "Financial cushion", "summary": "How much loss your finances can absorb."},
+    "behaviour": {"label": "Under pressure", "summary": "What you do when trades go against you, or for you."},
+    "style": {"label": "Trading style", "summary": "How you hold, size and protect your trades."},
+}
+
 QUESTIONS = [
-    {"key": "experience", "text": "How long have you been trading gold, forex or other leveraged products?",
+    # Experience
+    {"key": "experience", "category": "experience",
+     "text": "How long have you been trading gold, forex or other leveraged products?",
      "options": ["I haven't started yet", "Less than a year", "1 to 3 years", "More than 3 years"]},
-    {"key": "goal", "text": "What matters most to you?",
+    {"key": "knowledge", "category": "experience",
+     "text": "How well do you understand margin, leverage and margin calls?",
+     "options": ["Not at all yet", "I have a rough idea", "I understand them well", "I could explain them to someone else"]},
+    {"key": "past_losses", "category": "experience",
+     "text": "Have you lost money on a trade or investment before?",
+     "options": ["No, never", "Yes, and it put me off", "Yes, and I learned from it", "Often. Losses are part of the game"]},
+    # Goals
+    {"key": "goal", "category": "goals", "text": "What matters most to you?",
      "options": ["Protecting what I have", "Steady growth with small dips",
                  "Strong growth, accepting bigger swings", "The highest return possible"]},
-    {"key": "drawdown", "text": "Your account falls 20% in a month. What do you do?",
-     "options": ["Stop trading and take the money out", "Cut my trade sizes right away",
-                 "Wait it out and stick to my plan", "Add more, since prices are lower"]},
-    {"key": "loss_limit", "text": "What is the most you could lose in a year without it affecting your life?",
+    {"key": "return_target", "category": "goals", "text": "What yearly return would make you happy?",
+     "options": ["3% to 5%, steadily", "5% to 10%", "10% to 25%", "More than 25%"]},
+    {"key": "tradeoff", "category": "goals",
+     "text": "Which of these accounts would you pick? Each shows its best and worst year.",
+     "options": ["Best +5%, worst -2%", "Best +12%, worst -8%", "Best +25%, worst -18%", "Best +50%, worst -40%"],
+     "visual": "range"},
+    # Financial cushion
+    {"key": "loss_limit", "category": "capacity",
+     "text": "What is the most you could lose in a year without it affecting your life?",
      "options": ["Under 5% of the account", "5% to 15%", "15% to 30%", "More than 30%"]},
-    {"key": "money", "text": "How would you describe the money you trade with?",
+    {"key": "money", "category": "capacity", "text": "How would you describe the money you trade with?",
      "options": ["Savings I may need soon", "Savings I won't need for a few years",
                  "Spare money set aside for this", "Money I can afford to lose entirely"]},
-    {"key": "horizon", "text": "How long do you usually hold a trade?",
+    {"key": "income", "category": "capacity", "text": "How steady is your income?",
+     "options": ["Uncertain or irregular", "Mostly steady", "Steady", "Steady, with plenty left over each month"]},
+    {"key": "emergency", "category": "capacity",
+     "text": "How many months of living costs do you have saved outside your trading account?",
+     "options": ["Less than 1 month", "1 to 3 months", "3 to 6 months", "More than 6 months"]},
+    # Under pressure
+    {"key": "drawdown", "category": "behaviour", "text": "Your account falls 20% in a month. What do you do?",
+     "options": ["Stop trading and take the money out", "Cut my trade sizes right away",
+                 "Wait it out and stick to my plan", "Add more, since prices are lower"]},
+    {"key": "losing_streak", "category": "behaviour", "text": "You've just had five losing trades in a row. What next?",
+     "options": ["Take a break and review what went wrong", "Keep going with half the size",
+                 "Keep going with the same plan", "Trade bigger to win it back"]},
+    {"key": "winner", "category": "behaviour", "text": "A trade is up 10% in a day. What do you do?",
+     "options": ["Take all the profit now", "Take some profit and move my stop to break-even",
+                 "Let it run with a trailing stop", "Add to the position"]},
+    {"key": "news", "category": "behaviour",
+     "text": "A big announcement (like US inflation figures) is due in a few minutes and you have a trade open.",
+     "options": ["Close it before the news", "Make it smaller", "Leave it as it is", "Add to it to catch the move"]},
+    # Trading style
+    {"key": "horizon", "category": "style", "text": "How long do you usually hold a trade?",
      "options": ["Months or longer", "Weeks", "Days", "Minutes to hours"]},
-    {"key": "leverage", "text": "How do you feel about leverage (trading more than your balance)?",
+    {"key": "leverage", "category": "style", "text": "How do you feel about leverage (trading more than your balance)?",
      "options": ["I avoid it", "A little, carefully", "Moderate leverage is fine", "High leverage is fine"]},
-    {"key": "stops", "text": "How do you use stop losses?",
+    {"key": "stops", "category": "style", "text": "How do you use stop losses?",
      "options": ["On every trade, set tight", "On every trade, with room to move",
                  "Sometimes", "Rarely or never"]},
 ]
@@ -70,14 +111,28 @@ class AnswersIn(BaseModel):
     answers: dict[str, int]
 
 
+def breakdown(answers: dict[str, int]) -> list[dict]:
+    """Score per category as a percentage of its maximum, for the categories answered."""
+    out = []
+    for key, cat in CATEGORIES.items():
+        qs = [q["key"] for q in QUESTIONS if q["category"] == key and q["key"] in answers]
+        if qs:
+            out.append({"key": key, **cat, "pct": round(sum(answers[k] for k in qs) / (3 * len(qs)) * 100)})
+    return out
+
+
 def _out(row: dict) -> dict:
-    return {"profile": row["profile"], "score": row["score"], "max_score": MAX_SCORE,
-            "answers": row["answers"], "updated_at": row["updated_at"], **PROFILES[row["profile"]]}
+    # Profiles saved before questions were added keep the score they were given, out of
+    # the questions they answered.
+    answered = [k for k in row["answers"] if k in {q["key"] for q in QUESTIONS}] or list(row["answers"])
+    return {"profile": row["profile"], "score": row["score"], "max_score": 3 * len(answered),
+            "answers": row["answers"], "updated_at": row["updated_at"], "breakdown": breakdown(row["answers"]),
+            "complete": len(answered) == len(QUESTIONS), **PROFILES[row["profile"]]}
 
 
 @router.get("/quiz")
 def quiz():
-    return {"questions": QUESTIONS, "profiles": PROFILES}
+    return {"questions": QUESTIONS, "categories": CATEGORIES, "profiles": PROFILES}
 
 
 @router.post("/profile")

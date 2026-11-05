@@ -100,7 +100,7 @@ def test_validation_and_auth(client):
     bad = client.post("/backtests", json={"strategy": "ma_cross", "params": {"fast": 50, "slow": 20}})
     assert bad.status_code == 422 and "shorter" in bad.text
     assert client.post("/backtests", json={"strategy": "ma_cross", "params": {"bogus": 1}}).status_code == 422
-    assert len(client.get("/backtests/strategies").json()) == 4
+    assert len(client.get("/backtests/strategies").json()) == len(bt.STRATEGIES)
 
 
 def test_other_users_cannot_read_backtests(client):
@@ -110,3 +110,45 @@ def test_other_users_cannot_read_backtests(client):
     client.cookies.clear()
     client.post("/auth/signup", json={"email": "a2@example.com", "password": "longenough"})
     assert client.get(f"/backtests/{bid}").status_code == 404
+
+
+def random_bars(n=400, seed=3):
+    import random
+
+    rng, p, out = random.Random(seed), 2000.0, []
+    for i in range(n):
+        o = p
+        p *= 1 + rng.gauss(0, 0.01)
+        out.append({"t": T0 + i * 86400, "o": o, "h": max(o, p) * 1.003, "l": min(o, p) * 0.997, "c": p})
+    return out
+
+
+@pytest.mark.parametrize("key", list(bt.STRATEGIES))
+def test_every_strategy_runs_without_looking_ahead(key):
+    bars = random_bars()
+    params = bt.BacktestIn(strategy=key).params
+    full = bt.signals(key, params, bars)
+    assert len(full) == len(bars) and set(full) <= {-1, 0, 1}
+    # A signal at bar i must not change when later bars are added.
+    for cut in (60, 150, 300):
+        assert bt.signals(key, params, bars[:cut]) == full[:cut], key
+    rep = bt.run(bt.BacktestIn(strategy=key, tf="1d", units=1), bars)
+    assert rep["stats"]["trades"] >= 1, key
+
+
+def test_strategy_list_and_validation():
+    keys = [s["key"] for s in bt.strategies()]
+    assert len(keys) == len(set(keys)) >= 15
+    assert all(s["kind_label"] for s in bt.strategies())
+    with pytest.raises(ValueError, match="fast average"):
+        bt.BacktestIn(strategy="macd", params={"fast": 30, "slow": 20})
+    with pytest.raises(ValueError, match="oversold"):
+        bt.BacktestIn(strategy="stochastic", params={"lower": 50, "upper": 50})
+
+
+def test_buy_and_hold_matches_the_market():
+    bars = random_bars(200)
+    rep = bt.run(bt.BacktestIn(strategy="buy_and_hold", tf="1d", units=1, swap_long=0, spread=0), bars)
+    t = rep["trades"][0]
+    assert len(rep["trades"]) == 1 and t["entry_time"] == bars[1]["t"] and t["exit_reason"] == "end_of_test"
+    assert t["pnl"] == pytest.approx(bars[-1]["c"] - bars[1]["o"], abs=0.01)
