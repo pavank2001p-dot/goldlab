@@ -5,6 +5,7 @@ import { useUser } from "@/lib/useUser";
 
 const next = [
   { title: "Backtest a strategy", when: "Try 15 strategies on 15+ years of gold", href: "/backtest" },
+  { title: "Explore a trade's scenarios", when: "2,000 simulated paths from gold's own history", href: "/scenarios" },
   { title: "Log your own trades", when: "Type them in or import your broker history", href: "/trades" },
   { title: "Take the risk-profile quiz", when: "17 questions to set your risk limits", href: "/risk" },
 ];

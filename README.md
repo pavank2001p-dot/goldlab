@@ -29,6 +29,10 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
   one-line reason. Needs `FINNHUB_API_KEY` and `ANTHROPIC_API_KEY`; without them the page says it isn't connected.
 - **US event calendar** (`api/app/calendar.py`): 2026 FOMC decisions seeded from the Fed's calendar, plus
   this week's USD high/medium-impact releases from the public ForexFactory JSON feed (`CALENDAR_FEED_URL`).
+- **Trade scenarios** (`api/app/scenarios.py`): for a trade opened now, 2,000 simulated paths built from real
+  trading days drawn at random from the lookback period (close, high and low moves). Shows price ranges by date,
+  how often the stop or target is hit first, and the profit or loss spread. The past average move is removed by
+  default, so it takes no view on direction. A simulation, not a forecast.
 - **Risk quiz** (`api/app/risk.py`): 17 questions in five parts place a user as conservative, moderate or aggressive,
   with risk-per-trade, drawdown and leverage limits.
 - **Profile fit** (`api/app/fit.py`): every backtest and the trade log are checked against the user's

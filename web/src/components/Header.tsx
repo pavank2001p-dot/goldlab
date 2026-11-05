@@ -26,6 +26,7 @@ export default function Header() {
         <nav className="order-last -mx-4 flex w-[calc(100%+2rem)] gap-4 overflow-x-auto whitespace-nowrap px-4 text-sm text-muted sm:order-none sm:mx-0 sm:w-auto sm:px-0">
           <Link href="/chart" className="hover:text-foreground">Chart</Link>
           <Link href="/backtest" className="hover:text-foreground">Backtest</Link>
+          <Link href="/scenarios" className="hover:text-foreground">Scenarios</Link>
           <Link href="/trades" className="hover:text-foreground">Trade log</Link>
           <Link href="/news" className="hover:text-foreground">News</Link>
           <Link href="/risk" className="hover:text-foreground">Risk quiz</Link>

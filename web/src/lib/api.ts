@@ -187,6 +187,37 @@ export type Turn = { role: "user" | "assistant"; content: string };
 export type AssistantStatus = { configured: boolean; limit: number; used_today: number; remaining: number };
 export type AssistantAnswer = { id: number; question: string; status: "pending" | "done" | "error"; answer: string | null; tools_used: string[] };
 
+export type ScenarioInput = {
+  side: "long" | "short";
+  entry: number | null;
+  units: number;
+  stop: number | null;
+  target: number | null;
+  horizon_days: number;
+  lookback_years: number;
+  with_trend: boolean;
+  capital: number;
+};
+type Pcts = { p5: number; p25: number; p50: number; p75: number; p95: number };
+export type Scenario = {
+  entry: number;
+  side: "long" | "short";
+  trading_days: number;
+  paths: number;
+  bands: (Pcts & { t: number })[];
+  checkpoints: (Pcts & { label: string; t: number; above_entry_pct: number })[];
+  outcomes: { target: number; stop: number; open: number };
+  median_days_held: number;
+  pnl: Pcts & { mean: number; profit_pct: number; histogram: { from: number; to: number; count: number }[] };
+  loss_at_stop: number | null;
+  loss_at_stop_pct: number | null;
+  position_value: number;
+  leverage: number;
+  history: { days: number; yearly_volatility_pct: number; trend_removed: boolean; avg_yearly_move_pct: number; from: number | null };
+  recent: { t: number; c: number }[];
+  profile?: { profile: string; label: string; max_risk_per_trade_pct: number; max_leverage: number };
+};
+
 export const api = {
   me: () => call<User>("/auth/me"),
   signup: (email: string, password: string, name: string) =>
@@ -196,6 +227,7 @@ export const api = {
   logout: () => call<void>("/auth/logout", { method: "POST" }),
   summary: () => call<Summary>("/prices/summary"),
   live: () => call<LiveQuote>("/prices/live"),
+  scenario: (p: Partial<ScenarioInput>) => call<Scenario>("/scenarios", { method: "POST", body: JSON.stringify(p) }),
   candles: (tf: ChartTf, opts: { start?: number; end?: number; limit?: number } = {}) => {
     const q = new URLSearchParams({ tf, limit: String(opts.limit ?? 1000) });
     if (opts.start !== undefined) q.set("start", String(opts.start));
