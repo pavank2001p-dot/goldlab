@@ -218,6 +218,69 @@ export type Scenario = {
   profile?: { profile: string; label: string; max_risk_per_trade_pct: number; max_leverage: number };
 };
 
+export type PaperPrice = { bid: number; ask: number; t: number; age_seconds: number; open: boolean; source: "live" | "bars" };
+export type PaperPosition = {
+  id: number;
+  side: "long" | "short";
+  units: number;
+  entry_price: number;
+  opened_at: string;
+  stop_loss: number | null;
+  take_profit: number | null;
+  order_kind: "market" | "limit" | "stop";
+  closed_at: string | null;
+  exit_price: number | null;
+  close_reason: "manual" | "stop_loss" | "take_profit" | "stop_out" | null;
+  swap: number | null;
+  pnl: number | null;
+  mark?: number | null;
+  margin?: number | null;
+};
+export type PaperOrder = {
+  id: number;
+  side: "long" | "short";
+  kind: "limit" | "stop";
+  units: number;
+  price: number;
+  stop_loss: number | null;
+  take_profit: number | null;
+  status: "pending" | "filled" | "cancelled";
+  note: string;
+  created_at: string;
+  done_at: string | null;
+};
+export type PaperAccount = {
+  starting_balance: number;
+  balance: number;
+  equity: number;
+  unrealized: number;
+  margin_used: number;
+  free_margin: number;
+  margin_level_pct: number | null;
+  return_pct: number;
+  created_at: string;
+  closed_trades: number;
+  wins: number;
+  realized: number;
+};
+export type PaperState = {
+  account: PaperAccount;
+  price: PaperPrice | null;
+  positions: PaperPosition[];
+  orders: PaperOrder[];
+  cancelled_orders: PaperOrder[];
+  history: PaperPosition[];
+  settings: { spread: number; swap_long: number; swap_short: number; margin_rate_pct: number; max_leverage: number; stop_out_pct: number };
+};
+export type PaperOrderInput = {
+  side: "long" | "short";
+  kind: "market" | "limit" | "stop";
+  units: number;
+  price?: number | null;
+  stop_loss?: number | null;
+  take_profit?: number | null;
+};
+
 export const api = {
   me: () => call<User>("/auth/me"),
   signup: (email: string, password: string, name: string) =>
@@ -251,6 +314,16 @@ export const api = {
     call<RiskProfile>("/risk/profile", { method: "POST", body: JSON.stringify({ answers }) }),
   backtestFit: (id: number) => call<Fit>(`/fit/backtests/${id}`),
   tradeFit: (capital: number) => call<Fit>(`/fit/trades?capital=${capital}`),
+  paper: () => call<PaperState>("/paper"),
+  paperOrder: (o: PaperOrderInput) =>
+    call<{ position?: PaperPosition; order?: PaperOrder }>("/paper/orders", { method: "POST", body: JSON.stringify(o) }),
+  paperCancel: (id: number) => call<void>(`/paper/orders/${id}`, { method: "DELETE" }),
+  paperClose: (id: number) => call<{ position: PaperPosition }>(`/paper/positions/${id}/close`, { method: "POST" }),
+  paperProtect: (id: number, stop_loss: number | null, take_profit: number | null) =>
+    call<{ position: PaperPosition }>(`/paper/positions/${id}`, { method: "PATCH", body: JSON.stringify({ stop_loss, take_profit }) }),
+  paperReset: (balance: number) => call<PaperState>("/paper/reset", { method: "POST", body: JSON.stringify({ balance }) }),
+  paperReport: () => call<Report>("/paper/report"),
+  paperFit: () => call<Fit>("/paper/fit"),
   assistantStatus: () => call<AssistantStatus>("/assistant/status"),
   ask: (question: string, history: Turn[]) =>
     call<{ id: number }>("/assistant/questions", { method: "POST", body: JSON.stringify({ question, history }) }),

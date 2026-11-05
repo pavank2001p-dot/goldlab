@@ -11,6 +11,8 @@ const REASONS: Record<string, string> = {
   take_profit: "Take profit",
   end_of_test: "End of test",
   account_wiped_out: "Account wiped out",
+  manual: "Closed by you",
+  stop_out: "Margin stop-out",
 };
 
 function Stat({ label, value, num, fmt, tone, hint, icon }: {
@@ -55,7 +57,7 @@ type Filter = "all" | "wins" | "losses" | "long" | "short";
 
 const tone = (v: number | null | undefined) => (v == null ? undefined : v >= 0 ? "up" : "down");
 
-export default function ReportView({ report, kind }: { report: Report; kind: "backtest" | "log" }) {
+export default function ReportView({ report, kind }: { report: Report; kind: "backtest" | "log" | "paper" }) {
   const s = report.stats;
   const [showAll, setShowAll] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
@@ -70,7 +72,7 @@ export default function ReportView({ report, kind }: { report: Report; kind: "ba
   if (!s.trades)
     return (
       <p className="rounded-lg border border-border bg-surface p-4 text-sm text-muted">
-        {kind === "log" ? "Close at least one trade to see your report." : "This strategy made no trades in that period."}
+        {kind === "backtest" ? "This strategy made no trades in that period." : "Close at least one trade to see your report."}
       </p>
     );
 
@@ -134,7 +136,7 @@ export default function ReportView({ report, kind }: { report: Report; kind: "ba
               <th className="px-3 py-2 text-right">Oz</th>
               <th className="px-3 py-2 text-right">Swap</th>
               <th className="px-3 py-2 text-right">P&amp;L</th>
-              {kind === "backtest" && <th className="px-3 py-2">Exit reason</th>}
+              {kind !== "log" && <th className="px-3 py-2">Exit reason</th>}
             </tr>
           </thead>
           <tbody>
@@ -155,7 +157,7 @@ export default function ReportView({ report, kind }: { report: Report; kind: "ba
                     <span className={t.pnl >= 0 ? "text-up" : "text-down"}>{fmtUsd(t.pnl)}</span>
                   </div>
                 </td>
-                {kind === "backtest" && <td className="whitespace-nowrap px-3 py-1.5 text-muted">{REASONS[t.exit_reason ?? ""] ?? t.exit_reason}</td>}
+                {kind !== "log" && <td className="whitespace-nowrap px-3 py-1.5 text-muted">{REASONS[t.exit_reason ?? ""] ?? t.exit_reason}</td>}
               </tr>
             ))}
           </tbody>

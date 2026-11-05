@@ -33,6 +33,12 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
   trading days drawn at random from the lookback period (close, high and low moves). Shows price ranges by date,
   how often the stop or target is hit first, and the profit or loss spread. The past average move is removed by
   default, so it takes no view on direction. A simulation, not a forecast.
+- **Paper trading** (`api/app/paper.py`): a practice account in virtual dollars ($10,000 to start, resettable).
+  Market, limit and stop orders with optional stop loss and take profit fill at the real bid and ask, with the
+  same spread and overnight swap as the backtester and 20x maximum leverage (stop-out at a 50% margin level).
+  Pending orders and stops are checked against every saved minute bar since the account was last opened, so
+  nothing is missed while the page is closed. Closed paper trades get the same report and profile fit as the
+  trade log. No real money or broker is involved.
 - **Risk quiz** (`api/app/risk.py`): 17 questions in five parts place a user as conservative, moderate or aggressive,
   with risk-per-trade, drawdown and leverage limits.
 - **Profile fit** (`api/app/fit.py`): every backtest and the trade log are checked against the user's

@@ -36,6 +36,7 @@ const TOOL_LABELS: Record<string, string> = {
   run_backtest: "ran a backtest",
   my_backtests: "your backtests",
   my_trade_log: "your trade log",
+  my_paper_account: "your paper account",
   my_risk_profile: "your risk profile",
   profile_fit: "profile fit",
   gold_news: "news",

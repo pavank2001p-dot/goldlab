@@ -10,6 +10,7 @@ const NAV = [
   { href: "/chart", label: "Chart", icon: "candles" },
   { href: "/backtest", label: "Backtest", icon: "backtest" },
   { href: "/scenarios", label: "Scenarios", icon: "scenarios" },
+  { href: "/paper", label: "Paper trading", icon: "wallet" },
   { href: "/trades", label: "Trade log", icon: "trades" },
   { href: "/news", label: "News", icon: "news" },
   { href: "/risk", label: "Risk quiz", icon: "risk" },
@@ -30,12 +31,12 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3">
         <Link href="/" className="flex items-center gap-2 font-semibold">
           <span className="inline-block h-3 w-3 rotate-45 rounded-[3px] bg-gradient-to-br from-gold to-[#b8860b] shadow-[0_0_10px_var(--gold)]" />
           GoldLab
         </Link>
-        <nav className="order-last -mx-4 flex w-[calc(100%+2rem)] gap-4 overflow-x-auto whitespace-nowrap px-4 text-sm text-muted sm:order-none sm:mx-0 sm:w-auto sm:px-0">
+        <nav className="order-last -mx-4 flex w-[calc(100%+2rem)] gap-3.5 overflow-x-auto whitespace-nowrap px-4 text-sm text-muted sm:order-none sm:mx-0 sm:w-auto sm:px-0">
           {NAV.map((n) => {
             const on = path === n.href || path.startsWith(n.href + "/");
             return (
