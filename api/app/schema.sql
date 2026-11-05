@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS users (
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- One row per bar. tf is '1h' or '1d'; ts is the bar's open time in UTC.
+-- One row per bar. tf is '1s', '1m', '1h' or '1d'; ts is the bar's open time in UTC.
 CREATE TABLE IF NOT EXISTS candles (
     symbol TEXT             NOT NULL,
     tf     TEXT             NOT NULL,

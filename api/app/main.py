@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from . import assistant, auth, backtest, calendar, config, db, fit, ingest, news, prices, risk, trades
+from . import assistant, auth, backtest, calendar, config, db, fit, ingest, live, news, prices, risk, trades
 
 log = logging.getLogger("api")
 
@@ -35,6 +35,8 @@ async def lifespan(app: FastAPI):
     db.migrate()
     calendar.seed_fomc()
     tasks = [asyncio.create_task(_price_updater()), asyncio.create_task(_news_updater())] if config.ENABLE_SCHEDULER else []
+    if config.ENABLE_SCHEDULER and config.LIVE_PRICES and config.FINNHUB_API_KEY and config.PRICE_SOURCE != "sample":
+        tasks.append(asyncio.create_task(live.run()))
     yield
     for task in tasks:
         task.cancel()
@@ -44,6 +46,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="GoldLab API", lifespan=lifespan)
 app.include_router(auth.router)
 app.include_router(prices.router)
+app.include_router(live.router)
 app.include_router(backtest.router)
 app.include_router(trades.router)
 app.include_router(news.router)

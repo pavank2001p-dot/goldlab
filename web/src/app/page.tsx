@@ -3,7 +3,7 @@ import PriceChart from "@/components/PriceChart";
 import PriceTicker from "@/components/PriceTicker";
 
 const features = [
-  { title: "Live gold chart", body: "Hourly and daily XAU/USD candles back to 2010.", ready: true },
+  { title: "Live gold chart", body: "Live XAU/USD candles from 1 second to 1 month, with history back to 2010.", ready: true },
   { title: "Strategy backtests", body: "Test moving-average, breakout and other strategies with real spreads and swaps.", ready: true },
   { title: "News that moves gold", body: "Headlines tagged as good or bad for gold, plus the Fed and inflation calendar.", ready: true },
   { title: "Fits your risk appetite", body: "A short quiz sets your profile and the risk limits to measure your trading against.", ready: true },
