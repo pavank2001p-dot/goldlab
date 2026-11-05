@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import FitPanel from "@/components/FitPanel";
 import ReportView from "@/components/ReportView";
 import SignInPrompt from "@/components/SignInPrompt";
+import { Chips, Empty, Icon, PageHeader } from "@/components/ui";
 import { api, fmtPct, type Backtest, type BacktestParams, type BacktestSummary, type Strategy } from "@/lib/api";
 import { useUser } from "@/lib/useUser";
 
@@ -56,6 +57,8 @@ export default function BacktestPage() {
   const [history, setHistory] = useState<BacktestSummary[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [kind, setKind] = useState<"all" | Strategy["kind"]>("all");
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     api.strategies().then((list) => {
@@ -112,17 +115,40 @@ export default function BacktestPage() {
   return (
     <div className="mx-auto grid max-w-6xl gap-6 px-4 py-8 lg:grid-cols-[320px_1fr]">
       <form onSubmit={run} className="space-y-4">
-        <h1 className="text-xl font-semibold">Backtest a strategy</h1>
-        <Field label="Strategy">
-          <select className={input} value={form.strategy} onChange={(e) => pick(e.target.value)}>
-            {[...new Set(strategies.map((s) => s.kind_label))].map((kind) => (
-              <optgroup key={kind} label={kind}>
-                {strategies.filter((s) => s.kind_label === kind).map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-              </optgroup>
-            ))}
-          </select>
-        </Field>
-        <p className="text-xs text-muted">
+        <PageHeader icon="backtest" title="Backtest a strategy" subtitle={`${strategies.length} strategies on gold's history`} />
+        <div className="rounded-xl border border-border bg-surface p-3">
+          <div className="flex items-center gap-2 rounded-md border border-border bg-background px-2.5">
+            <Icon name="search" className="h-4 w-4 text-muted" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search strategies"
+              className="w-full bg-transparent py-1.5 text-sm outline-none" />
+          </div>
+          <div className="mt-2.5">
+            <Chips value={kind} onChange={setKind} options={[
+              { key: "all", label: "All", count: strategies.length },
+              { key: "trend", label: "Trend", count: strategies.filter((x) => x.kind === "trend").length },
+              { key: "reversion", label: "Reversion", count: strategies.filter((x) => x.kind === "reversion").length },
+              { key: "benchmark", label: "Benchmark", count: strategies.filter((x) => x.kind === "benchmark").length },
+            ]} />
+          </div>
+          <div role="radiogroup" aria-label="Strategy" className="mt-2.5 max-h-64 space-y-1 overflow-y-auto pr-1">
+            {strategies
+              .filter((x) => (kind === "all" || x.kind === kind) && `${x.label} ${x.summary}`.toLowerCase().includes(search.toLowerCase()))
+              .map((x) => {
+                const on = x.key === form.strategy;
+                return (
+                  <button key={x.key} type="button" role="radio" aria-checked={on} onClick={() => pick(x.key)}
+                    className={`flex w-full items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left text-sm transition-colors ${on ? "border-gold bg-gold/10" : "border-transparent hover:bg-background"}`}>
+                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${x.kind === "trend" ? "bg-up/15 text-up" : x.kind === "reversion" ? "bg-[#7c9cff]/15 text-[#9fb4ff]" : "bg-gold/15 text-gold"}`}>
+                      <Icon name={x.kind === "trend" ? "backtest" : x.kind === "reversion" ? "scale" : "layers"} className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">{x.label}</span>
+                    {on && <Icon name="check" className="h-4 w-4 text-gold" />}
+                  </button>
+                );
+              })}
+          </div>
+        </div>
+        <p className="text-xs leading-relaxed text-muted">
           <span className="mr-1.5 rounded bg-surface px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-gold">{strategy.kind_label}</span>
           {strategy.summary}
         </p>
@@ -184,7 +210,7 @@ export default function BacktestPage() {
         </details>
 
         {error && <p className="text-sm text-down">{error}</p>}
-        <button disabled={busy} className="w-full rounded-md bg-gold py-2 font-medium text-black disabled:opacity-60">
+        <button disabled={busy} className="w-full rounded-md bg-gold py-2 font-medium text-black shadow-[0_8px_30px_-12px_var(--gold)] transition hover:-translate-y-0.5 disabled:opacity-60">
           {busy ? "Running…" : "Run backtest"}
         </button>
         <p className="text-xs text-muted">
@@ -195,21 +221,21 @@ export default function BacktestPage() {
       <section id="results" className="min-w-0 space-y-6">
         {result ? (
           <div>
-            <h2 className="mb-3 font-medium">{label(strategies, result.params)}</h2>
+            <h2 className="mb-3 flex items-center gap-2 font-medium"><Icon name="backtest" className="h-4 w-4 text-gold" />{label(strategies, result.params)}</h2>
             <div className="space-y-4">
               <FitPanel load={() => api.backtestFit(result.id)} deps={[result.id]} />
               <ReportView report={result} kind="backtest" />
             </div>
           </div>
         ) : (
-          <div className="rounded-lg border border-dashed border-border p-10 text-center text-sm text-muted">
+          <Empty icon="backtest" title="No backtest yet">
             Pick a strategy and press Run to see its equity curve, drawdown, trades and statistics.
-          </div>
+          </Empty>
         )}
         {history.length > 0 && (
           <div>
             <h2 className="mb-2 font-medium">Your backtests</h2>
-            <div className="overflow-x-auto rounded-lg border border-border">
+            <div className="overflow-x-auto rounded-xl border border-border">
               <table className="w-full text-sm tabular-nums">
                 <thead className="bg-surface text-left text-xs text-muted">
                   <tr>
@@ -222,7 +248,7 @@ export default function BacktestPage() {
                 </thead>
                 <tbody>
                   {history.map((h) => (
-                    <tr key={h.id} className={`border-t border-border ${result?.id === h.id ? "bg-surface" : ""}`}>
+                    <tr key={h.id} className={`border-t border-border transition-colors hover:bg-surface ${result?.id === h.id ? "bg-surface" : ""}`}>
                       <td className="px-3 py-1.5">
                         <button onClick={() => open(h.id)} className="text-left hover:text-gold">{label(strategies, h.params)}</button>
                       </td>

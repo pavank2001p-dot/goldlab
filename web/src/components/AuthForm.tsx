@@ -32,10 +32,16 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
     }
   }
 
-  const input = "w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-gold";
+  const input = "w-full rounded-md border border-border bg-background px-3 py-2 outline-none transition focus:border-gold focus:shadow-[0_0_0_3px_rgba(227,179,65,0.15)]";
   return (
-    <div className="mx-auto max-w-sm px-4 py-14">
-      <h1 className="text-2xl font-semibold">{signup ? "Create your free account" : "Welcome back"}</h1>
+    <div className="relative mx-auto max-w-sm px-4 py-14">
+      <div aria-hidden className="pointer-events-none absolute left-1/2 top-6 h-40 w-72 -translate-x-1/2 rounded-full bg-gold/10 blur-3xl" />
+      <div className="relative rounded-2xl border border-border bg-surface p-6 shadow-[0_20px_60px_-30px_var(--gold)]">
+      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-gold to-[#b8860b]">
+        <span className="h-3 w-3 rotate-45 rounded-[3px] bg-black/80" />
+      </span>
+      <h1 className="mt-4 text-2xl font-semibold">{signup ? "Create your free account" : "Welcome back"}</h1>
+      <p className="mt-1 text-sm text-muted">{signup ? "Save your backtests, trades and risk profile." : "Log in to pick up where you left off."}</p>
       <form onSubmit={onSubmit} className="mt-6 space-y-4">
         {signup && (
           <label className="block text-sm">
@@ -70,6 +76,7 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
           <>New here? <Link href="/signup" className="text-gold">Create an account</Link></>
         )}
       </p>
+      </div>
     </div>
   );
 }

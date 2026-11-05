@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Fragment, useEffect, useRef, useState } from "react";
 import SignInPrompt from "@/components/SignInPrompt";
+import { Icon, PageHeader } from "@/components/ui";
 import { api, ApiError, type AssistantStatus, type Turn } from "@/lib/api";
 import { useUser } from "@/lib/useUser";
 
@@ -10,11 +11,23 @@ const STORE = "goldlab-assistant";
 const HISTORY_TURNS = 10;
 
 const SUGGESTIONS = [
-  "How has gold moved this year?",
-  "Does my latest backtest fit my risk profile?",
-  "Backtest a 20/50 moving-average crossover since 2015 with a 2% stop loss.",
-  "What US events this week could move gold, and why?",
+  { icon: "candles", text: "How has gold moved this year?" },
+  { icon: "risk", text: "Does my latest backtest fit my risk profile?" },
+  { icon: "backtest", text: "Backtest a 20/50 moving-average crossover since 2015 with a 2% stop loss." },
+  { icon: "calendar", text: "What US events this week could move gold, and why?" },
 ];
+
+function Avatar({ who }: { who: "user" | "assistant" }) {
+  return who === "assistant" ? (
+    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-gold to-[#b8860b] text-black">
+      <Icon name="assistant" className="h-4 w-4" />
+    </span>
+  ) : (
+    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-border text-muted">
+      <Icon name="account" className="h-4 w-4" />
+    </span>
+  );
+}
 
 const TOOL_LABELS: Record<string, string> = {
   price_summary: "latest prices",
@@ -132,53 +145,79 @@ export default function AssistantPage() {
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col px-4 py-8">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-2xl font-semibold">AI assistant</h1>
-        {status?.configured && (
-          <span className="text-xs text-muted">
-            {status.remaining} of {status.limit} questions left today
-          </span>
-        )}
-      </div>
-      <p className="mt-1 text-sm text-muted">
-        Ask about gold prices, strategies, your backtests, your trade log or the news. It looks up every number on this
-        site rather than guessing. It explains; it never tells you to buy or sell.
-      </p>
+      <PageHeader icon="assistant" title="AI assistant"
+        subtitle="Ask about gold prices, strategies, your backtests, your trade log or the news. It looks up every number on this site rather than guessing. It explains; it never tells you to buy or sell."
+        right={status?.configured ? (
+          <div className="w-full sm:w-40">
+            <p className="text-right text-xs tabular-nums text-muted">{status.remaining} of {status.limit} left today</p>
+            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-border">
+              <div className="h-full rounded-full bg-gold transition-all" style={{ width: `${(status.remaining / Math.max(status.limit, 1)) * 100}%` }} />
+            </div>
+          </div>
+        ) : undefined} />
 
       {status && !status.configured ? (
-        <p className="mt-6 rounded-lg border border-border bg-surface p-4 text-sm text-muted">
-          The assistant isn&apos;t switched on yet. It needs an Anthropic API key on the server.
-        </p>
+        <div className="mt-6 rounded-xl border border-border bg-surface p-5">
+          <p className="flex items-center gap-2 text-sm font-medium"><span className="h-2 w-2 rounded-full bg-gold" /> The assistant isn&apos;t switched on yet</p>
+          <p className="mt-1 text-sm text-muted">It needs an Anthropic API key on the server. Once it&apos;s on, you can ask things like:</p>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            {SUGGESTIONS.map((x) => (
+              <div key={x.text} className="flex items-start gap-2.5 rounded-lg border border-border p-3 text-sm text-muted opacity-70">
+                <Icon name={x.icon} className="mt-0.5 h-4 w-4 shrink-0" />{x.text}
+              </div>
+            ))}
+          </div>
+        </div>
       ) : (
         <>
           <div className="mt-6 space-y-4">
             {msgs.length === 0 && (
               <div className="grid gap-2 sm:grid-cols-2">
-                {SUGGESTIONS.map((s) => (
-                  <button key={s} onClick={() => send(s)} disabled={waiting || status?.remaining === 0}
-                          className="rounded-lg border border-border bg-surface p-3 text-left text-sm hover:border-gold disabled:opacity-50">
-                    {s}
+                {SUGGESTIONS.map((x, i) => (
+                  <button key={x.text} onClick={() => send(x.text)} disabled={waiting || status?.remaining === 0}
+                          style={{ animationDelay: `${i * 60}ms` }}
+                          className="rise-in group flex items-start gap-2.5 rounded-xl border border-border bg-surface p-3.5 text-left text-sm transition hover:-translate-y-0.5 hover:border-gold disabled:opacity-50">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gold/10 text-gold transition group-hover:bg-gold group-hover:text-black">
+                      <Icon name={x.icon} className="h-4 w-4" />
+                    </span>
+                    {x.text}
                   </button>
                 ))}
               </div>
             )}
             {msgs.map((m, i) =>
               m.role === "user" ? (
-                <div key={i} className="ml-auto max-w-[85%] rounded-lg bg-gold/15 px-3 py-2 text-sm">{m.content}</div>
+                <div key={i} className="rise-in flex justify-end gap-2.5">
+                  <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-gold/15 px-3.5 py-2 text-sm">{m.content}</div>
+                  <Avatar who="user" />
+                </div>
               ) : (
-                <div key={i} className={`max-w-[95%] rounded-lg border px-3 py-1 text-sm ${m.failed ? "border-down/50" : "border-border bg-surface"}`}>
-                  <Rich text={m.content} />
-                  {m.tools && m.tools.length > 0 && (
-                    <p className="mb-2 text-xs text-muted">
-                      Checked: {[...new Set(m.tools.map((t) => TOOL_LABELS[t] ?? t))].join(", ")}
-                    </p>
-                  )}
+                <div key={i} className="rise-in flex gap-2.5">
+                  <Avatar who="assistant" />
+                  <div className={`min-w-0 max-w-[92%] rounded-2xl rounded-tl-sm border px-3.5 py-1 text-sm ${m.failed ? "border-down/50" : "border-border bg-surface"}`}>
+                    <Rich text={m.content} />
+                    {m.tools && m.tools.length > 0 && (
+                      <div className="mb-2 flex flex-wrap gap-1">
+                        {[...new Set(m.tools.map((t) => TOOL_LABELS[t] ?? t))].map((t) => (
+                          <span key={t} className="inline-flex items-center gap-1 rounded-full bg-background px-2 py-0.5 text-[11px] text-muted">
+                            <Icon name="check" className="h-3 w-3 text-up" />{t}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               ),
             )}
             {waiting && (
-              <div className="w-fit animate-pulse rounded-lg border border-border bg-surface px-3 py-2 text-sm text-muted">
-                Looking that up…
+              <div className="flex gap-2.5">
+                <Avatar who="assistant" />
+                <div className="flex items-center gap-2 rounded-2xl rounded-tl-sm border border-border bg-surface px-3.5 py-2.5 text-sm text-muted">
+                  <span className="flex gap-1">
+                    {[0, 1, 2].map((d) => <span key={d} className="typing-dot h-1.5 w-1.5 rounded-full bg-gold" style={{ animationDelay: `${d * 0.15}s` }} />)}
+                  </span>
+                  Looking that up
+                </div>
               </div>
             )}
             <div ref={end} />
@@ -200,7 +239,7 @@ export default function AssistantPage() {
               maxLength={2000}
               placeholder={status?.remaining === 0 ? "You've used today's questions. Back tomorrow (midnight UTC)." : "Ask about gold or your results…"}
               disabled={waiting || status?.remaining === 0}
-              className="min-w-0 flex-1 resize-none rounded-md border border-border bg-background px-3 py-2 text-base outline-none focus:border-gold sm:text-sm"
+              className="min-w-0 flex-1 resize-none rounded-xl border border-border bg-surface px-3.5 py-2.5 text-base outline-none transition focus:border-gold focus:shadow-[0_0_0_3px_rgba(227,179,65,0.15)] sm:text-sm"
             />
             <div className="flex flex-col gap-2">
               <button type="submit" disabled={waiting || !q.trim() || status?.remaining === 0}

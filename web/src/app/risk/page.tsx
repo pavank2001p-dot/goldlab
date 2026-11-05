@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import SignInPrompt from "@/components/SignInPrompt";
+import { PageHeader } from "@/components/ui";
 import { api, type RiskCategory, type RiskLimits, type RiskProfile, type RiskQuestion } from "@/lib/api";
 import { useUser } from "@/lib/useUser";
 
@@ -101,10 +102,8 @@ function Quiz({ questions, categories, initial, onDone }: {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
-      <h1 className="text-xl font-semibold">What&apos;s your risk appetite?</h1>
-      <p className="mt-1 text-sm text-muted">
-        {questions.length} quick questions in {catKeys.length} parts. There are no right answers, just pick what fits you best.
-      </p>
+      <PageHeader icon="risk" title="What's your risk appetite?"
+        subtitle={`${questions.length} quick questions in ${catKeys.length} parts. There are no right answers, just pick what fits you best.`} />
 
       {/* Sections */}
       <div className="mt-6 grid grid-cols-5 gap-1.5">
