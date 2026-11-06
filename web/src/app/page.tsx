@@ -7,6 +7,7 @@ const features = [
   { title: "Live gold chart", body: "Live XAU/USD candles from 1 second to 1 month, with history back to 2010.", href: "/chart", icon: "candles" },
   { title: "Strategy backtests", body: "Test 15 trend and mean-reversion strategies with real spreads and swaps.", href: "/backtest", icon: "backtest" },
   { title: "Trade scenarios", body: "See the range of prices and returns gold's past moves make possible for a trade you open today.", href: "/scenarios", icon: "scenarios" },
+  { title: "Paper trading", body: "Practise with $10,000 of virtual money: market, limit and stop orders on live gold prices.", href: "/paper", icon: "wallet" },
   { title: "Trade log", body: "Log your own trades or import them from your broker, and get the same report as a backtest.", href: "/trades", icon: "trades" },
   { title: "News that moves gold", body: "Headlines tagged as good or bad for gold, plus the Fed and inflation calendar.", href: "/news", icon: "news" },
   { title: "Fits your risk appetite", body: "A 17-question quiz sets your profile and the limits your trading is measured against.", href: "/risk", icon: "risk" },
@@ -32,7 +33,7 @@ export default function Home() {
             Understand gold <span className="bg-gradient-to-r from-gold to-[#f5d77a] bg-clip-text text-transparent">before you trade it.</span>
           </h1>
           <p className="mt-4 max-w-2xl text-muted">
-            Chart XAU/USD live, backtest 15 strategies on 15+ years of data, explore what could happen to a trade, and see how
+            Chart XAU/USD live, backtest 15 strategies on 15+ years of data, practise with virtual money, explore what could happen to a trade, and see how
             the news and your own risk limits relate to it all.
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
@@ -54,7 +55,7 @@ export default function Home() {
 
       <section className="mt-14">
         <h2 className="text-lg font-semibold">Everything in one place</h2>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           {features.map((f) => (
             <Link key={f.title} href={f.href}
               className="group relative overflow-hidden rounded-xl border border-border bg-surface p-5 transition hover:-translate-y-0.5 hover:border-gold/50 hover:shadow-[0_12px_40px_-20px_var(--gold)]">
@@ -69,7 +70,7 @@ export default function Home() {
             </Link>
           ))}
           <Link href="/signup"
-            className="flex flex-col justify-between rounded-xl border border-gold/40 bg-gradient-to-br from-gold/20 to-gold/5 p-5 transition hover:-translate-y-0.5">
+            className="flex flex-col justify-between rounded-xl border border-gold/40 lg:col-span-2 bg-gradient-to-br from-gold/20 to-gold/5 p-5 transition hover:-translate-y-0.5">
             <div>
               <h3 className="font-medium">Start in a minute</h3>
               <p className="mt-1.5 text-sm text-muted">A free account saves your backtests, trades and risk profile.</p>

@@ -112,3 +112,50 @@ CREATE TABLE IF NOT EXISTS assistant_questions (
     finished_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS assistant_user_day_idx ON assistant_questions (user_id, created_at DESC);
+
+-- Paper trading: a practice account in virtual dollars, filled against real XAU/USD prices.
+CREATE TABLE IF NOT EXISTS paper_accounts (
+    user_id          BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    starting_balance DOUBLE PRECISION NOT NULL,
+    balance          DOUBLE PRECISION NOT NULL,          -- cash after closed positions
+    leverage         INTEGER NOT NULL DEFAULT 20,        -- 1:N; margin held is 1/N of each position's value
+    checked_at       TIMESTAMPTZ NOT NULL DEFAULT now(), -- prices up to here have been applied
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE paper_accounts ADD COLUMN IF NOT EXISTS leverage INTEGER NOT NULL DEFAULT 20;
+
+-- Limit and stop orders waiting for the price to reach them. Market orders open a position at once.
+CREATE TABLE IF NOT EXISTS paper_orders (
+    id          BIGSERIAL PRIMARY KEY,
+    user_id     BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    side        TEXT NOT NULL CHECK (side IN ('long', 'short')),
+    kind        TEXT NOT NULL CHECK (kind IN ('limit', 'stop')),
+    units       DOUBLE PRECISION NOT NULL CHECK (units > 0),
+    price       DOUBLE PRECISION NOT NULL CHECK (price > 0),
+    stop_loss   DOUBLE PRECISION,
+    take_profit DOUBLE PRECISION,
+    status      TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'filled', 'cancelled')),
+    note        TEXT NOT NULL DEFAULT '',
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    done_at     TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS paper_orders_user_idx ON paper_orders (user_id, status);
+
+CREATE TABLE IF NOT EXISTS paper_positions (
+    id           BIGSERIAL PRIMARY KEY,
+    user_id      BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    side         TEXT NOT NULL CHECK (side IN ('long', 'short')),
+    units        DOUBLE PRECISION NOT NULL CHECK (units > 0),
+    entry_price  DOUBLE PRECISION NOT NULL,
+    opened_at    TIMESTAMPTZ NOT NULL,
+    stop_loss    DOUBLE PRECISION,
+    take_profit  DOUBLE PRECISION,
+    order_kind   TEXT NOT NULL DEFAULT 'market',
+    closed_at    TIMESTAMPTZ,
+    exit_price   DOUBLE PRECISION,
+    close_reason TEXT,
+    swap         DOUBLE PRECISION,
+    pnl          DOUBLE PRECISION
+);
+CREATE INDEX IF NOT EXISTS paper_positions_user_idx ON paper_positions (user_id, closed_at);

@@ -16,7 +16,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
-from . import backtest, calendar, config, db, fit, news, prices, risk
+from . import backtest, calendar, config, db, fit, news, paper, prices, risk
 from .auth import UserOut, current_user
 from .trades import log_report
 
@@ -31,7 +31,7 @@ SYSTEM = """You are the GoldLab assistant, built into an educational website abo
 
 What you do
 - Explain gold prices, strategies, backtests, risk and news in plain English for people who may be new to trading.
-- Help users understand their own backtests, trade log and risk profile.
+- Help users understand their own backtests, trade log, paper trading account and risk profile.
 
 Rules you always follow
 - Every price, return, statistic or date you state must come from a tool result in this conversation. If you need a number, call a tool. If no tool can give it, say you don't have that data. Never estimate prices from memory.
@@ -99,6 +99,12 @@ TOOLS = [
         "name": "my_trade_log",
         "description": "Statistics for the user's own logged gold trades and the 20 most recent closed trades.",
         "input_schema": _obj({"capital": {"type": "number", "description": "Account size in USD; default 10000"}}),
+    },
+    {
+        "name": "my_paper_account",
+        "description": "The user's paper trading (practice, virtual money) account: balance, equity, open positions, "
+        "pending orders, statistics and the 20 most recent closed paper trades. Read-only: you cannot place or close trades.",
+        "input_schema": _obj({}),
     },
     {
         "name": "my_risk_profile",
@@ -238,6 +244,23 @@ def t_my_trade_log(i: dict, user_id: int) -> dict:
     return {"stats": rep["stats"], "recent_trades": trades}
 
 
+def t_my_paper_account(_: dict, user_id: int) -> dict:
+    s = paper.summary(user_id)
+    rep = paper.paper_report(user_id)
+    pos_keys = ("side", "units", "entry_price", "stop_loss", "take_profit", "mark", "pnl")
+    ord_keys = ("side", "kind", "units", "price", "stop_loss", "take_profit")
+    return {
+        "account": {k: v for k, v in s["account"].items() if k != "created_at"},
+        "price": s["price"] and {k: s["price"][k] for k in ("bid", "ask", "open")},
+        "open_positions": [{k: p[k] for k in pos_keys} for p in s["positions"]],
+        "pending_orders": [{k: o[k] for k in ord_keys} for o in s["orders"]],
+        "stats": rep["stats"],
+        "recent_closed": [{**t, "entry_time": _day(t["entry_time"]), "exit_time": _day(t["exit_time"])}
+                          for t in rep["trades"][-20:]],
+        "settings": s["settings"],
+    }
+
+
 def t_my_risk_profile(_: dict, user_id: int) -> dict:
     p = risk.profile_of(user_id)
     if not p:
@@ -276,6 +299,7 @@ HANDLERS = {
     "run_backtest": t_run_backtest,
     "my_backtests": t_my_backtests,
     "my_trade_log": t_my_trade_log,
+    "my_paper_account": t_my_paper_account,
     "my_risk_profile": t_my_risk_profile,
     "profile_fit": t_profile_fit,
     "gold_news": t_gold_news,
