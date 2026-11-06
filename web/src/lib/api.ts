@@ -110,6 +110,7 @@ export type BacktestParams = {
   swap_short: number;
   stop_loss_pct?: number | null;
   take_profit_pct?: number | null;
+  size_pct?: number | null;
 };
 
 export type Backtest = Report & { id: number; created_at: string; params: BacktestParams; period?: { start: number; end: number } };
@@ -285,6 +286,64 @@ export type PaperOrderInput = {
   take_profit?: number | null;
 };
 
+export type PlanStats = {
+  total_return_pct: number | null;
+  cagr_pct: number | null;
+  max_drawdown_pct: number | null;
+  sharpe: number | null;
+  trades: number;
+  win_rate_pct: number | null;
+  profit_factor: number | null;
+  time_in_market_pct: number | null;
+  wiped_out: boolean;
+};
+export type PlanInput = {
+  profile?: RiskProfile["profile"] | null;
+  tf: "1d" | "1h";
+  years: number;
+  style: "any" | "trend" | "reversion";
+  direction: "both" | "long_only";
+  capital: number;
+  max_leverage?: number | null;
+};
+export type PlanResult = {
+  strategy: string;
+  label: string;
+  kind: Strategy["kind"];
+  kind_label: string;
+  summary: string;
+  params: Record<string, number>;
+  param_labels: Record<string, string>;
+  stop_loss_pct: number;
+  size_pct: number;
+  in_sample: PlanStats;
+  in_sample_fit: FitCheck["level"];
+  out_of_sample: PlanStats;
+  out_of_sample_fit: FitCheck["level"];
+  qualifies: boolean;
+  score: number | null;
+};
+export type Plan = {
+  profile: RiskProfile["profile"];
+  profile_label: string;
+  limits: { max_risk_per_trade_pct: number; max_drawdown_pct: number; max_leverage: number };
+  max_leverage: number;
+  capital: number;
+  tf: "1d" | "1h";
+  years: number;
+  periods: { in_sample: { start: number; end: number }; out_of_sample: { start: number; end: number } };
+  results: PlanResult[];
+  benchmark: { in_sample: PlanStats; in_sample_fit: FitCheck["level"]; out_of_sample: PlanStats; out_of_sample_fit: FitCheck["level"]; size_pct: number };
+  tried: number;
+  last_price: number;
+};
+export type PlanOptions = {
+  profiles: Record<string, RiskLimits>;
+  years: Record<"1d" | "1h", number[]>;
+  defaults: { profile: RiskProfile["profile"] | null; tf: "1d" | "1h"; max_leverage: number | null; complete: boolean };
+  history_since: string;
+};
+
 export const api = {
   me: () => call<User>("/auth/me"),
   signup: (email: string, password: string, name: string) =>
@@ -316,6 +375,8 @@ export const api = {
   riskProfile: () => call<RiskProfile>("/risk/profile"),
   saveRiskProfile: (answers: Record<string, number>) =>
     call<RiskProfile>("/risk/profile", { method: "POST", body: JSON.stringify({ answers }) }),
+  planOptions: () => call<PlanOptions>("/plans/options"),
+  plan: (p: PlanInput) => call<Plan>("/plans/match", { method: "POST", body: JSON.stringify(p) }),
   backtestFit: (id: number) => call<Fit>(`/fit/backtests/${id}`),
   tradeFit: (capital: number) => call<Fit>(`/fit/trades?capital=${capital}`),
   paper: () => call<PaperState>("/paper"),

@@ -47,6 +47,13 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
 - **Profile fit** (`api/app/fit.py`): every backtest and the trade log are checked against the user's
   limits (drawdown, risk per trade from the stop distance or the largest loss, and position size against
   the account), with a trade size that would have stayed inside them.
+- **Strategy finder** (`api/app/planner.py`, `/strategies`): tries every strategy with three settings (default,
+  half and double length) and three stop distances for the chosen profile, on daily (3 to 20 years) or hourly
+  (1 or 2 years) candles. Each trade is sized as a share of the account so a stop-out costs at most the
+  profile's risk per trade, within its leverage cap, and shrunk further if the result breaks a limit.
+  Settings are picked on the first 70% of the period and re-run unchanged on the last 30%; both are shown,
+  next to owning gold unleveraged. Results are cached in memory for six hours. Backtests can also size
+  trades as a % of the account (`size_pct`).
 - **AI assistant** (`api/app/assistant.py`): Claude with tools over the site's own data (prices, backtests,
   the trade log, risk profile, news, calendar), so numbers come from the database rather than the model.
   Answers run in the background and the page polls for them. Each user gets `ASSISTANT_DAILY_LIMIT`

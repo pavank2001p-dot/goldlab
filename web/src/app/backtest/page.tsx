@@ -22,6 +22,7 @@ const DEFAULTS: Omit<BacktestParams, "strategy" | "params"> = {
   swap_short: 0.05,
   stop_loss_pct: null,
   take_profit_pct: null,
+  size_pct: null,
 };
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -64,7 +65,13 @@ export default function BacktestPage() {
     api.strategies().then((list) => {
       setStrategies(list);
       const s = list[0];
-      setForm({ ...DEFAULTS, strategy: s.key, params: Object.fromEntries(s.params.map((p) => [p.key, p.default])) });
+      // The strategy finder links here with a full set of settings.
+      let plan: Partial<BacktestParams> | null = null;
+      try {
+        plan = JSON.parse(new URLSearchParams(window.location.search).get("plan") ?? "null");
+      } catch {}
+      if (plan?.strategy && list.some((x) => x.key === plan.strategy)) setForm({ ...DEFAULTS, params: {}, ...plan } as BacktestParams);
+      else setForm({ ...DEFAULTS, strategy: s.key, params: Object.fromEntries(s.params.map((p) => [p.key, p.default])) });
     });
   }, []);
   useEffect(() => {
@@ -193,10 +200,21 @@ export default function BacktestPage() {
           <summary className="cursor-pointer text-sm font-medium">Money and risk</summary>
           <div className="mt-3 grid grid-cols-2 gap-3">
             <Field label="Starting capital ($)"><Num value={form.capital} min={1} onChange={(v) => set({ capital: v ?? 10000 })} /></Field>
-            <Field label="Ounces per trade" hint="1 lot = 100 oz"><Num value={form.units} min={0.01} onChange={(v) => set({ units: v ?? 1 })} /></Field>
+            {form.size_pct ? (
+              <Field label="Size (% of account)" hint={`${(form.size_pct / 100).toFixed(2)}x, resized each trade`}>
+                <Num value={form.size_pct} min={0.1} onChange={(v) => set({ size_pct: v })} />
+              </Field>
+            ) : (
+              <Field label="Ounces per trade" hint="1 lot = 100 oz"><Num value={form.units} min={0.01} onChange={(v) => set({ units: v ?? 1 })} /></Field>
+            )}
             <Field label="Stop loss (%)"><Num value={form.stop_loss_pct} min={0.1} placeholder="none" onChange={(v) => set({ stop_loss_pct: v })} /></Field>
             <Field label="Take profit (%)"><Num value={form.take_profit_pct} min={0.1} placeholder="none" onChange={(v) => set({ take_profit_pct: v })} /></Field>
           </div>
+          <label className="mt-3 flex items-center gap-2 text-sm text-muted">
+            <input type="checkbox" checked={!!form.size_pct} className="accent-[var(--gold)]"
+              onChange={(e) => set({ size_pct: e.target.checked ? 100 : null })} />
+            Size each trade as a % of the account
+          </label>
         </details>
         <details className="rounded-lg border border-border p-3">
           <summary className="cursor-pointer text-sm font-medium">Broker costs</summary>
