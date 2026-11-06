@@ -11,6 +11,7 @@ import { CountUp, Icon } from "@/components/ui";
 import {
   api, type Condition, type CustomCatalog, type CustomPreview, type IndicatorSpec, type Operand, type Rules, type SavedStrategy,
 } from "@/lib/api";
+import { clampOperand, mRange, nRange, sanitizeRules } from "@/lib/ruleBounds";
 import { useUser } from "@/lib/useUser";
 
 type Lane = keyof Omit<Rules, "name">;
@@ -60,7 +61,10 @@ function Token({ o, cat, onChange, allowNumber }: { o: Operand; cat: CustomCatal
   const groups = [...new Set(cat.indicators.map((i) => i.group))].filter((g) => allowNumber || g !== "Number");
   const num = (k: "n" | "m" | "value", label: string, w = "w-14") => (
     <input type="number" aria-label={label} title={label} value={o[k] ?? ""} step="any"
+      min={k === "n" ? nRange(o.ind)[0] : k === "m" ? mRange(o.ind)[0] : undefined}
+      max={k === "n" ? nRange(o.ind)[1] : k === "m" ? mRange(o.ind)[1] : undefined}
       onChange={(e) => onChange({ ...o, [k]: e.target.value === "" ? null : Number(e.target.value) })}
+      onBlur={() => onChange(clampOperand(o))}
       className={`${w} rounded-md border border-border bg-background px-1.5 py-1 text-center text-sm tabular-nums outline-none focus:border-gold`} />
   );
   return (
@@ -198,7 +202,7 @@ export default function BuilderPage() {
 
   function start(r: Rules, key: string | null, id: number | null = null) {
     setNote(null);
-    setRules(r);
+    setRules(sanitizeRules(r));
     setTemplate(key);
     setEditing(id);
     setMsg(null);
