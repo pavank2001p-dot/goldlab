@@ -5,6 +5,7 @@ import {
   CandlestickSeries,
   ColorType,
   createChart,
+  createSeriesMarkers,
   HistogramSeries,
   LineSeries,
   LineStyle,
@@ -12,13 +13,17 @@ import {
   type CandlestickData,
   type IChartApi,
   type ISeriesApi,
+  type ISeriesMarkersPluginApi,
+  type SeriesMarker,
+  type Time,
   type SeriesType,
   type UTCTimestamp,
 } from "lightweight-charts";
 import { useThemeKey } from "@/lib/theme";
 import Drawings from "./chart/Drawings";
 import { IND_LIST, ema, macd, pts, rsi, sma, stdev, type IndKey } from "./chart/indicators";
-import { api, fmtPrice, type Bar, type ChartTf, type LiveQuote } from "@/lib/api";
+import { api, fmtPrice, type Bar, type ChartMarker, type ChartTf, type LiveQuote } from "@/lib/api";
+import { usePref } from "@/lib/prefs";
 
 const GROUPS: { label: string; tfs: [ChartTf, string][] }[] = [
   { label: "Seconds", tfs: [["1s", "1s"], ["5s", "5s"], ["15s", "15s"], ["30s", "30s"]] },
@@ -56,6 +61,14 @@ function Icon({ d }: { d: string }) {
 }
 
 const IND_KEY = "goldlab-indicators";
+const NO_INDS: IndKey[] = [];
+export const EVENT_COLOR: Record<ChartMarker["kind"], string> = {
+  fed: "#e8b53e", inflation: "#f97316", jobs: "#60a5fa", growth: "#a78bfa", dollar: "#2dd4bf", shock: "#f43f5e", other: "#94a3b8",
+};
+const EVENT_LETTER: Record<ChartMarker["kind"], string> = { fed: "F", inflation: "CPI", jobs: "J", growth: "G", dollar: "$", shock: "!", other: "•" };
+const EVENT_NAME: Record<ChartMarker["kind"], string> = {
+  fed: "Fed", inflation: "Inflation", jobs: "Jobs", growth: "Growth", dollar: "Dollar", shock: "Shock", other: "Release",
+};
 
 export default function PriceChart({ height = 520, initialTf = "1h", tools = false }: { height?: number; initialTf?: ChartTf; tools?: boolean }) {
   const wrap = useRef<HTMLDivElement>(null);
@@ -75,22 +88,20 @@ export default function PriceChart({ height = 520, initialTf = "1h", tools = fal
   const barsRef = useRef<Bar[]>([]);
   const [ver, setVer] = useState(0);
   const [ready, setReady] = useState<{ chart: IChartApi; series: ISeriesApi<"Candlestick"> } | null>(null);
-  const [inds, setInds] = useState<IndKey[]>([]);
+  const [inds, setInds] = usePref<IndKey[]>("indicators", IND_KEY, NO_INDS, tools);
+  const [showEvents, setShowEvents] = usePref<boolean>("chart_events", "goldlab-chart-events", true, tools);
+  const [events, setEvents] = useState<ChartMarker[]>([]);
+  const [hoverEvents, setHoverEvents] = useState<ChartMarker[]>([]);
+  const eventsByBar = useRef(new Map<number, ChartMarker[]>());
+  const eventsKey = useRef("");
+  const markers = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const [indOpen, setIndOpen] = useState(false);
   const [legend, setLegend] = useState<Bar | null>(null);
   const [accent, setAccent] = useState("#e8b53e");
   useEffect(() => {
-    if (!tools) return;
-    try { setInds(JSON.parse(localStorage.getItem(IND_KEY) ?? "[]")); } catch {}
-  }, [tools]);
-  useEffect(() => {
     setAccent(getComputedStyle(document.documentElement).getPropertyValue("--gold").trim() || "#e8b53e");
   }, [themeKey]);
-  const toggleInd = (k: IndKey) => setInds((xs) => {
-    const next = xs.includes(k) ? xs.filter((x) => x !== k) : [...xs, k];
-    try { localStorage.setItem(IND_KEY, JSON.stringify(next)); } catch {}
-    return next;
-  });
+  const toggleInd = (k: IndKey) => setInds(inds.includes(k) ? inds.filter((x) => x !== k) : [...inds, k]);
 
   // Create the chart once.
   useEffect(() => {
@@ -240,13 +251,55 @@ export default function PriceChart({ height = 520, initialTf = "1h", tools = fal
     if (!ready) return;
     const on = (e: { time?: unknown }) => {
       const bs = barsRef.current;
-      if (e.time == null) return setLegend(bs[bs.length - 1] ?? null);
+      if (e.time == null) { setHoverEvents([]); return setLegend(bs[bs.length - 1] ?? null); }
       setLegend(bs.find((b) => b.t === e.time) ?? null);
+      setHoverEvents(eventsByBar.current.get(e.time as number) ?? []);
     };
     ready.chart.subscribeCrosshairMove(on);
     return () => ready.chart.unsubscribeCrosshairMove(on);
   }, [ready]);
   useEffect(() => setLegend(barsRef.current[barsRef.current.length - 1] ?? null), [ver]);
+
+  // Market events: Fed decisions, inflation and jobs releases, and turning points, marked above their candle.
+  useEffect(() => {
+    if (!tools || !showEvents) { setEvents([]); eventsKey.current = ""; return; }
+    const bs = barsRef.current;
+    if (!bs.length) return;
+    const key = `${tf}:${all}:${bs[0].t}`;
+    if (eventsKey.current === key) return;
+    eventsKey.current = key;
+    // Weekly and monthly candles are too coarse for every release, so show only the turning points there.
+    const coarse = tf === "1w" || tf === "1mo";
+    api.markers(bs[0].t, Math.floor(Date.now() / 1000) + 86400, !coarse).then(setEvents, () => setEvents([]));
+  }, [tools, showEvents, tf, all, ver]);
+
+  useEffect(() => {
+    if (!ready) return;
+    markers.current = createSeriesMarkers(ready.series, []);
+    return () => { markers.current?.detach(); markers.current = null; };
+  }, [ready]);
+
+  useEffect(() => {
+    const bs = barsRef.current, m = markers.current;
+    const map = new Map<number, ChartMarker[]>();
+    if (m && bs.length && events.length) {
+      const last = bs[bs.length - 1].t;
+      for (const e of events) {
+        if (e.t < bs[0].t || e.t > last + (SIZE[tf] ?? 86400 * 31)) continue;
+        let lo = 0, hi = bs.length - 1; // the last bar starting at or before the event
+        while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (bs[mid].t <= e.t) lo = mid; else hi = mid - 1; }
+        const t = bs[lo].t;
+        map.set(t, [...(map.get(t) ?? []), e]);
+      }
+    }
+    eventsByBar.current = map;
+    const list: SeriesMarker<Time>[] = [...map.entries()].sort((a, b) => a[0] - b[0]).map(([t, es]) => {
+      const top = es.find((e) => e.history) ?? es.find((e) => e.kind === "fed") ?? es[0];
+      return { time: t as UTCTimestamp, position: "aboveBar", shape: "circle", size: 0.7, color: EVENT_COLOR[top.kind],
+        text: es.length > 1 ? `${EVENT_LETTER[top.kind]}+${es.length - 1}` : EVENT_LETTER[top.kind] };
+    });
+    m?.setMarkers(list);
+  }, [events, ver, tf, ready]);
 
   // Indicators: lines over the candles, and RSI or MACD in their own panes underneath.
   useEffect(() => {
@@ -390,7 +443,15 @@ export default function PriceChart({ height = 520, initialTf = "1h", tools = fal
                       {i.pane && <span className="text-[10px] text-muted">pane</span>}
                     </label>
                   ))}
-                  <p className="px-2 pb-1 pt-1.5 text-[11px] text-muted">Worked out from the candles on screen. Your picks are remembered.</p>
+                  <div className="my-1 h-px bg-border" />
+                  <label className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm hover:bg-surface-2">
+                    <input type="checkbox" checked={showEvents} onChange={() => setShowEvents(!showEvents)} className="accent-[var(--gold)]" />
+                    <span className="flex-1">Market events</span>
+                    <span className="flex gap-0.5" aria-hidden>
+                      {(["fed", "inflation", "dollar", "shock"] as const).map((k) => <span key={k} className="h-2 w-2 rounded-full" style={{ background: EVENT_COLOR[k] }} />)}
+                    </span>
+                  </label>
+                  <p className="px-2 pb-1 pt-1 text-[11px] text-muted">Events mark Fed decisions, inflation and jobs releases, and turning points like 2008 and 2020. Point at one to read it. Your picks are saved to your account.</p>
                 </div>
               )}
             </div>
@@ -457,6 +518,19 @@ export default function PriceChart({ height = 520, initialTf = "1h", tools = fal
             <span className={legend.c >= legend.o ? "text-up" : "text-down"}>
               {legend.c >= legend.o ? "+" : ""}{(((legend.c - legend.o) / legend.o) * 100).toFixed(2)}%
             </span>
+          </div>
+        )}
+        {hoverEvents.length > 0 && (
+          <div className={`pointer-events-none absolute top-7 z-[1] max-w-[min(26rem,calc(100%-6rem))] space-y-1 rounded-lg border border-border bg-surface/95 px-2.5 py-1.5 text-[11px] shadow-lg backdrop-blur ${tools ? "left-14" : "left-3"}`}>
+            {hoverEvents.slice(0, 3).map((e, k) => (
+              <p key={k} className="leading-snug">
+                <span className="mr-1 inline-block h-2 w-2 rounded-full align-middle" style={{ background: EVENT_COLOR[e.kind] }} />
+                <span className="font-medium">{e.title}</span>
+                <span className="text-muted"> · {EVENT_NAME[e.kind]}{e.history ? "" : `, ${new Date(e.t * 1000).toLocaleString("en-GB", { timeZone: "UTC", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} UTC`}</span>
+                {k === 0 && e.why && <span className="block text-muted">{e.why}</span>}
+              </p>
+            ))}
+            {hoverEvents.length > 3 && <p className="text-muted">and {hoverEvents.length - 3} more</p>}
           </div>
         )}
         {tools && ready && <Drawings chart={ready.chart} series={ready.series} bars={barsRef} accent={accent} />}

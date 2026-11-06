@@ -256,3 +256,12 @@ CREATE TABLE IF NOT EXISTS lesson_progress (
     completed_at TIMESTAMPTZ NOT NULL,
     PRIMARY KEY (user_id, lesson)
 );
+
+-- Per-account settings that follow the user across devices (chart drawings, indicators).
+CREATE TABLE IF NOT EXISTS user_prefs (
+    user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    key        TEXT NOT NULL,
+    value      JSONB NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, key)
+);

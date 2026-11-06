@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { clamp, levelRange, mRange, nRange } from "@/lib/ruleBounds";
 import { api, type Condition, type CustomCatalog, type Operand, type Rules, type SweepRow } from "@/lib/api";
 import { Icon } from "../ui";
 
@@ -8,12 +9,11 @@ type Lane = "long_entry" | "long_exit" | "short_entry" | "short_exit";
 type Knob = { lane: Lane; index: number; side: "left" | "right"; field: "n" | "m" | "value"; label: string; v: number; min: number; max: number; step: number };
 
 const LANE_WORD: Record<Lane, string> = { long_entry: "Buy", long_exit: "Close buy", short_entry: "Short", short_exit: "Close short" };
-// Sensible slider ranges for numbers compared with bounded indicators.
-const BOUNDS: Record<string, [number, number]> = {
-  rsi: [0, 100], stoch: [0, 100], adx: [0, 100], plus_di: [0, 100], minus_di: [0, 100], williams_r: [-100, 0], cci: [-300, 300], roc: [-20, 20], atr_pct: [0, 10],
-};
+const id = (k: Pick<Knob, "lane" | "index" | "side" | "field">) => `${k.lane}.${k.index}.${k.side}.${k.field}`;
 
-function knobs(r: Rules, cat: CustomCatalog): Knob[] {
+/** Every number in the rules with a fixed range. A free number compared with a price keeps the range it had
+ *  when first seen (half to one and a half times it), so dragging to the end never widens it. */
+function knobs(r: Rules, cat: CustomCatalog, anchors: Map<string, [number, number]>): Knob[] {
   const out: Knob[] = [];
   const name = (o: Operand) => cat.indicators.find((i) => i.key === o.ind);
   (Object.keys(LANE_WORD) as Lane[]).forEach((lane) => r[lane].forEach((c: Condition, index) => {
@@ -22,13 +22,25 @@ function knobs(r: Rules, cat: CustomCatalog): Knob[] {
       const spec = name(o);
       if (o.ind === "value" && o.value != null) {
         const other = side === "right" ? c.left : c.right;
-        const [lo, hi] = BOUNDS[other.ind] ?? [Math.min(o.value * 0.5, o.value * 1.5), Math.max(o.value * 0.5, o.value * 1.5) || 100];
-        out.push({ lane, index, side, field: "value", label: `${name(other)?.label ?? other.ind} level`, v: o.value, min: lo, max: hi, step: hi - lo > 50 ? 1 : 0.1 });
+        const key = id({ lane, index, side, field: "value" });
+        let range = levelRange(other.ind);
+        if (!range) {
+          if (!anchors.has(key)) {
+            const a = Math.abs(o.value) || 100;
+            anchors.set(key, [Math.round(Math.min(o.value - a * 0.5, o.value)), Math.round(Math.max(o.value + a * 0.5, o.value))]);
+          }
+          range = anchors.get(key)!;
+        }
+        const [lo, hi] = range;
+        out.push({ lane, index, side, field: "value", label: `${name(other)?.label ?? other.ind} level`, v: clamp(o.value, lo, hi), min: lo, max: hi, step: hi - lo > 50 ? 1 : 0.1 });
       }
-      if (spec?.n && o.n != null) out.push({ lane, index, side, field: "n", label: `${spec.label} · ${spec.n.label.toLowerCase()}`, v: o.n, min: 2, max: Math.max(250, o.n * 2), step: 1 });
+      if (spec?.n && o.n != null) {
+        const [lo, hi] = nRange(o.ind);
+        out.push({ lane, index, side, field: "n", label: `${spec.label} · ${spec.n.label.toLowerCase()}`, v: Math.round(clamp(o.n, lo, hi)), min: lo, max: hi, step: 1 });
+      }
       if (spec?.m && o.m != null) {
-        const sd = o.ind.startsWith("bb_");
-        out.push({ lane, index, side, field: "m", label: `${spec.label} · ${spec.m.label.toLowerCase()}`, v: o.m, min: sd ? 0.5 : 3, max: sd ? 4 : 120, step: sd ? 0.1 : 1 });
+        const [lo, hi, step] = mRange(o.ind);
+        out.push({ lane, index, side, field: "m", label: `${spec.label} · ${spec.m.label.toLowerCase()}`, v: clamp(o.m, lo, hi), min: lo, max: hi, step });
       }
     });
   }));
@@ -47,11 +59,14 @@ export default function TunePanel({ rules, cat, test, onChange }: {
   rules: Rules; cat: CustomCatalog; test: { tf: "1d" | "1h"; years: number; stop: number | null }; onChange: (r: Rules) => void;
 }) {
   const [sweep, setSweep] = useState<{ key: string; rows: SweepRow[] | null; err?: string } | null>(null);
-  const list = knobs(rules, cat);
+  const anchors = useRef(new Map<string, [number, number]>());
+  const list = knobs(rules, cat, anchors.current);
   if (!list.length) return null;
-  const id = (k: Knob) => `${k.lane}.${k.index}.${k.side}.${k.field}`;
 
-  function set(k: Knob, v: number) {
+  function set(k: Knob, raw: number) {
+    // Always inside the slider's range and on its step, whatever the input says.
+    const c = clamp(raw, k.min, k.max);
+    const v = k.step >= 1 ? Math.round(c) : Math.round(c * 10) / 10;
     const next = structuredClone(rules);
     (next[k.lane][k.index][k.side] as Operand)[k.field] = v;
     onChange(next);
@@ -89,7 +104,7 @@ export default function TunePanel({ rules, cat, test, onChange }: {
               <div className="flex items-center gap-2 text-sm">
                 <span className="rounded-md bg-surface-2 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted">{LANE_WORD[k.lane]}</span>
                 <span className="min-w-0 flex-1 truncate">{k.label}</span>
-                <span className="w-14 text-right font-semibold tabular-nums text-gold">{k.v}</span>
+                <span className="max-w-[5rem] shrink-0 truncate text-right font-semibold tabular-nums text-gold">{k.v}</span>
               </div>
               <div className="mt-1.5 flex items-center gap-3">
                 <input type="range" min={k.min} max={k.max} step={k.step} value={k.v} aria-label={k.label}

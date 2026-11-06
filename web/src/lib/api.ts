@@ -454,8 +454,14 @@ export type TradeReview = {
 export type LessonSummary = { id: string; year: number; title: string; day: string; minutes: number; summary: string; watch: string[]; takeaway: string };
 export type Lesson = LessonSummary & { body: string[]; next: string | null };
 export type LessonProgress = Record<string, { return_pct: number; trades: number; completed_at: string }>;
+export type ChartMarker = { t: number; title: string; kind: "fed" | "inflation" | "jobs" | "growth" | "dollar" | "shock" | "other"; impact: string; why: string; history: boolean };
 
 export const api = {
+  prefs: () => call<Record<string, unknown>>("/prefs"),
+  setPref: (key: "drawings" | "indicators" | "chart_events", value: unknown) =>
+    call<{ ok: boolean }>(`/prefs/${key}`, { method: "PUT", body: JSON.stringify({ value }) }),
+  markers: (start: number, end: number, scheduled = true) =>
+    call<ChartMarker[]>(`/calendar/markers?start=${start}&end=${end}&scheduled=${scheduled}`),
   alerts: () => call<PriceAlert[]>("/practice/alerts"),
   addAlert: (price: number, note = "") => call<PriceAlert>("/practice/alerts", { method: "POST", body: JSON.stringify({ price, note }) }),
   deleteAlert: (id: number) => call<void>(`/practice/alerts/${id}`, { method: "DELETE" }),
