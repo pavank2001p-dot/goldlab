@@ -9,8 +9,8 @@ export default function SignInPrompt({ what, next }: { what: string; next: strin
       </span>
       <p className="mt-4 text-muted">Create a free account or log in to {what}.</p>
       <div className="mt-4 flex justify-center gap-3">
-        <Link href={`/signup?next=${next}`} className="rounded-md bg-gold px-4 py-2 font-medium text-black">Sign up free</Link>
-        <Link href={`/login?next=${next}`} className="rounded-md border border-border px-4 py-2">Log in</Link>
+        <Link href={`/signup?next=${next}`} className="rounded-lg bg-gold px-4 py-2 font-medium text-black">Sign up free</Link>
+        <Link href={`/login?next=${next}`} className="rounded-lg border border-border px-4 py-2">Log in</Link>
       </div>
     </div>
   );

@@ -1,32 +1,60 @@
 @import "tailwindcss";
 
+/* Bold, high-contrast palette: deep charcoal, rich gold, and clear gain and loss colours.
+   Calm comes from less on each screen, not from washing the colours out. */
 :root {
-  --background: #0b0d10;
-  --surface: #13161b;
-  --border: #242a33;
-  --foreground: #e8eaed;
-  --muted: #8b939e;
-  --gold: #e3b341;
-  --up: #26a69a;
-  --down: #ef5350;
+  --background: #0b0e12;
+  --surface: #13171d;
+  --surface-2: #1a1f27;
+  --border: #252c36;
+  --foreground: #eef0f3;
+  --muted: #8f99a5;
+  --gold: #e8b53e;
+  --up: #26b89a;
+  --down: #ef5a55;
+  --calm: #7fb0e6;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
   --color-border: var(--border);
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
   --color-gold: var(--gold);
   --color-up: var(--up);
   --color-down: var(--down);
+  --color-calm: var(--calm);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
 body {
-  background: var(--background);
+  /* A faint wash of light at the top so the page feels open rather than a black box. */
+  background:
+    radial-gradient(1200px 500px at 50% -200px, rgb(232 181 62 / 0.06), transparent 70%),
+    var(--background);
+  background-attachment: fixed;
   color: var(--foreground);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--font-sans);
+  line-height: 1.6;
+  font-feature-settings: "cv11", "ss01";
 }
+::selection { background: rgb(232 181 62 / 0.3); }
+:focus-visible { outline: 2px solid var(--calm); outline-offset: 2px; border-radius: 6px; }
+h1, h2, h3 { letter-spacing: -0.01em; line-height: 1.25; }
+
+/* Shared calm card. */
+.card {
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: linear-gradient(180deg, var(--surface-2), var(--surface) 60%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04), 0 24px 48px -28px rgb(0 0 0 / 0.7);
+}
+
 
 @keyframes quiz-in {
   from { opacity: 0; transform: translateY(6px); }
@@ -40,8 +68,8 @@ body {
   from { transform: scaleX(0); }
   to { transform: none; }
 }
-.quiz-card { animation: quiz-in 0.25s ease-out; }
-.gauge-needle { animation: needle-in 0.9s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
+.quiz-card { animation: quiz-in 0.4s ease-out; }
+.gauge-needle { animation: needle-in 1.2s cubic-bezier(0.25, 0.8, 0.3, 1); }
 .bar-grow { transform-origin: left; animation: bar-grow 0.7s ease-out; }
 @media (prefers-reduced-motion: reduce) {
   .quiz-card, .gauge-needle, .bar-grow { animation: none; }
@@ -67,7 +95,7 @@ body {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: none; }
 }
-.rise-in { animation: rise-in 0.35s ease-out both; }
+.rise-in { animation: rise-in 0.5s ease-out both; }
 @keyframes typing {
   0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
   40% { opacity: 1; transform: translateY(-3px); }
@@ -76,3 +104,11 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .ring-draw, .rise-in, .typing-dot { animation: none; }
 }
+
+/* A slow, breathing pulse for "live" dots: about the pace of a relaxed breath. */
+@keyframes breathe {
+  0%, 100% { opacity: 0.45; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1); }
+}
+.breathe { animation: breathe 5s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .breathe { animation: none; } }

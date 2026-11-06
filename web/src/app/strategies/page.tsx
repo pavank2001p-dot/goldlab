@@ -7,7 +7,7 @@ import { Chips, Empty, Icon, PageHeader } from "@/components/ui";
 import { api, fmtPct, type BacktestParams, type FitCheck, type Plan, type PlanInput, type PlanOptions, type PlanResult, type PlanStats } from "@/lib/api";
 import { useUser } from "@/lib/useUser";
 
-const input = "w-full rounded-md border border-border bg-background px-3 py-1.5 outline-none focus:border-gold";
+const input = "w-full rounded-lg border border-border bg-background px-3 py-1.5 outline-none focus:border-gold";
 const VERDICT: Record<FitCheck["level"], { label: string; cls: string }> = {
   fits: { label: "Fits", cls: "bg-up/15 text-up" },
   close: { label: "Slightly over", cls: "bg-gold/15 text-gold" },
@@ -74,7 +74,7 @@ function Pick({ r, rank, plan, input }: { r: PlanResult; rank: number; plan: Pla
   const h = heldUp(r);
   const oz = (input.capital * r.size_pct) / 100 / plan.last_price;
   return (
-    <article className="rounded-xl border border-border bg-surface p-4">
+    <article className="rounded-2xl border border-border bg-surface p-4">
       <div className="flex items-start gap-3">
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gold/15 font-semibold text-gold">{rank}</span>
         <div className="min-w-0 flex-1">
@@ -87,12 +87,12 @@ function Pick({ r, rank, plan, input }: { r: PlanResult; rank: number; plan: Pla
         {Object.entries(r.params).map(([k, v]) => {
           const l = r.param_labels[k] ?? k;
           return (
-            <li key={k} className="rounded-md border border-border px-2 py-0.5">
+            <li key={k} className="rounded-lg border border-border px-2 py-0.5">
               {l.includes("(1 = yes)") ? `${l.replace(" (1 = yes)", "")}: ${v ? "yes" : "no"}` : `${l}: ${v}`}
             </li>
           );
         })}
-        <li className="rounded-md border border-border px-2 py-0.5">Stop loss {r.stop_loss_pct}%</li>
+        <li className="rounded-lg border border-border px-2 py-0.5">Stop loss {r.stop_loss_pct}%</li>
       </ul>
       <p className="mt-3 text-sm">
         Size each trade at <b className="tabular-nums">{r.size_pct.toFixed(0)}%</b> of the account
@@ -108,10 +108,10 @@ function Pick({ r, rank, plan, input }: { r: PlanResult; rank: number; plan: Pla
           <Icon name={h.ok ? "check" : "bolt"} className="h-4 w-4" />{h.text}
         </span>
         <div className="flex gap-2">
-          <Link href={backtestLink(r, plan, input)} className="rounded-md border border-border px-3 py-1.5 text-sm hover:border-gold hover:text-gold">
+          <Link href={backtestLink(r, plan, input)} className="rounded-lg border border-border px-3 py-1.5 text-sm hover:border-gold hover:text-gold">
             Open in backtester
           </Link>
-          <Link href={agentLink(r, plan, input)} className="rounded-md border border-gold px-3 py-1.5 text-sm text-gold hover:bg-gold/10">
+          <Link href={agentLink(r, plan, input)} className="rounded-lg border border-gold px-3 py-1.5 text-sm text-gold hover:bg-gold/10">
             Run as agent
           </Link>
         </div>
@@ -232,7 +232,7 @@ export default function StrategiesPage() {
         </div>
 
         {error && <p className="text-sm text-down">{error}</p>}
-        <button disabled={busy} className="w-full rounded-md bg-gold py-2 font-medium text-black shadow-[0_8px_30px_-12px_var(--gold)] transition hover:-translate-y-0.5 disabled:opacity-60">
+        <button disabled={busy} className="w-full rounded-lg bg-gold py-2 font-medium text-black transition disabled:opacity-60">
           {busy ? "Testing strategies…" : "Find strategies"}
         </button>
         <p className="text-xs leading-relaxed text-muted">
@@ -249,7 +249,7 @@ export default function StrategiesPage() {
           </Empty>
         ) : (
           <>
-            <div className="rounded-xl border border-border bg-surface p-4 text-sm">
+            <div className="rounded-2xl border border-border bg-surface p-4 text-sm">
               <p>
                 Tried <b>{plan.tried}</b> combinations on {plan.tf === "1h" ? "hourly" : "daily"} candles for a{" "}
                 <b>{plan.profile_label.toLowerCase()}</b> profile, up to {plan.max_leverage}x leverage.
@@ -275,7 +275,7 @@ export default function StrategiesPage() {
 
             <div>
               <h2 className="mb-2 font-medium">Every strategy tried</h2>
-              <div className="overflow-x-auto rounded-xl border border-border">
+              <div className="overflow-x-auto rounded-2xl border border-border">
                 <table className="w-full min-w-[620px] text-sm tabular-nums">
                   <thead className="bg-surface text-left text-xs text-muted">
                     <tr>

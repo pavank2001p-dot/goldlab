@@ -49,13 +49,13 @@ export default function AccountPage() {
             </>
           );
           return n.href ? (
-            <Link key={n.title} href={n.href} className="group rounded-xl border border-border bg-surface p-4 transition hover:-translate-y-0.5 hover:border-gold/60">{body}</Link>
+            <Link key={n.title} href={n.href} className="group rounded-2xl border border-border bg-surface p-4 transition hover:border-gold/60">{body}</Link>
           ) : (
             <div key={n.title} className="rounded-lg border border-border bg-surface p-4 opacity-70">{body}</div>
           );
         })}
       </div>
-      <Link href="/chart" className="mt-8 inline-block rounded-md bg-gold px-4 py-2 font-medium text-black">
+      <Link href="/chart" className="mt-8 inline-block rounded-lg bg-gold px-4 py-2 font-medium text-black">
         Open the gold chart
       </Link>
     </div>

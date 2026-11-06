@@ -42,7 +42,7 @@ export function Icon({ name, className = "h-4 w-4", strokeWidth = 1.8 }: { name:
 export function PageHeader({ icon, title, subtitle, right }: { icon: string; title: string; subtitle?: React.ReactNode; right?: React.ReactNode }) {
   return (
     <div className="flex flex-wrap items-start gap-3">
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gold/30 bg-gradient-to-br from-gold/25 to-gold/5 text-gold shadow-[0_0_24px_-6px_var(--gold)]">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-gold/30 bg-gradient-to-br from-gold/25 to-gold/5 text-gold">
         <Icon name={icon} className="h-5 w-5" />
       </span>
       <div className="min-w-0 flex-1">
@@ -113,7 +113,7 @@ export function SidePill({ side }: { side: "long" | "short" }) {
 /** A friendly empty state. */
 export function Empty({ icon, title, children }: { icon: string; title: string; children?: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-dashed border-border px-6 py-10 text-center">
+    <div className="rounded-2xl border border-dashed border-border px-6 py-10 text-center">
       <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-surface text-muted">
         <Icon name={icon} className="h-6 w-6" />
       </span>

@@ -32,12 +32,12 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
     }
   }
 
-  const input = "w-full rounded-md border border-border bg-background px-3 py-2 outline-none transition focus:border-gold focus:shadow-[0_0_0_3px_rgba(227,179,65,0.15)]";
+  const input = "w-full rounded-lg border border-border bg-background px-3 py-2 outline-none transition focus:border-gold focus:shadow-[0_0_0_3px_rgba(232,181,62,0.15)]";
   return (
     <div className="relative mx-auto max-w-sm px-4 py-14">
       <div aria-hidden className="pointer-events-none absolute left-1/2 top-6 h-40 w-72 -translate-x-1/2 rounded-full bg-gold/10 blur-3xl" />
-      <div className="relative rounded-2xl border border-border bg-surface p-6 shadow-[0_20px_60px_-30px_var(--gold)]">
-      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-gold to-[#b8860b]">
+      <div className="relative rounded-2xl border border-border bg-surface p-6">
+      <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-gold to-[#b8860b]">
         <span className="h-3 w-3 rotate-45 rounded-[3px] bg-black/80" />
       </span>
       <h1 className="mt-4 text-2xl font-semibold">{signup ? "Create your free account" : "Welcome back"}</h1>
@@ -65,7 +65,7 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
           />
         </label>
         {error && <p className="text-sm text-down">{error}</p>}
-        <button disabled={busy} className="w-full rounded-md bg-gold py-2 font-medium text-black hover:opacity-90 disabled:opacity-60">
+        <button disabled={busy} className="w-full rounded-lg bg-gold py-2 font-medium text-black hover:opacity-90 disabled:opacity-60">
           {busy ? "Please wait…" : signup ? "Sign up" : "Log in"}
         </button>
       </form>

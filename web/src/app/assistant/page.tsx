@@ -124,7 +124,7 @@ export default function AssistantPage() {
         ) : undefined} />
 
       {status && !status.configured ? (
-        <div className="mt-6 rounded-xl border border-border bg-surface p-5">
+        <div className="mt-6 rounded-2xl border border-border bg-surface p-5">
           <p className="flex items-center gap-2 text-sm font-medium"><span className="h-2 w-2 rounded-full bg-gold" /> The assistant isn&apos;t switched on yet</p>
           <p className="mt-1 text-sm text-muted">It needs an Anthropic API key on the server. Once it&apos;s on, you can ask things like:</p>
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
@@ -143,7 +143,7 @@ export default function AssistantPage() {
                 {SUGGESTIONS.map((x, i) => (
                   <button key={x.text} onClick={() => send(x.text)} disabled={waiting || status?.remaining === 0}
                           style={{ animationDelay: `${i * 60}ms` }}
-                          className="rise-in group flex items-start gap-2.5 rounded-xl border border-border bg-surface p-3.5 text-left text-sm transition hover:-translate-y-0.5 hover:border-gold disabled:opacity-50">
+                          className="rise-in group flex items-start gap-2.5 rounded-2xl border border-border bg-surface p-3.5 text-left text-sm transition hover:border-gold disabled:opacity-50">
                     <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gold/10 text-gold transition group-hover:bg-gold group-hover:text-black">
                       <Icon name={x.icon} className="h-4 w-4" />
                     </span>
@@ -206,11 +206,11 @@ export default function AssistantPage() {
               maxLength={2000}
               placeholder={status?.remaining === 0 ? "You've used today's questions. Back tomorrow (midnight UTC)." : "Ask about gold or your results…"}
               disabled={waiting || status?.remaining === 0}
-              className="min-w-0 flex-1 resize-none rounded-xl border border-border bg-surface px-3.5 py-2.5 text-base outline-none transition focus:border-gold focus:shadow-[0_0_0_3px_rgba(227,179,65,0.15)] sm:text-sm"
+              className="min-w-0 flex-1 resize-none rounded-2xl border border-border bg-surface px-3.5 py-2.5 text-base outline-none transition focus:border-gold focus:shadow-[0_0_0_3px_rgba(232,181,62,0.15)] sm:text-sm"
             />
             <div className="flex flex-col gap-2">
               <button type="submit" disabled={waiting || !q.trim() || status?.remaining === 0}
-                      className="rounded-md bg-gold px-4 py-2 text-sm font-medium text-black disabled:opacity-50">
+                      className="rounded-lg bg-gold px-4 py-2 text-sm font-medium text-black disabled:opacity-50">
                 Ask
               </button>
               {msgs.length > 0 && (

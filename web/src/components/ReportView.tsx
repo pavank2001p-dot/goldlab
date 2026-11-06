@@ -20,7 +20,7 @@ function Stat({ label, value, num, fmt, tone, hint, icon }: {
 }) {
   const colour = tone === "up" ? "text-up" : tone === "down" ? "text-down" : "";
   return (
-    <div className="group relative overflow-hidden rounded-xl border border-border bg-surface p-3.5 transition hover:border-muted" title={hint}>
+    <div className="group relative overflow-hidden rounded-2xl border border-border bg-surface p-3.5 transition hover:border-muted" title={hint}>
       <div className="flex items-center justify-between text-xs text-muted">
         {label}
         <Icon name={icon} className={`h-4 w-4 opacity-60 ${colour}`} />
@@ -38,7 +38,7 @@ function Stat({ label, value, num, fmt, tone, hint, icon }: {
 function WinRing({ pct, wins, losses }: { pct: number; wins: number; losses: number }) {
   const r = 30, c = 2 * Math.PI * r;
   return (
-    <div className="flex items-center justify-center gap-4 rounded-xl border border-border bg-surface p-4">
+    <div className="flex items-center justify-center gap-4 rounded-2xl border border-border bg-surface p-4">
       <svg viewBox="0 0 80 80" className="h-20 w-20 -rotate-90" aria-hidden>
         <circle cx="40" cy="40" r={r} fill="none" stroke="var(--down)" strokeOpacity={0.35} strokeWidth={9} />
         <circle cx="40" cy="40" r={r} fill="none" stroke="var(--up)" strokeWidth={9} strokeLinecap="round"
@@ -124,7 +124,7 @@ export default function ReportView({ report, kind }: { report: Report; kind: "ba
           { key: "short", label: "Short", count: all.filter((t) => t.side === "short").length },
         ]} />
       </div>
-      <div className="overflow-x-auto rounded-xl border border-border">
+      <div className="overflow-x-auto rounded-2xl border border-border">
         <table className="w-full text-sm tabular-nums">
           <thead className="bg-surface text-left text-xs text-muted">
             <tr>

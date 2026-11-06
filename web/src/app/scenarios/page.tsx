@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/ui";
 import { api, type Scenario, type ScenarioInput } from "@/lib/api";
 import { useUser } from "@/lib/useUser";
 
-const input = "w-full rounded-md border border-border bg-background px-3 py-1.5 outline-none focus:border-gold";
+const input = "w-full rounded-lg border border-border bg-background px-3 py-1.5 outline-none focus:border-gold";
 const HORIZONS = [
   { label: "1 week", days: 7 },
   { label: "1 month", days: 30 },
@@ -111,7 +111,7 @@ function FanChart({ s, stop, target }: { s: Scenario; stop: number | null; targe
         )}
       </svg>}
       {hb && (
-        <div className="pointer-events-none absolute top-2 rounded-md border border-border bg-background/95 px-3 py-2 text-xs shadow-lg"
+        <div className="pointer-events-none absolute top-2 rounded-lg border border-border bg-background/95 px-3 py-2 text-xs shadow-lg"
           style={{ left: Math.min(Math.max(x(hb.t) + 12, 8), w - 190) }}>
           <p className="font-medium">{day(hb.t, true)}</p>
           <p className="mt-1 tabular-nums text-muted">9 in 10 paths: <span className="text-foreground">{price(hb.p5)} – {price(hb.p95)}</span></p>
@@ -158,7 +158,7 @@ function PnlHistogram({ s }: { s: Scenario }) {
         <span>{money(bins[bins.length - 1].to, true)}</span>
       </div>
       {hb && (
-        <div className="pointer-events-none absolute -top-2 right-0 rounded-md border border-border bg-background/95 px-2.5 py-1.5 text-xs tabular-nums">
+        <div className="pointer-events-none absolute -top-2 right-0 rounded-lg border border-border bg-background/95 px-2.5 py-1.5 text-xs tabular-nums">
           {money(hb.from, true)} to {money(hb.to, true)}: {((hb.count / s.paths) * 100).toFixed(1)}% of paths
         </div>
       )}
@@ -251,7 +251,7 @@ export default function ScenariosPage() {
         <div className="grid grid-cols-2 gap-1 rounded-lg border border-border p-1">
           {(["long", "short"] as const).map((side) => (
             <button key={side} type="button" onClick={() => set({ side })}
-              className={`rounded-md py-1.5 text-sm font-medium transition-colors ${form.side === side ? (side === "long" ? "bg-up text-black" : "bg-down text-black") : "text-muted hover:text-foreground"}`}>
+              className={`rounded-lg py-1.5 text-sm font-medium transition-colors ${form.side === side ? (side === "long" ? "bg-up text-black" : "bg-down text-black") : "text-muted hover:text-foreground"}`}>
               {side === "long" ? "Buy (long)" : "Sell (short)"}
             </button>
           ))}
@@ -294,7 +294,7 @@ export default function ScenariosPage() {
           <div className="mt-1 grid grid-cols-5 gap-1">
             {HORIZONS.map((hz) => (
               <button key={hz.days} type="button" onClick={() => set({ horizon_days: hz.days })}
-                className={`rounded-md border px-1 py-1.5 text-xs ${form.horizon_days === hz.days ? "border-gold bg-gold/10 text-foreground" : "border-border text-muted hover:text-foreground"}`}>
+                className={`rounded-lg border px-1 py-1.5 text-xs ${form.horizon_days === hz.days ? "border-gold bg-gold/10 text-foreground" : "border-border text-muted hover:text-foreground"}`}>
                 {hz.label}
               </button>
             ))}
@@ -320,7 +320,7 @@ export default function ScenariosPage() {
         </details>
 
         {error && <p className="text-sm text-down">{error}</p>}
-        <button disabled={busy || !entry} className="w-full rounded-md bg-gold py-2 font-medium text-black disabled:opacity-60">
+        <button disabled={busy || !entry} className="w-full rounded-lg bg-gold py-2 font-medium text-black disabled:opacity-60">
           {busy ? "Simulating…" : "Run 2,000 scenarios"}
         </button>
       </form>
@@ -332,12 +332,12 @@ export default function ScenariosPage() {
         </div>
 
         {!s ? (
-          <div className="rounded-xl border border-dashed border-border p-10 text-center text-sm text-muted">
+          <div className="rounded-2xl border border-dashed border-border p-10 text-center text-sm text-muted">
             {busy ? "Simulating…" : "Set up a trade and press Run to see its possible outcomes."}
           </div>
         ) : (
           <div className={`space-y-5 transition-opacity ${busy ? "opacity-50" : ""}`}>
-            <div className="rounded-xl border border-border bg-surface p-4">
+            <div className="rounded-2xl border border-border bg-surface p-4">
               <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
                 <h2 className="font-medium">Where gold could be by {day(s.bands[s.bands.length - 1].t, true)}</h2>
                 <p className="text-xs text-muted">Hover the chart for any date</p>
@@ -346,12 +346,12 @@ export default function ScenariosPage() {
             </div>
 
             <div className="grid gap-5 md:grid-cols-2">
-              <div className="rounded-xl border border-border bg-surface p-4">
+              <div className="rounded-2xl border border-border bg-surface p-4">
                 <h3 className="mb-3 text-sm font-medium">How the trade ended</h3>
                 <OutcomeBar o={s.outcomes} />
                 <p className="mt-3 text-xs text-muted">Typically closed after {Math.round(s.median_days_held)} trading day{s.median_days_held === 1 ? "" : "s"}.</p>
               </div>
-              <div className="rounded-xl border border-border bg-surface p-4">
+              <div className="rounded-2xl border border-border bg-surface p-4">
                 <div className="mb-3 flex items-baseline justify-between">
                   <h3 className="text-sm font-medium">Profit or loss</h3>
                   <p className="text-xs text-muted">{s.pnl.profit_pct.toFixed(0)}% of paths in profit</p>
@@ -367,7 +367,7 @@ export default function ScenariosPage() {
             </div>
 
             {s.checkpoints.length > 0 && (
-              <div className="overflow-x-auto rounded-xl border border-border">
+              <div className="overflow-x-auto rounded-2xl border border-border">
                 <table className="w-full text-sm tabular-nums">
                   <thead className="bg-surface text-left text-xs text-muted">
                     <tr>
@@ -392,19 +392,19 @@ export default function ScenariosPage() {
             )}
 
             <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-xl border border-border bg-surface p-4">
+              <div className="rounded-2xl border border-border bg-surface p-4">
                 <p className="text-xs text-muted">Loss if the stop is hit</p>
                 <p className={`mt-1 text-lg font-semibold tabular-nums ${riskOver ? "text-down" : ""}`}>
                   {s.loss_at_stop != null ? `${money(s.loss_at_stop)} · ${s.loss_at_stop_pct}%` : "No stop"}
                 </p>
                 {s.profile && <p className="text-xs text-muted">Your {s.profile.label.toLowerCase()} limit: {s.profile.max_risk_per_trade_pct}%</p>}
               </div>
-              <div className="rounded-xl border border-border bg-surface p-4">
+              <div className="rounded-2xl border border-border bg-surface p-4">
                 <p className="text-xs text-muted">Position vs account</p>
                 <p className={`mt-1 text-lg font-semibold tabular-nums ${levOver ? "text-down" : ""}`}>{s.leverage}x</p>
                 {s.profile && <p className="text-xs text-muted">Your limit: {s.profile.max_leverage}x</p>}
               </div>
-              <div className="rounded-xl border border-border bg-surface p-4">
+              <div className="rounded-2xl border border-border bg-surface p-4">
                 <p className="text-xs text-muted">Gold&apos;s yearly swings</p>
                 <p className="mt-1 text-lg font-semibold tabular-nums">±{s.history.yearly_volatility_pct}%</p>
                 <p className="text-xs text-muted">from {s.history.days.toLocaleString()} trading days{s.history.from ? ` since ${day(s.history.from, true)}` : ""}</p>
