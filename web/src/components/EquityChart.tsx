@@ -2,10 +2,12 @@
 
 import { useEffect, useRef } from "react";
 import { AreaSeries, ColorType, createChart, type UTCTimestamp } from "lightweight-charts";
+import { alpha, useThemeKey } from "@/lib/theme";
 import type { Report } from "@/lib/api";
 
 export default function EquityChart({ equity, height = 360 }: { equity: Report["equity"]; height?: number }) {
   const box = useRef<HTMLDivElement>(null);
+  const themeKey = useThemeKey();
 
   useEffect(() => {
     const el = box.current!;
@@ -24,8 +26,8 @@ export default function EquityChart({ equity, height = 360 }: { equity: Report["
       pts.filter((p, i) => i === pts.length - 1 || pts[i + 1].time !== p.time);
     const eq = chart.addSeries(AreaSeries, {
       lineColor: v("--gold"),
-      topColor: "rgba(232,181,62,0.28)",
-      bottomColor: "rgba(232,181,62,0.02)",
+      topColor: alpha(v("--gold"), 0.28),
+      bottomColor: alpha(v("--gold"), 0.02),
       lineWidth: 2,
       priceFormat: { type: "price", precision: 0, minMove: 1 },
     });
@@ -34,8 +36,8 @@ export default function EquityChart({ equity, height = 360 }: { equity: Report["
       AreaSeries,
       {
         lineColor: v("--down"),
-        topColor: "rgba(239,90,85,0.05)",
-        bottomColor: "rgba(239,90,85,0.35)",
+        topColor: alpha(v("--down"), 0.05),
+        bottomColor: alpha(v("--down"), 0.35),
         invertFilledArea: true,
         lineWidth: 1,
         priceFormat: { type: "custom", formatter: (x: number) => `${x.toFixed(1)}%` },
@@ -46,7 +48,7 @@ export default function EquityChart({ equity, height = 360 }: { equity: Report["
     chart.panes()[1]?.setHeight(Math.round(height * 0.28));
     chart.timeScale().fitContent();
     return () => chart.remove();
-  }, [equity, height]);
+  }, [equity, height, themeKey]);
 
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-surface">

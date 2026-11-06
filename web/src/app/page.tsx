@@ -1,4 +1,5 @@
 import Link from "next/link";
+import HomeTop, { SignedOut } from "@/components/HomeTop";
 import PriceChart from "@/components/PriceChart";
 import PriceTicker from "@/components/PriceTicker";
 import { Icon } from "@/components/ui";
@@ -31,9 +32,9 @@ const habits = [
 export default function Home() {
   return (
     <div className="mx-auto max-w-6xl px-4">
-      <section className="relative py-16 sm:py-24">
+      <HomeTop hero={<section className="relative py-16 sm:py-24">
         <div aria-hidden className="pointer-events-none absolute -top-32 left-1/2 h-80 w-[48rem] max-w-full -translate-x-1/2 rounded-full bg-gold/10 blur-3xl" />
-        <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgb(255_255_255/0.025)_1px,transparent_1px),linear-gradient(to_bottom,rgb(255_255_255/0.025)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:radial-gradient(ellipse_at_top,black,transparent_70%)]" />
+        <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,color-mix(in_srgb,var(--foreground)_3%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_srgb,var(--foreground)_3%,transparent)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:radial-gradient(ellipse_at_top,black,transparent_70%)]" />
         <div className="relative">
           <span className="inline-flex items-center gap-2 rounded-full border border-gold/30 bg-gold/10 px-3 py-1 text-xs font-medium text-gold">
             <span className="h-1.5 w-1.5 rounded-full bg-gold" /> Free, and built for learning
@@ -47,7 +48,7 @@ export default function Home() {
             and nothing here uses real money.
           </p>
           <div className="mt-9 flex flex-wrap gap-3">
-            <Link href="/risk" className="group flex items-center gap-2 rounded-full bg-gradient-to-b from-[#f2c95a] to-gold px-6 py-3 font-semibold text-black shadow-[0_10px_30px_-12px_var(--gold),inset_0_1px_0_rgb(255_255_255/0.35)] transition-[filter] hover:brightness-105">
+            <Link href="/risk" className="group flex items-center gap-2 rounded-full bg-gradient-to-b from-gold-hi to-gold px-6 py-3 font-semibold text-black shadow-[0_10px_30px_-12px_var(--gold),inset_0_1px_0_rgb(255_255_255/0.35)] transition-[filter] hover:brightness-105">
               Start with your risk profile
               <Icon name="arrow" className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5" />
             </Link>
@@ -65,10 +66,10 @@ export default function Home() {
             ))}
           </dl>
         </div>
-      </section>
+      </section>} />
 
-      <section className="card space-y-4 p-4 sm:p-6">
-        <PriceTicker />
+      <section data-tour="chart" className="card mt-6 space-y-4 p-4 sm:p-6">
+        <SignedOut><PriceTicker /></SignedOut>
         <PriceChart height={380} />
       </section>
 
@@ -120,15 +121,17 @@ export default function Home() {
         </ul>
       </section>
 
+      <SignedOut>
       <section className="mt-20 mb-6 flex flex-col items-start justify-between gap-4 rounded-3xl border border-gold/30 bg-gradient-to-r from-gold/15 via-gold/5 to-transparent p-6 sm:flex-row sm:items-center sm:p-8">
         <div>
           <h2 className="text-lg font-medium">Keep your work in one place</h2>
           <p className="mt-1 text-sm text-muted">A free account saves your risk profile, backtests, paper account and trades.</p>
         </div>
-        <Link href="/signup" className="rounded-full bg-gradient-to-b from-[#f2c95a] to-gold px-5 py-2.5 font-semibold text-black shadow-[inset_0_1px_0_rgb(255_255_255/0.35)] transition-[filter] hover:brightness-105">
+        <Link href="/signup" className="rounded-full bg-gradient-to-b from-gold-hi to-gold px-5 py-2.5 font-semibold text-black shadow-[inset_0_1px_0_rgb(255_255_255/0.35)] transition-[filter] hover:brightness-105">
           Create a free account
         </Link>
       </section>
+      </SignedOut>
     </div>
   );
 }

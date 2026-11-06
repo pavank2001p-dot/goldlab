@@ -11,6 +11,7 @@ import {
   type ISeriesApi,
   type UTCTimestamp,
 } from "lightweight-charts";
+import { useThemeKey } from "@/lib/theme";
 import { api, fmtPrice, type Bar, type ChartTf, type LiveQuote } from "@/lib/api";
 
 const GROUPS: { label: string; tfs: [ChartTf, string][] }[] = [
@@ -60,6 +61,8 @@ export default function PriceChart({ height = 520, initialTf = "1h" }: { height?
   const [quote, setQuote] = useState<LiveQuote | null>(null);
   const [all, setAll] = useState(false); // whole history on monthly candles
   const [logScale, setLogScale] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const themeKey = useThemeKey();
 
   // Create the chart once.
   useEffect(() => {
@@ -91,6 +94,21 @@ export default function PriceChart({ height = 520, initialTf = "1h" }: { height?
     };
   }, []);
 
+  // Recolour when the theme or accent changes.
+  useEffect(() => {
+    const chart = chartRef.current, series = seriesRef.current;
+    if (!chart || !series || !themeKey) return;
+    const css = getComputedStyle(document.documentElement);
+    const v = (name: string) => css.getPropertyValue(name).trim();
+    chart.applyOptions({
+      layout: { background: { type: ColorType.Solid, color: v("--surface") }, textColor: v("--muted") },
+      grid: { vertLines: { color: v("--border") }, horzLines: { color: v("--border") } },
+      rightPriceScale: { borderColor: v("--border") },
+      timeScale: { borderColor: v("--border") },
+    });
+    series.applyOptions({ upColor: v("--up"), downColor: v("--down"), wickUpColor: v("--up"), wickDownColor: v("--down") });
+  }, [themeKey]);
+
   // Load the selected timeframe, page in older bars on scroll, follow live quotes.
   useEffect(() => {
     const chart = chartRef.current!;
@@ -101,19 +119,24 @@ export default function PriceChart({ height = 520, initialTf = "1h" }: { height?
     let cancelled = false;
     setError(null);
     setEmpty(false);
-    series.setData([]);
+    setLoading(true);
     chart.applyOptions({ timeScale: { secondsVisible: isSeconds(tf) } });
 
     api.candles(tf, { limit: tf === "1mo" ? ALL_MONTHS : PAGE }).then(
       (data) => {
         if (cancelled) return;
         bars = data;
+        setLoading(false);
         setEmpty(!data.length);
         series.setData(bars.map(toCandle));
         if (all) chart.timeScale().fitContent();
         else chart.timeScale().setVisibleLogicalRange({ from: bars.length - VISIBLE, to: bars.length + 5 });
       },
-      (e) => !cancelled && setError(e.message),
+      (e) => {
+        if (cancelled) return;
+        setLoading(false);
+        setError(e.message);
+      },
     );
 
     const onRange = async (range: { from: number } | null) => {
@@ -307,7 +330,7 @@ export default function PriceChart({ height = 520, initialTf = "1h" }: { height?
             : "No prices loaded yet."}
         </p>
       )}
-      <div ref={box} className={full ? "min-h-0 flex-1" : ""} style={full ? undefined : { height }} />
+      <div ref={box} data-loading={loading} className={`chart-swap ${full ? "min-h-0 flex-1" : ""}`} style={full ? undefined : { height }} />
     </div>
   );
 }

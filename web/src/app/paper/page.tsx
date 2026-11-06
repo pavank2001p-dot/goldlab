@@ -10,6 +10,7 @@ import { Chips, CountUp, Empty, Icon, PageHeader, SidePill } from "@/components/
 import {
   api, fmtUsd, type PaperOrder, type PaperOrderInput, type PaperPosition, type PaperState, type Report, type RiskProfile,
 } from "@/lib/api";
+import { toast } from "@/components/Toaster";
 import { useUser } from "@/lib/useUser";
 
 type Side = "long" | "short";
@@ -182,7 +183,7 @@ function OrderRow({ o, price, onCancel, busy }: { o: PaperOrder; price: PaperSta
 function Ticket({ state, profile, onPlaced, busy, setBusy }: {
   state: PaperState;
   profile: RiskProfile | null;
-  onPlaced: (msg: string) => Promise<void>;
+  onPlaced: (msg: string | null) => Promise<void>;
   busy: boolean;
   setBusy: (b: boolean) => void;
 }) {
@@ -244,9 +245,13 @@ function Ticket({ state, profile, onPlaced, busy, setBusy }: {
       const r = await api.paperOrder(body);
       const verb = long ? "Bought" : "Sold";
       setReview(false);
-      await onPlaced(r.position
-        ? `${verb} ${u} oz at ${px(r.position.entry_price)}`
-        : `${long ? "Buy" : "Sell"} ${kind} order placed: ${u} oz at ${px(r.order?.price)}`);
+      if (r.position) {
+        toast(`Filled: ${verb.toLowerCase()} ${u} oz`, {
+          tone: "fill",
+          body: `At ${px(r.position.entry_price)}${slN != null ? `, stop at ${px(slN)}` : ", no stop set"}`,
+        });
+        await onPlaced(null);
+      } else await onPlaced(`${long ? "Buy" : "Sell"} ${kind} order placed: ${u} oz at ${px(r.order?.price)}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't place the order");
     } finally {
@@ -509,15 +514,12 @@ export default function PaperPage() {
   const [profile, setProfile] = useState<RiskProfile | null>(null);
   const [tab, setTab] = useState<Tab>("positions");
   const [busy, setBusy] = useState(false);
-  const [toast, setToast] = useState<{ msg: string; tone: "up" | "down" | "info" } | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const seen = useRef<Set<number> | null>(null);
+  const openIds = useRef<Set<number> | null>(null);
 
-  const say = useCallback((msg: string, t: "up" | "down" | "info" = "info") => {
-    setToast({ msg, tone: t });
-    setTimeout(() => setToast((x) => (x?.msg === msg ? null : x)), 4500);
-  }, []);
+  const say = useCallback((msg: string, t: "up" | "down" | "info" = "info") => toast(msg, { tone: t }), []);
 
   const load = useCallback(async () => {
     const s = await api.paper();
@@ -528,6 +530,13 @@ export default function PaperPage() {
           say(`${REASON[h.close_reason ?? ""]}: ${signed(h.pnl)}`, (h.pnl ?? 0) >= 0 ? "up" : "down");
     }
     seen.current = new Set(s.history.map((h) => h.id));
+    // A limit or stop order that filled since the last look gets the same confirmation as a market fill.
+    if (openIds.current) {
+      for (const p of s.positions)
+        if (!openIds.current.has(p.id) && (p.order_kind === "limit" || p.order_kind === "stop"))
+          toast(`Your ${p.order_kind} order filled`, { tone: "fill", body: `${p.side === "long" ? "Long" : "Short"} ${p.units} oz at ${px(p.entry_price)}` });
+    }
+    openIds.current = new Set(s.positions.map((p) => p.id));
     setState(s);
     return s;
   }, [say]);
@@ -689,7 +698,7 @@ export default function PaperPage() {
             <aside className="order-first space-y-3 lg:sticky lg:top-20 lg:order-none lg:self-start">
               <h2 className="flex items-center gap-2 font-medium"><Icon name="bolt" className="h-4 w-4 text-gold" />New order</h2>
               <Ticket state={state} profile={profile} busy={busy} setBusy={setBusy}
-                onPlaced={async (msg) => { await load(); setTab((t) => (t === "report" || t === "history" ? "positions" : t)); say(msg, "up"); }} />
+                onPlaced={async (msg) => { await load(); setTab((t) => (t === "report" || t === "history" ? "positions" : t)); if (msg) say(msg, "up"); }} />
               <p className="text-xs leading-relaxed text-muted">
                 Spread {state.settings.spread.toFixed(2)} per ounce. Overnight swap {state.settings.swap_long.toFixed(2)} long and{" "}
                 +{state.settings.swap_short.toFixed(2)} short per ounce. Stops and targets are checked against every minute of real prices,
@@ -700,12 +709,6 @@ export default function PaperPage() {
         </>
       )}
 
-      {toast && (
-        <div role="status" className={`rise-in fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-full border px-4 py-2 text-sm shadow-2xl backdrop-blur ${
-          toast.tone === "up" ? "border-up/50 bg-up/20" : toast.tone === "down" ? "border-down/50 bg-down/20" : "border-border bg-surface/90"}`}>
-          {toast.msg}
-        </div>
-      )}
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import ThemeMenu from "./ThemeMenu";
 import { Icon } from "./ui";
 import { api } from "@/lib/api";
 import { useUser } from "@/lib/useUser";
@@ -137,15 +138,16 @@ export default function Header() {
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
       <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
         <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
-          <span className="inline-block h-3 w-3 rotate-45 rounded-[3px] bg-gradient-to-br from-gold to-[#b8860b]" />
+          <span className="inline-block h-3 w-3 rotate-45 rounded-[3px] bg-gradient-to-br from-gold to-gold-deep" />
           GoldLab
         </Link>
-        <nav aria-label="Main" className="hidden items-center gap-1 text-sm md:flex">
+        <nav aria-label="Main" data-tour="menus" className="hidden items-center gap-1 text-sm md:flex">
           {GROUPS.map((g) => <Menu key={g.label} group={g} path={path} />)}
         </nav>
         <div className="ml-auto flex items-center gap-2 text-sm">
+          <ThemeMenu />
           {account}
-          <button type="button" onClick={() => setMobile(!mobile)} aria-expanded={mobile} aria-label={mobile ? "Close menu" : "Open menu"}
+          <button type="button" data-tour="menus" onClick={() => setMobile(!mobile)} aria-expanded={mobile} aria-label={mobile ? "Close menu" : "Open menu"}
             className="flex h-8 w-8 items-center justify-center rounded-full border border-border text-muted md:hidden">
             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
               {mobile ? <path d="M6 6l12 12M18 6 6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}

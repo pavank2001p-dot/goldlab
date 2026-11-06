@@ -62,6 +62,12 @@ export type CustomCatalog = {
 };
 export type SavedStrategy = { id: number; name: string; rules: Rules; description: string; created_at: string; updated_at: string };
 
+export type PreviewTrade = { side: "long" | "short"; entry_time: number; entry_price: number; exit_time: number | null; exit_price: number | null; pnl: number | null; exit_reason: string | null };
+export type CustomPreview = {
+  stats: Report["stats"]; equity: Report["equity"]; trades: PreviewTrade[];
+  candles: { t: number; o: number; h: number; l: number; c: number }[]; in_market_pct: number; description: string;
+};
+
 /** A saved custom strategy shown in the same list as the built-in ones. */
 export const asStrategy = (m: SavedStrategy): Strategy => ({
   key: `custom:${m.id}`, label: m.name, summary: m.description, kind: "custom", kind_label: "Your strategy", params: [],
@@ -411,11 +417,17 @@ export type AgentState = {
   price: { bid: number; ask: number; open: boolean } | null;
 };
 
+export type Badge = { key: string; title: string; blurb: string; icon: string; progress: number; goal: number; earned: boolean };
+export type Achievements = { badges: Badge[]; earned: number; streak: { current: number; best: number; logged_today: boolean } };
+
 export const api = {
+  achievements: () => call<Achievements>("/achievements"),
   customCatalog: () => call<CustomCatalog>("/custom-strategies/catalog"),
   customList: () => call<SavedStrategy[]>("/custom-strategies"),
   customSave: (rules: Rules, id?: number) =>
     call<SavedStrategy>(id ? `/custom-strategies/${id}` : "/custom-strategies", { method: id ? "PUT" : "POST", body: JSON.stringify({ rules }) }),
+  customPreview: (b: { rules: Rules; tf: "1d" | "1h"; years: number; stop_loss_pct: number | null }) =>
+    call<CustomPreview>("/custom-strategies/preview", { method: "POST", body: JSON.stringify(b) }),
   customDelete: (id: number) => call<{ ok: boolean }>(`/custom-strategies/${id}`, { method: "DELETE" }),
   me: () => call<User>("/auth/me"),
   signup: (email: string, password: string, name: string) =>

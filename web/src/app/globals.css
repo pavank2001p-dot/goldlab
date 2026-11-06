@@ -13,7 +13,39 @@
   --up: #26b89a;
   --down: #ef5a55;
   --calm: #7fb0e6;
+  --gold-hi: #f2c95a;
+  --gold-deep: #b8860b;
+  --shadow: rgb(0 0 0 / 0.7);
+  --sheen: rgb(255 255 255 / 0.04);
+  color-scheme: dark;
 }
+
+/* Daylight: warm paper, ink text, and deeper accents so they still read on white. */
+:root[data-theme="light"] {
+  --background: #f5f3ee;
+  --surface: #ffffff;
+  --surface-2: #faf8f4;
+  --border: #e2ded4;
+  --foreground: #16191e;
+  --muted: #5d6671;
+  --gold: #b07f12;
+  --gold-hi: #d8a530;
+  --gold-deep: #8a6200;
+  --up: #0c8a70;
+  --down: #d23c35;
+  --calm: #2f6db0;
+  --shadow: rgb(60 50 30 / 0.16);
+  --sheen: rgb(255 255 255 / 0.9);
+  color-scheme: light;
+}
+
+/* Accent colours replace gold everywhere it is used as the highlight. */
+:root[data-accent="rose"] { --gold: #e59a84; --gold-hi: #f2b8a6; --gold-deep: #b9644d; }
+:root[data-accent="platinum"] { --gold: #b7c3d0; --gold-hi: #dbe3ec; --gold-deep: #7d8b9b; }
+:root[data-accent="sapphire"] { --gold: #6fa8ff; --gold-hi: #9cc4ff; --gold-deep: #3a73d0; }
+:root[data-theme="light"][data-accent="rose"] { --gold: #c2664d; --gold-hi: #dd8c74; --gold-deep: #9a4a34; }
+:root[data-theme="light"][data-accent="platinum"] { --gold: #5c6b7c; --gold-hi: #8796a7; --gold-deep: #3f4b59; }
+:root[data-theme="light"][data-accent="sapphire"] { --gold: #2f6fd6; --gold-hi: #5a90e6; --gold-deep: #1f4f9e; }
 
 @theme inline {
   --color-background: var(--background);
@@ -26,16 +58,19 @@
   --color-up: var(--up);
   --color-down: var(--down);
   --color-calm: var(--calm);
+  --color-gold-hi: var(--gold-hi);
+  --color-gold-deep: var(--gold-deep);
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 html { scroll-behavior: smooth; }
+body, .card { transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 
 body {
   /* A faint wash of light at the top so the page feels open rather than a black box. */
   background:
-    radial-gradient(1200px 500px at 50% -200px, rgb(232 181 62 / 0.06), transparent 70%),
+    radial-gradient(1200px 500px at 50% -200px, color-mix(in srgb, var(--gold) 6%, transparent), transparent 70%),
     var(--background);
   background-attachment: fixed;
   color: var(--foreground);
@@ -43,7 +78,7 @@ body {
   line-height: 1.6;
   font-feature-settings: "cv11", "ss01";
 }
-::selection { background: rgb(232 181 62 / 0.3); }
+::selection { background: color-mix(in srgb, var(--gold) 30%, transparent); }
 :focus-visible { outline: 2px solid var(--calm); outline-offset: 2px; border-radius: 6px; }
 h1, h2, h3 { letter-spacing: -0.01em; line-height: 1.25; }
 
@@ -52,7 +87,7 @@ h1, h2, h3 { letter-spacing: -0.01em; line-height: 1.25; }
   border: 1px solid var(--border);
   border-radius: 1rem;
   background: linear-gradient(180deg, var(--surface-2), var(--surface) 60%);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04), 0 24px 48px -28px rgb(0 0 0 / 0.7);
+  box-shadow: inset 0 1px 0 var(--sheen), 0 24px 48px -28px var(--shadow);
 }
 
 
@@ -112,3 +147,33 @@ h1, h2, h3 { letter-spacing: -0.01em; line-height: 1.25; }
 }
 .breathe { animation: breathe 5s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .breathe { animation: none; } }
+
+/* Price ticks: the number glows briefly in the direction it moved. */
+@keyframes tick-up { from { color: var(--up); text-shadow: 0 0 18px color-mix(in srgb, var(--up) 60%, transparent); } }
+@keyframes tick-down { from { color: var(--down); text-shadow: 0 0 18px color-mix(in srgb, var(--down) 60%, transparent); } }
+.tick-up { animation: tick-up 1.2s ease-out; }
+.tick-down { animation: tick-down 1.2s ease-out; }
+
+/* Charts ease between datasets instead of snapping. */
+.chart-swap { transition: opacity 0.35s ease, filter 0.35s ease; }
+.chart-swap[data-loading="true"] { opacity: 0.35; filter: saturate(0.6); }
+
+/* Toasts slide in from the corner; a fill draws its check ring and throws a few sparks. */
+@keyframes toast-in { from { opacity: 0; transform: translateY(12px) scale(0.97); } }
+.toast-in { animation: toast-in 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
+@keyframes check-draw { from { stroke-dashoffset: 30; } to { stroke-dashoffset: 0; } }
+.check-draw { stroke-dasharray: 30; animation: check-draw 0.45s 0.25s ease-out both; }
+@keyframes spark { from { opacity: 1; transform: translate(0, 0) scale(1); } to { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(0.4); } }
+.spark { animation: spark 0.9s cubic-bezier(0.1, 0.7, 0.3, 1) both; }
+@keyframes badge-pop { 0% { transform: scale(0.6); opacity: 0; } 70% { transform: scale(1.08); } 100% { transform: none; opacity: 1; } }
+.badge-pop { animation: badge-pop 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.3) both; }
+@keyframes shimmer { from { background-position: -200% 0; } to { background-position: 200% 0; } }
+.shimmer { background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--gold) 18%, transparent), transparent) 0 0 / 200% 100%; animation: shimmer 3.5s linear infinite; }
+
+/* Tour spotlight. */
+.tour-hole { transition: all 0.4s cubic-bezier(0.2, 0.8, 0.3, 1); box-shadow: 0 0 0 9999px rgb(5 7 10 / 0.72), 0 0 0 2px var(--gold), 0 0 40px 4px color-mix(in srgb, var(--gold) 35%, transparent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .tick-up, .tick-down, .toast-in, .check-draw, .spark, .badge-pop, .shimmer { animation: none; }
+  .chart-swap, .tour-hole, body, .card { transition: none; }
+}
