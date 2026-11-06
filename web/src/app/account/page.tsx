@@ -6,7 +6,7 @@ import { useUser } from "@/lib/useUser";
 
 const next = [
   { title: "Take the risk-profile quiz", when: "17 questions to set your risk limits", href: "/risk", icon: "risk" },
-  { title: "Backtest a strategy", when: "Try 15 strategies on 15+ years of gold", href: "/backtest", icon: "backtest" },
+  { title: "Backtest a strategy", when: "Try 23 strategies, or your own, on 20+ years of gold", href: "/backtest", icon: "backtest" },
   { title: "Explore a trade's scenarios", when: "2,000 simulated paths from gold's own history", href: "/scenarios", icon: "scenarios" },
   { title: "Practise with paper trading", when: "Virtual money, real gold prices", href: "/paper", icon: "wallet" },
   { title: "Log your own trades", when: "Type them in or import your broker history", href: "/trades", icon: "trades" },

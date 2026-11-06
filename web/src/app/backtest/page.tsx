@@ -5,7 +5,8 @@ import FitPanel from "@/components/FitPanel";
 import ReportView from "@/components/ReportView";
 import SignInPrompt from "@/components/SignInPrompt";
 import { Chips, Empty, Icon, PageHeader } from "@/components/ui";
-import { api, fmtPct, type Backtest, type BacktestParams, type BacktestSummary, type Strategy } from "@/lib/api";
+import Link from "next/link";
+import { api, asStrategy, fmtPct, type Backtest, type BacktestParams, type BacktestSummary, type SavedStrategy, type Strategy } from "@/lib/api";
 import { useUser } from "@/lib/useUser";
 
 const input = "w-full rounded-lg border border-border bg-background px-3 py-1.5 outline-none focus:border-gold";
@@ -45,6 +46,7 @@ function Num({ value, onChange, step = "any", min, max, placeholder }: {
 }
 
 const label = (strategies: Strategy[], p: BacktestParams) => {
+  if (p.strategy === "custom") return `${p.rules?.name ?? "Custom strategy"} · ${p.tf === "1h" ? "hourly" : "daily"}`;
   const s = strategies.find((x) => x.key === p.strategy);
   const vals = Object.values(p.params);
   return `${s?.label ?? p.strategy}${vals.length ? ` (${vals.join("/")})` : ""} · ${p.tf === "1h" ? "hourly" : "daily"}`;
@@ -60,6 +62,8 @@ export default function BacktestPage() {
   const [error, setError] = useState<string | null>(null);
   const [kind, setKind] = useState<"all" | Strategy["kind"]>("all");
   const [search, setSearch] = useState("");
+  const [mine, setMine] = useState<SavedStrategy[]>([]);
+  const [customKey, setCustomKey] = useState<string | null>(null);
 
   useEffect(() => {
     api.strategies().then((list) => {
@@ -70,23 +74,43 @@ export default function BacktestPage() {
       try {
         plan = JSON.parse(new URLSearchParams(window.location.search).get("plan") ?? "null");
       } catch {}
-      if (plan?.strategy && list.some((x) => x.key === plan.strategy)) setForm({ ...DEFAULTS, params: {}, ...plan } as BacktestParams);
+      if (plan?.strategy && (list.some((x) => x.key === plan.strategy) || (plan.strategy === "custom" && plan.rules))) setForm({ ...DEFAULTS, params: {}, ...plan } as BacktestParams);
       else setForm({ ...DEFAULTS, strategy: s.key, params: Object.fromEntries(s.params.map((p) => [p.key, p.default])) });
     });
   }, []);
   useEffect(() => {
     if (user) api.backtests().then(setHistory, () => {});
+    if (user) api.customList().then((list) => {
+      setMine(list);
+      // The strategy builder links here with ?custom=<id>.
+      const id = Number(new URLSearchParams(window.location.search).get("custom"));
+      const m = list.find((x) => x.id === id);
+      if (m) {
+        setCustomKey(`custom:${m.id}`);
+        setForm((f) => f && { ...f, strategy: "custom", params: {}, rules: m.rules });
+      }
+    }, () => {});
   }, [user]);
 
   if (user === null) return <SignInPrompt what="backtest strategies on gold" next="/backtest" />;
   if (!form || user === undefined) return null;
 
-  const strategy = strategies.find((s) => s.key === form.strategy)!;
+  const all = [...strategies, ...mine.map(asStrategy)];
+  const selected = form.strategy === "custom" ? customKey : form.strategy;
+  const strategy: Strategy = all.find((s) => s.key === selected) ?? {
+    key: "custom", label: form.rules?.name ?? "Custom strategy", summary: "", kind: "custom", kind_label: "Your strategy", params: [],
+  };
   const set = (patch: Partial<BacktestParams>) => setForm({ ...form, ...patch });
 
   function pick(key: string) {
+    if (key.startsWith("custom:")) {
+      const m = mine.find((x) => `custom:${x.id}` === key)!;
+      setCustomKey(key);
+      set({ strategy: "custom", params: {}, rules: m.rules });
+      return;
+    }
     const s = strategies.find((x) => x.key === key)!;
-    set({ strategy: key, params: Object.fromEntries(s.params.map((p) => [p.key, p.default])) });
+    set({ strategy: key, params: Object.fromEntries(s.params.map((p) => [p.key, p.default])), rules: null });
   }
 
   async function run(e: React.FormEvent) {
@@ -110,6 +134,8 @@ export default function BacktestPage() {
     const r = await api.backtest(id);
     setResult(r);
     setForm({ ...r.params, end: r.params.end ?? null });
+    const m = r.params.strategy === "custom" ? mine.find((x) => x.name === r.params.rules?.name) : null;
+    setCustomKey(m ? `custom:${m.id}` : null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -131,22 +157,23 @@ export default function BacktestPage() {
           </div>
           <div className="mt-2.5">
             <Chips value={kind} onChange={setKind} options={[
-              { key: "all", label: "All", count: strategies.length },
+              { key: "all", label: "All", count: all.length },
               { key: "trend", label: "Trend", count: strategies.filter((x) => x.kind === "trend").length },
               { key: "reversion", label: "Reversion", count: strategies.filter((x) => x.kind === "reversion").length },
               { key: "benchmark", label: "Benchmark", count: strategies.filter((x) => x.kind === "benchmark").length },
+              ...(mine.length ? [{ key: "custom" as const, label: "Mine", count: mine.length }] : []),
             ]} />
           </div>
           <div role="radiogroup" aria-label="Strategy" className="mt-2.5 max-h-64 space-y-1 overflow-y-auto pr-1">
-            {strategies
+            {all
               .filter((x) => (kind === "all" || x.kind === kind) && `${x.label} ${x.summary}`.toLowerCase().includes(search.toLowerCase()))
               .map((x) => {
-                const on = x.key === form.strategy;
+                const on = x.key === selected;
                 return (
                   <button key={x.key} type="button" role="radio" aria-checked={on} onClick={() => pick(x.key)}
                     className={`flex w-full items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left text-sm transition-colors ${on ? "border-gold bg-gold/10" : "border-transparent hover:bg-background"}`}>
                     <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${x.kind === "trend" ? "bg-up/15 text-up" : x.kind === "reversion" ? "bg-calm/15 text-calm" : "bg-gold/15 text-gold"}`}>
-                      <Icon name={x.kind === "trend" ? "backtest" : x.kind === "reversion" ? "scale" : "layers"} className="h-4 w-4" />
+                      <Icon name={x.kind === "trend" ? "backtest" : x.kind === "reversion" ? "scale" : x.kind === "custom" ? "bolt" : "layers"} className="h-4 w-4" />
                     </span>
                     <span className="min-w-0 flex-1 truncate">{x.label}</span>
                     {on && <Icon name="check" className="h-4 w-4 text-gold" />}
@@ -154,6 +181,9 @@ export default function BacktestPage() {
                 );
               })}
           </div>
+          <Link href="/strategies/builder" className="mt-2.5 flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-gold/40 py-2 text-sm text-gold transition-colors hover:bg-gold/10">
+            <Icon name="bolt" className="h-4 w-4" /> Build your own strategy
+          </Link>
         </div>
         <p className="text-xs leading-relaxed text-muted">
           <span className="mr-1.5 rounded bg-surface px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-gold">{strategy.kind_label}</span>

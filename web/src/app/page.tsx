@@ -13,7 +13,7 @@ const paths = [
   {
     n: 2, title: "Test ideas on the past", icon: "backtest",
     body: "See how a strategy would have done on more than 20 years of gold prices, with real costs, before you trust it.",
-    links: [{ href: "/strategies", label: "Strategy finder" }, { href: "/backtest", label: "Backtest" }, { href: "/scenarios", label: "Scenarios" }],
+    links: [{ href: "/strategies", label: "Strategy finder" }, { href: "/backtest", label: "Backtest" }, { href: "/strategies/builder", label: "Build your own" }, { href: "/scenarios", label: "Scenarios" }],
   },
   {
     n: 3, title: "Practise without risk", icon: "wallet",
@@ -56,7 +56,7 @@ export default function Home() {
             </Link>
           </div>
           <dl className="mt-12 grid max-w-3xl grid-cols-2 gap-y-6 border-t border-border pt-8 sm:grid-cols-4">
-            {[["1833", "Price history since"], ["15", "Strategies to test"], ["2,000", "Paths per scenario"], ["$0", "Real money at risk"]].map(([v, l]) => (
+            {[["1833", "Price history since"], ["23", "Strategies, plus your own"], ["2,000", "Paths per scenario"], ["$0", "Real money at risk"]].map(([v, l]) => (
               <div key={l} className="sm:border-l sm:border-border sm:pl-5 sm:first:border-l-0 sm:first:pl-0">
                 <dt className="sr-only">{l}</dt>
                 <dd className="text-2xl font-bold tabular-nums tracking-tight">{v}</dd>

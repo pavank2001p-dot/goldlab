@@ -9,7 +9,7 @@ import { useUser } from "@/lib/useUser";
 
 type Item = { href: string; label: string; icon: string; blurb: string };
 
-/** Nine tools grouped into four plain steps, so the bar stays short and each menu says what a page is for. */
+/** Ten tools grouped into four plain steps, so the bar stays short and each menu says what a page is for. */
 export const GROUPS: { label: string; items: Item[] }[] = [
   {
     label: "Market",
@@ -23,6 +23,7 @@ export const GROUPS: { label: string; items: Item[] }[] = [
     items: [
       { href: "/strategies", label: "Strategy finder", icon: "trophy", blurb: "Strategies that stayed inside your limits" },
       { href: "/backtest", label: "Backtest", icon: "backtest", blurb: "Run one strategy on past prices" },
+      { href: "/strategies/builder", label: "Strategy builder", icon: "bolt", blurb: "Combine indicators into your own rules" },
       { href: "/scenarios", label: "Scenarios", icon: "scenarios", blurb: "The range a trade could take from today" },
     ],
   },
@@ -44,8 +45,8 @@ export const GROUPS: { label: string; items: Item[] }[] = [
 ];
 
 function active(path: string, href: string) {
-  // The agent lives under /paper, so Paper trading is only active on its own page.
-  if (href === "/paper") return path === "/paper";
+  // The agent and builder live under other pages, so those parents are only active on their own page.
+  if (href === "/paper" || href === "/strategies") return path === href;
   return path === href || path.startsWith(href + "/");
 }
 

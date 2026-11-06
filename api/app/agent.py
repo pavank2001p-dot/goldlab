@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field, ValidationError, model_validator
 from . import backtest as bt
 from . import config, db, paper
 from .auth import UserOut, current_user
+from .custom import Rules
 from .fit import assess
 from .report import build_report
 from .risk import profile_of
@@ -39,8 +40,9 @@ AGENT_KIND = "agent"
 
 
 class AgentConfig(BaseModel):
-    strategy: Literal[tuple(k for k in bt.STRATEGIES if k != "buy_and_hold")]  # type: ignore[valid-type]
+    strategy: Literal[tuple(k for k in bt.STRATEGIES if k != "buy_and_hold") + ("custom",)]  # type: ignore[valid-type]
     params: dict[str, float] = {}
+    rules: Rules | None = None
     tf: Literal["1h", "1d"] = "1d"
     direction: Literal["both", "long_only", "short_only"] = "both"
     stop_loss_pct: float = Field(3, gt=0, le=50)
@@ -50,14 +52,18 @@ class AgentConfig(BaseModel):
     def _check(self):
         # Reuse the backtester's checks on the strategy settings.
         try:
-            cfg = bt.BacktestIn(strategy=self.strategy, params=self.params, tf=self.tf, direction=self.direction)
+            cfg = bt.BacktestIn(strategy=self.strategy, params=self.params, rules=self.rules, tf=self.tf, direction=self.direction)
         except ValidationError as e:
             raise ValueError(e.errors()[0]["msg"].removeprefix("Value error, "))
-        self.params = cfg.params
+        self.params, self.rules = cfg.params, cfg.rules
         return self
 
+    @property
+    def label(self) -> str:
+        return bt.label_of(self.strategy, self.rules)
+
     def backtest(self, capital: float = 10_000, **changes) -> bt.BacktestIn:
-        d = {"strategy": self.strategy, "params": self.params, "tf": self.tf, "direction": self.direction,
+        d = {"strategy": self.strategy, "params": self.params, "rules": self.rules, "tf": self.tf, "direction": self.direction,
              "stop_loss_pct": self.stop_loss_pct, "size_pct": self.size_pct, **changes}
         return bt.BacktestIn(capital=capital, start=date(2000, 1, 1), **d)
 
@@ -135,7 +141,7 @@ def diagnose(bars: list[dict], trades: list[dict], equity: list[dict], strategy:
              capital: float, profile: str | None) -> dict:
     """Explain a set of trades against the market they were made in.
     bars: the price bars the trades ran on (t, o, h, l, c); trades: report trades; equity: report curve."""
-    kind = bt.STRATEGIES[strategy]["kind"]
+    kind = bt.kind_of(strategy)
     closed = [t for t in trades if t.get("exit_time") is not None]
     reg = regimes(bars) if bars else []
     times = [b["t"] for b in bars]
@@ -323,8 +329,8 @@ def _calmar(s: dict) -> float:
 
 def _variant(params: dict, strategy: str, f: float) -> dict:
     out = dict(params)
-    for p in bt.STRATEGIES[strategy]["params"]:
-        if p["key"] in {"fast", "slow", "signal", "period", "entry", "exit", "lookback", "atr", "smooth"}:
+    for p in bt.STRATEGIES[strategy]["params"] if strategy in bt.STRATEGIES else []:
+        if p["key"] in {"fast", "mid", "slow", "signal", "period", "entry", "exit", "lookback", "atr", "smooth", "tenkan", "kijun", "senkou", "trend"}:
             out[p["key"]] = min(max(round(params[p["key"]] * f), p["min"]), p["max"])
     return out
 
@@ -357,12 +363,13 @@ def fixes(cfg: AgentConfig, bars: list[dict], diag: dict, base: dict, profile: s
             cand.append(("Smaller positions", "Cuts the size until the results stay inside your risk limits.",
                          {"size_pct": cfg.size_pct * min(ratios) * 0.95}))
     # A different kind of strategy, if the market didn't suit this one.
-    kind = bt.STRATEGIES[cfg.strategy]["kind"]
+    kind = bt.kind_of(cfg.strategy)
     if "regime" in keys or "against_trend" in keys:
-        other = "reversion" if kind == "trend" else "trend"
+        # A custom strategy has no kind of its own, so the best of both kinds are tried.
+        others = {"trend": ("reversion",), "reversion": ("trend",)}.get(kind, ("trend", "reversion"))
         alts = []
         for key, spec in bt.STRATEGIES.items():
-            if spec["kind"] != other:
+            if spec["kind"] not in others:
                 continue
             try:
                 rep = bt.run(cfg.backtest(strategy=key, params={}), bars)
@@ -370,9 +377,9 @@ def fixes(cfg: AgentConfig, bars: list[dict], diag: dict, base: dict, profile: s
                 continue
             alts.append((_calmar(rep["stats"]), key))
         for _, key in sorted(alts, reverse=True)[:2]:
-            cand.append((f"Switch to {bt.STRATEGIES[key]['label']}", f"A {bt.KINDS[other].lower()} strategy, which suits "
+            cand.append((f"Switch to {bt.STRATEGIES[key]['label']}", f"A {bt.KINDS[bt.kind_of(key)].lower()} strategy, which suits "
                          f"the markets this one struggled in, with its default settings.",
-                         {"strategy": key, "params": {p["key"]: p["default"] for p in bt.STRATEGIES[key]["params"]}}))
+                         {"strategy": key, "rules": None, "params": {p["key"]: p["default"] for p in bt.STRATEGIES[key]["params"]}}))
 
     cut = int(len(bars) * (1 - HOLDOUT))
     late = bars[cut:]
@@ -464,7 +471,7 @@ def step(user_id: int, now: datetime | None = None) -> bool:
         if ag["last_bar"] and last <= ag["last_bar"]:
             return False
 
-        sig = bt.signals(cfg.strategy, cfg.params, bars)[-1]
+        sig = bt.signals(cfg.strategy, cfg.params, bars, cfg.rules)[-1]
         allow = {"both": (1, -1), "long_only": (1,), "short_only": (-1,)}[cfg.direction]
         want = sig if sig in allow else 0
         mine = c.execute("SELECT id FROM paper_positions WHERE user_id = %s AND agent AND closed_at IS NULL", (user_id,)).fetchone()
@@ -486,7 +493,7 @@ def step(user_id: int, now: datetime | None = None) -> bool:
         have = 0 if not pos else (1 if pos["side"] == "long" else -1)
         traded = False
         candle = last.strftime("%d %b %H:%M UTC") if cfg.tf == "1h" else last.strftime("%d %b %Y")
-        label = bt.STRATEGIES[cfg.strategy]["label"]
+        label = cfg.label
         if have != want:
             if not price or not price["open"]:
                 if ag["note"] != "closed":
@@ -593,7 +600,7 @@ def state(user_id: int) -> dict:
     if ag:
         cfg = AgentConfig(**ag["config"])
         out["agent"] = {**{k: ag[k] for k in ("status", "started_at", "stopped_at", "last_bar", "signal", "blocked")},
-                        "config": cfg.model_dump(), "label": bt.STRATEGIES[cfg.strategy]["label"],
+                        "config": cfg.model_dump(), "label": cfg.label,
                         "next_check": (ag["last_bar"] + timedelta(seconds=2 * TF_SECONDS[cfg.tf])) if ag["last_bar"] else None}
         out["live"] = live_report(user_id)
     return out
@@ -625,7 +632,7 @@ def start(cfg: AgentConfig, user: UserOut = Depends(current_user)):
                      ON CONFLICT (user_id) DO UPDATE SET config = EXCLUDED.config, status = 'running', started_at = now(),
                        stopped_at = NULL, last_bar = NULL, signal = 0, blocked = 0, position_id = NULL, note = ''""",
                   (user.id, Jsonb(cfg.model_dump())))
-        _log(c, user.id, "start", f"Started {bt.STRATEGIES[cfg.strategy]['label']} on "
+        _log(c, user.id, "start", f"Started {cfg.label} on "
                                   f"{'hourly' if cfg.tf == '1h' else 'daily'} candles, {cfg.size_pct:.0f}% of the account per "
                                   f"trade with a {cfg.stop_loss_pct}% stop.")
     return state(user.id)

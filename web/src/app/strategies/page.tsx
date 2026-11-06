@@ -38,7 +38,7 @@ function heldUp(r: PlanResult) {
 
 function backtestLink(r: PlanResult, plan: Plan, input: PlanInput): string {
   const p: BacktestParams = {
-    strategy: r.strategy, params: r.params, tf: plan.tf,
+    strategy: r.strategy, params: r.params, rules: r.rules ?? null, tf: plan.tf,
     start: new Date(plan.periods.in_sample.start * 1000).toISOString().slice(0, 10), end: null,
     direction: input.direction, capital: input.capital, units: 1, spread: 0.3, swap_long: -0.25, swap_short: 0.05,
     stop_loss_pct: r.stop_loss_pct, take_profit_pct: null, size_pct: r.size_pct,
@@ -47,7 +47,7 @@ function backtestLink(r: PlanResult, plan: Plan, input: PlanInput): string {
 }
 
 function agentLink(r: PlanResult, plan: Plan, input: PlanInput): string {
-  const c = { strategy: r.strategy, params: r.params, tf: plan.tf, direction: input.direction, stop_loss_pct: r.stop_loss_pct,
+  const c = { strategy: r.strategy, params: r.params, rules: r.rules ?? null, tf: plan.tf, direction: input.direction, stop_loss_pct: r.stop_loss_pct,
     size_pct: r.size_pct, years: plan.tf === "1h" ? Math.min(plan.years, 2) : Math.min(plan.years, 20) };
   return `/paper/agent?plan=${encodeURIComponent(JSON.stringify(c))}`;
 }
@@ -263,7 +263,7 @@ export default function StrategiesPage() {
               <div>
                 <h2 className="mb-3 font-medium">Best fits for your limits</h2>
                 <div className="space-y-4">
-                  {picks.map((r, i) => <Pick key={r.strategy} r={r} rank={i + 1} plan={plan} input={asked} />)}
+                  {picks.map((r, i) => <Pick key={r.custom_id ?? r.strategy} r={r} rank={i + 1} plan={plan} input={asked} />)}
                 </div>
               </div>
             ) : (
@@ -290,7 +290,7 @@ export default function StrategiesPage() {
                   </thead>
                   <tbody>
                     {[...picks, ...rest].map((r) => (
-                      <tr key={r.strategy} className="border-t border-border">
+                      <tr key={r.custom_id ?? r.strategy} className="border-t border-border">
                         <td className="px-3 py-1.5">
                           <Link href={backtestLink(r, plan, asked)} className="hover:text-gold">{r.label}</Link>
                           {!r.qualifies && <span className="ml-1.5 text-xs text-muted">(didn&apos;t qualify)</span>}

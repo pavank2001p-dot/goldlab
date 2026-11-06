@@ -7,7 +7,7 @@ import Rich from "@/components/Rich";
 import SignInPrompt from "@/components/SignInPrompt";
 import { Empty, Icon, PageHeader } from "@/components/ui";
 import {
-  api, ApiError, fmtPct, type AgentConfig, type AgentFix, type AgentState, type BriefStats, type Diagnosis, type PastTest, type Strategy,
+  api, ApiError, asStrategy, fmtPct, type AgentConfig, type AgentFix, type AgentState, type BriefStats, type Diagnosis, type PastTest, type SavedStrategy, type Strategy,
 } from "@/lib/api";
 import { useUser } from "@/lib/useUser";
 
@@ -245,6 +245,7 @@ function LiveCard({ s, act, busy }: { s: AgentState; act: (fn: () => Promise<Age
 export default function AgentPage() {
   const { user } = useUser();
   const [strategies, setStrategies] = useState<Strategy[]>([]);
+  const [mine, setMine] = useState<SavedStrategy[]>([]);
   const [form, setForm] = useState<(AgentConfig & { years: number }) | null>(null);
   const [past, setPast] = useState<PastTest | null>(null);
   const [state, setState] = useState<AgentState | null>(null);
@@ -256,18 +257,24 @@ export default function AgentPage() {
 
   useEffect(() => {
     if (!user) return;
-    api.strategies().then((list) => {
+    Promise.all([api.strategies(), api.customList().catch(() => [] as SavedStrategy[])]).then(([list, saved]) => {
       const usable = list.filter((s) => s.kind !== "benchmark");
       setStrategies(usable);
+      setMine(saved);
       const first = usable[0];
+      const q = new URLSearchParams(window.location.search);
       let plan: Partial<AgentConfig> | null = null;
       try {
-        plan = JSON.parse(new URLSearchParams(window.location.search).get("plan") ?? "null");
+        plan = JSON.parse(q.get("plan") ?? "null");
       } catch {}
+      // The strategy builder links here with ?custom=<id>.
+      const own = saved.find((m) => m.id === Number(q.get("custom")));
+      if (own) plan = { strategy: "custom", params: {}, rules: own.rules };
       const base = { strategy: first.key, params: Object.fromEntries(first.params.map((p) => [p.key, p.default])), tf: "1d" as const,
         direction: "both" as const, stop_loss_pct: 3, size_pct: 33, years: 5 };
-      setForm(plan?.strategy && usable.some((s) => s.key === plan.strategy)
-        ? { ...base, ...plan, stop_loss_pct: plan.stop_loss_pct ?? 3, size_pct: plan.size_pct ?? 33 } as AgentConfig & { years: number }
+      const ok = plan?.strategy && (usable.some((s) => s.key === plan.strategy) || (plan.strategy === "custom" && plan.rules));
+      setForm(ok
+        ? { ...base, ...plan, stop_loss_pct: plan!.stop_loss_pct ?? 3, size_pct: plan!.size_pct ?? 33 } as AgentConfig & { years: number }
         : base);
     });
     refresh();
@@ -278,7 +285,12 @@ export default function AgentPage() {
   if (user === null) return <SignInPrompt what="run a strategy agent on your paper account" next="/paper/agent" />;
   if (!user || !form) return null;
 
-  const strategy = strategies.find((s) => s.key === form.strategy)!;
+  // A custom strategy is matched to its saved copy by name, so the picker shows which one is in use.
+  const own = form.strategy === "custom" ? mine.find((m) => m.name === form.rules?.name) : undefined;
+  const selected = form.strategy === "custom" ? (own ? `custom:${own.id}` : "custom") : form.strategy;
+  const strategy: Strategy | undefined = form.strategy === "custom"
+    ? (own ? asStrategy(own) : { key: "custom", label: form.rules?.name ?? "Custom strategy", summary: "Rules from the strategy finder.", kind: "custom", kind_label: "Your strategy", params: [] })
+    : strategies.find((s) => s.key === form.strategy);
   const set = (patch: Partial<AgentConfig & { years: number }>) => setForm({ ...form, ...patch });
   const running = state?.agent?.status === "running";
 
@@ -322,16 +334,25 @@ export default function AgentPage() {
           <div className="space-y-3 rounded-2xl border border-border bg-surface p-4">
             <h2 className="font-medium">Setup</h2>
             <Field label="Strategy">
-              <select className={input} value={form.strategy} onChange={(e) => {
+              <select className={input} value={selected} onChange={(e) => {
+                const m = mine.find((x) => `custom:${x.id}` === e.target.value);
+                if (m) return set({ strategy: "custom", params: {}, rules: m.rules });
                 const s = strategies.find((x) => x.key === e.target.value)!;
-                set({ strategy: s.key, params: Object.fromEntries(s.params.map((p) => [p.key, p.default])) });
+                set({ strategy: s.key, params: Object.fromEntries(s.params.map((p) => [p.key, p.default])), rules: null });
               }}>
+                {selected === "custom" && <option value="custom">{strategy?.label}</option>}
+                {mine.length > 0 && (
+                  <optgroup label="Your strategies">
+                    {mine.map((m) => <option key={m.id} value={`custom:${m.id}`}>{m.name}</option>)}
+                  </optgroup>
+                )}
                 {(["trend", "reversion"] as const).map((k) => (
                   <optgroup key={k} label={k === "trend" ? "Trend following" : "Mean reversion"}>
                     {strategies.filter((s) => s.kind === k).map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
                   </optgroup>
                 ))}
               </select>
+              <Link href="/strategies/builder" className="mt-1.5 inline-block text-xs text-gold hover:underline">Build your own strategy</Link>
             </Field>
             <p className="text-xs text-muted">{strategy?.summary}</p>
             <div className="grid grid-cols-2 gap-3">
@@ -416,7 +437,7 @@ export default function AgentPage() {
             {past && base && (
               <>
                 <h2 className="font-medium">
-                  Past test: {strategies.find((s) => s.key === past.config.strategy)?.label}, last {past.years < 1 ? "6 months" : `${past.years} years`}
+                  Past test: {past.config.strategy === "custom" ? past.config.rules?.name : strategies.find((s) => s.key === past.config.strategy)?.label}, last {past.years < 1 ? "6 months" : `${past.years} years`}
                 </h2>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   <Stat label="Per year">{ret(past.stats.cagr_pct ?? past.stats.total_return_pct)}</Stat>
