@@ -10,7 +10,7 @@ import { useUser } from "@/lib/useUser";
 
 type Item = { href: string; label: string; icon: string; blurb: string };
 
-/** Ten tools grouped into four plain steps, so the bar stays short and each menu says what a page is for. */
+/** Twelve tools grouped into four plain steps, so the bar stays short and each menu says what a page is for. */
 export const GROUPS: { label: string; items: Item[] }[] = [
   {
     label: "Market",
@@ -32,6 +32,8 @@ export const GROUPS: { label: string; items: Item[] }[] = [
     label: "Practise",
     items: [
       { href: "/paper", label: "Paper trading", icon: "wallet", blurb: "Trade with virtual money, no risk" },
+      { href: "/paper/replay", label: "Replay a day", icon: "clock", blurb: "Trade a past day candle by candle" },
+      { href: "/paper/challenge", label: "Weekly challenge", icon: "trophy", blurb: "Same day for everyone, with an opt-in leaderboard" },
       { href: "/paper/agent", label: "Strategy agent", icon: "bolt", blurb: "Let a strategy trade on paper and learn why" },
       { href: "/trades", label: "Trade log", icon: "trades", blurb: "Review your own real trades" },
     ],

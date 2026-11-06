@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import FitPanel from "@/components/FitPanel";
 import ReportView from "@/components/ReportView";
+import Insights from "@/components/practice/Insights";
 import SignInPrompt from "@/components/SignInPrompt";
 import { Empty, Icon, PageHeader, SidePill } from "@/components/ui";
 import { api, fmtUsd, type ImportResult, type Report, type Trade, type TradeInput } from "@/lib/api";
@@ -191,6 +192,13 @@ export default function TradesPage() {
           </div>
         )}
       </section>
+
+      {trades.length > 0 && (
+        <section>
+          <h2 className="mb-3 flex items-center gap-2 font-medium"><Icon name="assistant" className="h-4 w-4 text-gold" /> Habits in your log</h2>
+          <Insights source="journal" refresh={trades.length} />
+        </section>
+      )}
 
       {trades.length > 0 && (
         <section>

@@ -422,7 +422,45 @@ export type AgentState = {
 export type Badge = { key: string; title: string; blurb: string; icon: string; progress: number; goal: number; earned: boolean };
 export type Achievements = { badges: Badge[]; earned: number; streak: { current: number; best: number; logged_today: boolean } };
 
+export type PriceAlert = {
+  id: number; price: number; direction: "above" | "below"; note: string;
+  created_at: string; triggered_at: string | null; triggered_price: number | null;
+};
+export type Insight = { key: string; tone: "warn" | "info" | "good"; title: string; metric: string; body: string };
+export type Insights = { source: "paper" | "journal"; trades: number; needed: number; win_rate_pct?: number; net?: number; items: Insight[] };
+export type ReplayBar = { t: number; o: number; h: number; l: number; c: number };
+export type ReplayTf = "5m" | "15m" | "1h";
+export type ReplayTradeIn = { side: "long" | "short"; units: number; entry_bar: number; exit_bar: number; stop: number | null; target: number | null };
+export type ReplaySettled = ReplayTradeIn & { entry_price: number; exit_price: number; reason: "closed" | "stop" | "target"; pnl: number };
+export type ReplayScore = { balance: number; return_pct: number; max_drawdown_pct: number; trades: number; wins: number; detail: ReplaySettled[] };
+export type Replay = {
+  tf: ReplayTf; day: string; start: number; end: number; context: ReplayBar[]; bars: ReplayBar[];
+  balance: number; leverage: number; range: { first: string; last: string };
+};
+export type BoardRow = { rank: number; nickname: string | null; return_pct: number; max_drawdown_pct: number; trades: number; me: boolean };
+export type Board = { players: number; top: BoardRow[]; mine: (BoardRow & { public: boolean }) | null };
+export type Challenge = {
+  week: string; ends: string; tf: ReplayTf; start: number; end: number;
+  rules: { balance: number; leverage: number; risk_pct: number };
+  context: ReplayBar[]; bars: ReplayBar[]; board: Board; nickname: string | null;
+  last_week: (Board & { week: string }) | null;
+};
+
 export const api = {
+  alerts: () => call<PriceAlert[]>("/practice/alerts"),
+  addAlert: (price: number, note = "") => call<PriceAlert>("/practice/alerts", { method: "POST", body: JSON.stringify({ price, note }) }),
+  deleteAlert: (id: number) => call<void>(`/practice/alerts/${id}`, { method: "DELETE" }),
+  checkAlerts: () => call<{ triggered: PriceAlert[]; price: number | null }>("/practice/alerts/check", { method: "POST" }),
+  insights: (source: "paper" | "journal") => call<Insights>(`/practice/insights?source=${source}`),
+  replay: (o: { day?: string; tf: ReplayTf }) =>
+    call<Replay>(`/practice/replay?tf=${o.tf}${o.day ? `&day=${o.day}` : ""}`),
+  replaySettle: (b: { tf: ReplayTf; start: number; end: number; trades: ReplayTradeIn[] }) =>
+    call<ReplayScore>("/practice/replay/settle", { method: "POST", body: JSON.stringify(b) }),
+  challenge: () => call<Challenge>("/practice/challenge"),
+  enterChallenge: (b: { trades: ReplayTradeIn[]; public: boolean; nickname: string | null }) =>
+    call<ReplayScore & { board: Board }>("/practice/challenge", { method: "POST", body: JSON.stringify(b) }),
+  challengeVisibility: (pub: boolean, nickname: string | null) =>
+    call<Board>("/practice/challenge", { method: "PATCH", body: JSON.stringify({ public: pub, nickname }) }),
   achievements: () => call<Achievements>("/achievements"),
   customCatalog: () => call<CustomCatalog>("/custom-strategies/catalog"),
   customList: () => call<SavedStrategy[]>("/custom-strategies"),
