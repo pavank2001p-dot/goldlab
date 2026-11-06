@@ -145,6 +145,10 @@ def test_save_backtest_and_run_as_agent(client):
     assert [s["name"] for s in client.get("/custom-strategies").json()] == ["Dip buyer 2"]
 
     daily(walk(700, seed=9))
+    r = client.post("/custom-strategies/preview", json={"rules": TEMPLATE, "years": 1.5, "stop_loss_pct": 3})
+    assert r.status_code == 200, r.text
+    pv = r.json()
+    assert pv["candles"] and pv["stats"]["trades"] == len(pv["trades"]) > 0 and 0 < pv["in_market_pct"] <= 100
     start = (datetime.now(UTC) - timedelta(days=650)).date().isoformat()
     r = client.post("/backtests", json={"strategy": "custom", "rules": TEMPLATE, "start": start})
     assert r.status_code == 201, r.text

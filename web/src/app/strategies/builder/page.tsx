@@ -1,29 +1,38 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import EquityChart from "@/components/EquityChart";
+import { useEffect, useMemo, useRef, useState } from "react";
 import SignInPrompt from "@/components/SignInPrompt";
-import { Empty, PageHeader } from "@/components/ui";
+import TradeChart from "@/components/TradeChart";
+import { CountUp, Icon } from "@/components/ui";
 import {
-  api, fmtPct, type Backtest, type Condition, type CustomCatalog, type IndicatorSpec, type Operand, type Rules, type SavedStrategy,
+  api, type Condition, type CustomCatalog, type CustomPreview, type IndicatorSpec, type Operand, type Rules, type SavedStrategy,
 } from "@/lib/api";
 import { useUser } from "@/lib/useUser";
 
-const input = "w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:border-gold";
-const GROUPS: { key: keyof Omit<Rules, "name">; title: string; hint: string; tone: string }[] = [
-  { key: "long_entry", title: "Buy (go long) when", hint: "All of these are true on a candle's close", tone: "text-up" },
-  { key: "long_exit", title: "Close the long when", hint: "Optional. A sell signal also closes it", tone: "text-up" },
-  { key: "short_entry", title: "Sell (go short) when", hint: "Optional. Leave empty for a long-only strategy", tone: "text-down" },
-  { key: "short_exit", title: "Close the short when", hint: "Optional. A buy signal also closes it", tone: "text-down" },
+type Lane = keyof Omit<Rules, "name">;
+const LANES: { key: Lane; title: string; hint: string; icon: string; tone: "up" | "down"; exit: boolean }[] = [
+  { key: "long_entry", title: "Buy when", hint: "Opens a long trade", icon: "up", tone: "up", exit: false },
+  { key: "long_exit", title: "Close the buy when", hint: "Optional. A sell signal also closes it", icon: "check", tone: "up", exit: true },
+  { key: "short_entry", title: "Sell short when", hint: "Optional. Leave empty for buys only", icon: "down", tone: "down", exit: false },
+  { key: "short_exit", title: "Close the short when", hint: "Optional. A buy signal also closes it", icon: "check", tone: "down", exit: true },
 ];
+// A colour per indicator family, so a rule reads at a glance.
+const TINT: Record<string, string> = {
+  Price: "#9aa5b1", Trend: "var(--gold)", Momentum: "var(--calm)", Volatility: "#c084fc", Number: "var(--foreground)",
+};
+const TAGS: Record<string, string> = {
+  golden_cross: "Trend", rsi_dip_uptrend: "Pullback", strong_trend_breakout: "Breakout", macd_trend_filter: "Momentum", band_fade: "Reversion",
+};
+const TEMPLATE_ICON: Record<string, string> = {
+  golden_cross: "backtest", rsi_dip_uptrend: "drop", strong_trend_breakout: "bolt", macd_trend_filter: "layers", band_fade: "scale",
+};
 const EMPTY: Rules = { name: "My strategy", long_entry: [], long_exit: [], short_entry: [], short_exit: [] };
 
-function defaults(spec: IndicatorSpec | undefined, ind: string, value?: number): Operand {
-  return { ind, n: spec?.n?.default ?? null, m: spec?.m?.default ?? null, value: ind === "value" ? (value ?? 50) : null };
+function defaults(spec: IndicatorSpec | undefined, ind: string): Operand {
+  return { ind, n: spec?.n?.default ?? null, m: spec?.m?.default ?? null, value: ind === "value" ? 50 : null };
 }
 
-/** The rules as a sentence, matching what the API stores in the description. */
 function sentence(r: Rules, cat: CustomCatalog): string {
   const spec = (k: string) => cat.indicators.find((i) => i.key === k);
   const op = (o: Operand) => {
@@ -39,87 +48,126 @@ function sentence(r: Rules, cat: CustomCatalog): string {
     .join(" ");
 }
 
-function OperandPicker({ o, cat, onChange, allowNumber }: { o: Operand; cat: CustomCatalog; onChange: (o: Operand) => void; allowNumber: boolean }) {
+const chevron = "bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%238f99a5%22 stroke-width=%222.5%22><path d=%22M6 9l6 6 6-6%22/></svg>')] bg-[length:12px] bg-[right_10px_center] bg-no-repeat";
+
+/** One side of a condition, drawn as a coloured token with its settings inline. */
+function Token({ o, cat, onChange, allowNumber }: { o: Operand; cat: CustomCatalog; onChange: (o: Operand) => void; allowNumber: boolean }) {
   const spec = cat.indicators.find((i) => i.key === o.ind);
+  const tint = TINT[spec?.group ?? "Price"];
   const groups = [...new Set(cat.indicators.map((i) => i.group))].filter((g) => allowNumber || g !== "Number");
+  const num = (k: "n" | "m" | "value", label: string, w = "w-14") => (
+    <input type="number" aria-label={label} title={label} value={o[k] ?? ""} step="any"
+      onChange={(e) => onChange({ ...o, [k]: e.target.value === "" ? null : Number(e.target.value) })}
+      className={`${w} rounded-md border border-border bg-background px-1.5 py-1 text-center text-sm tabular-nums outline-none focus:border-gold`} />
+  );
   return (
-    <div className="min-w-0 flex-1 space-y-1.5">
-      <select className={input} value={o.ind} aria-label="Indicator"
-        onChange={(e) => onChange(defaults(cat.indicators.find((i) => i.key === e.target.value), e.target.value))}>
+    <span className="inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-xl border bg-surface-2 py-1 pl-1 pr-1.5"
+      style={{ borderColor: `color-mix(in srgb, ${tint} 45%, transparent)` }}>
+      <span className="ml-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: tint }} />
+      <select value={o.ind} aria-label="Indicator"
+        onChange={(e) => onChange(defaults(cat.indicators.find((i) => i.key === e.target.value), e.target.value))}
+        className={`min-w-0 max-w-[20rem] appearance-none [field-sizing:content] rounded-lg bg-transparent py-1 pl-1 pr-7 text-sm font-medium outline-none ${chevron}`}>
         {groups.map((g) => (
           <optgroup key={g} label={g}>
             {cat.indicators.filter((i) => i.group === g).map((i) => <option key={i.key} value={i.key}>{i.label}</option>)}
           </optgroup>
         ))}
       </select>
-      {o.ind === "value" ? (
-        <input type="number" className={input} value={o.value ?? ""} step="any" aria-label="Number"
-          onChange={(e) => onChange({ ...o, value: e.target.value === "" ? null : Number(e.target.value) })} />
-      ) : (spec?.n || spec?.m) && (
-        <div className="flex gap-1.5">
-          {(["n", "m"] as const).map((k) => spec?.[k] && (
-            <label key={k} className="flex min-w-0 flex-1 items-center gap-1.5 text-xs text-muted">
-              <span className="shrink-0">{spec[k]!.label}</span>
-              <input type="number" className={`${input} py-1`} value={o[k] ?? ""} min={1} step="any"
-                onChange={(e) => onChange({ ...o, [k]: e.target.value === "" ? null : Number(e.target.value) })} />
-            </label>
-          ))}
-        </div>
+      {o.ind === "value" ? num("value", "Number", "w-20") : (
+        <>
+          {spec?.n && num("n", spec.n.label)}
+          {spec?.m && num("m", spec.m.label)}
+        </>
       )}
-    </div>
+    </span>
   );
 }
 
-function ConditionRow({ c, cat, onChange, onRemove }: { c: Condition; cat: CustomCatalog; onChange: (c: Condition) => void; onRemove: () => void }) {
+function Rule({ c, i, cat, onChange, onRemove }: { c: Condition; i: number; cat: CustomCatalog; onChange: (c: Condition) => void; onRemove: () => void }) {
   return (
-    <div className="rise-in flex flex-col gap-2 rounded-xl border border-border bg-background/60 p-2.5 sm:flex-row sm:items-start">
-      <OperandPicker o={c.left} cat={cat} allowNumber={false} onChange={(left) => onChange({ ...c, left })} />
-      <select className={`${input} sm:w-36`} value={c.op} aria-label="Comparison" onChange={(e) => onChange({ ...c, op: e.target.value as Condition["op"] })}>
-        {cat.ops.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
-      </select>
-      <OperandPicker o={c.right} cat={cat} allowNumber onChange={(right) => onChange({ ...c, right })} />
+    <div className="rise-in group flex items-start gap-3">
+      <span className={`mt-1.5 w-10 shrink-0 rounded-md py-0.5 text-center text-[10px] font-bold tracking-widest ${i ? "bg-surface-2 text-muted" : "bg-gold/15 text-gold"}`}>
+        {i ? "AND" : "IF"}
+      </span>
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+        <Token o={c.left} cat={cat} allowNumber={false} onChange={(left) => onChange({ ...c, left })} />
+        <select value={c.op} aria-label="Comparison" onChange={(e) => onChange({ ...c, op: e.target.value as Condition["op"] })}
+          className={`appearance-none rounded-full border border-border bg-background py-1.5 pl-3 pr-8 text-sm italic text-muted outline-none focus:border-gold ${chevron}`}>
+          {cat.ops.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+        </select>
+        <Token o={c.right} cat={cat} allowNumber onChange={(right) => onChange({ ...c, right })} />
+      </div>
       <button type="button" onClick={onRemove} aria-label="Remove condition"
-        className="self-end rounded-lg p-1.5 text-muted transition-colors hover:text-down sm:self-start">
+        className="mt-1 rounded-lg p-1.5 text-muted opacity-60 transition hover:bg-down/10 hover:text-down group-hover:opacity-100">
         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="M6 6l12 12M18 6 6 18" /></svg>
       </button>
     </div>
   );
 }
 
+function Stat({ label, value, format, tone }: { label: string; value: number | null | undefined; format: (v: number) => string; tone?: string }) {
+  return (
+    <div className="rounded-xl border border-border bg-background/60 p-3">
+      <p className="text-[10px] font-medium uppercase tracking-widest text-muted">{label}</p>
+      <p className={`mt-1 text-lg font-bold tabular-nums ${tone ?? ""}`}>{value == null ? "–" : <CountUp value={value} format={format} />}</p>
+    </div>
+  );
+}
+
+const pct = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
+
 export default function BuilderPage() {
   const { user } = useUser();
   const [cat, setCat] = useState<CustomCatalog | null>(null);
   const [mine, setMine] = useState<SavedStrategy[]>([]);
   const [rules, setRules] = useState<Rules>(EMPTY);
+  const [template, setTemplate] = useState<string | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const [test, setTest] = useState<{ tf: "1d" | "1h"; years: number; stop: number | null }>({ tf: "1d", years: 10, stop: 3 });
-  const [result, setResult] = useState<Backtest | null>(null);
+  const [test, setTest] = useState<{ tf: "1d" | "1h"; years: number; stop: number | null }>({ tf: "1d", years: 5, stop: 3 });
+  const [live, setLive] = useState<CustomPreview | null>(null);
+  const [liveErr, setLiveErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const seq = useRef(0);
 
   useEffect(() => {
     api.customCatalog().then((c) => {
       setCat(c);
-      setRules(c.templates[0] ? { ...c.templates[0].rules, name: "My strategy" } : EMPTY);
+      const t = c.templates[2] ?? c.templates[0];
+      if (t) {
+        setRules({ ...t.rules, name: t.name });
+        setTemplate(t.key);
+      }
     });
   }, []);
   useEffect(() => {
     if (user) api.customList().then(setMine, () => {});
   }, [user]);
 
+  // Re-test shortly after every change, so the chart follows the rules as they are written.
+  const ready = rules.long_entry.length + rules.short_entry.length > 0;
+  useEffect(() => {
+    if (!user || !cat || !ready) return;
+    const id = ++seq.current;
+    setLoading(true);
+    const t = setTimeout(() => {
+      api.customPreview({ rules, tf: test.tf, years: test.years, stop_loss_pct: test.stop })
+        .then((r) => { if (id === seq.current) { setLive(r); setLiveErr(null); } })
+        .catch((e) => { if (id === seq.current) setLiveErr(e instanceof Error ? e.message : "Couldn't test these rules"); })
+        .finally(() => { if (id === seq.current) setLoading(false); });
+    }, 650);
+    return () => clearTimeout(t);
+  }, [rules, test, user, cat, ready]);
+
   const text = useMemo(() => (cat ? sentence(rules, cat) : ""), [rules, cat]);
   if (user === null) return <SignInPrompt what="build your own strategies" next="/strategies/builder" />;
   if (!user || !cat) return null;
 
-  const setGroup = (k: keyof Omit<Rules, "name">, list: Condition[]) => {
-    setRules({ ...rules, [k]: list });
-    setResult(null);
-  };
-  const newCondition = (): Condition => ({
-    left: defaults(cat.indicators.find((i) => i.key === "close"), "close"),
-    op: ">",
-    right: defaults(cat.indicators.find((i) => i.key === "sma"), "sma"),
-  });
+  const setLane = (k: Lane, list: Condition[]) => setRules({ ...rules, [k]: list });
+  const newCondition = (exit: boolean): Condition => exit
+    ? { left: defaults(undefined, "close"), op: "<", right: defaults(cat.indicators.find((i) => i.key === "sma"), "sma") }
+    : { left: defaults(cat.indicators.find((i) => i.key === "rsi"), "rsi"), op: "<", right: { ind: "value", value: 30 } };
 
   async function guard<T>(fn: () => Promise<T>, ok?: string): Promise<T | null> {
     setBusy(true);
@@ -137,94 +185,201 @@ export default function BuilderPage() {
   }
 
   async function save() {
-    const s = await guard(() => api.customSave(rules, editing ?? undefined), editing ? "Saved your changes" : "Saved to your strategies");
+    const s = await guard(() => api.customSave(rules, editing ?? undefined), editing ? "Changes saved" : "Saved to your strategies");
     if (s) {
       setEditing(s.id);
       setMine(await api.customList());
     }
   }
 
-  async function runTest() {
-    const start = new Date(Date.now() - test.years * 365.25 * 864e5).toISOString().slice(0, 10);
-    const r = await guard(() => api.runBacktest({
-      strategy: "custom", params: {}, rules, tf: test.tf, start, end: null, direction: "both", capital: 10000, units: 1,
-      spread: 0.3, swap_long: -0.25, swap_short: 0.05, stop_loss_pct: test.stop, take_profit_pct: null, size_pct: 100,
-    }));
-    if (r) setResult(r);
-  }
-
-  function load(s: SavedStrategy) {
-    setRules(s.rules);
-    setEditing(s.id);
-    setResult(null);
+  function start(r: Rules, key: string | null, id: number | null = null) {
+    setRules(r);
+    setTemplate(key);
+    setEditing(id);
     setMsg(null);
-    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  const st = result?.stats;
+  const st = live?.stats;
+  const hold = st?.buy_and_hold_pct ?? null;
+  const ret = st?.total_return_pct ?? null;
+  const scale = Math.max(Math.abs(ret ?? 0), Math.abs(hold ?? 0), 1);
+  const count = LANES.reduce((n, l) => n + rules[l.key].length, 0);
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
-      <PageHeader icon="bolt" title="Strategy builder"
-        subtitle="Combine indicators into your own rules for buying, selling and closing. Test them on past prices, then use them in the backtester, the strategy finder and the agent." />
-
-      <div className="mt-6">
-        <p className="text-sm font-medium">Start from an idea</p>
-        <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-          {cat.templates.map((t) => (
-            <button key={t.key} type="button" title={t.summary}
-              onClick={() => { setRules({ ...t.rules, name: t.name }); setEditing(null); setResult(null); setMsg(null); }}
-              className="shrink-0 rounded-full border border-border px-3.5 py-1.5 text-sm transition-colors hover:border-gold/60 hover:text-gold">
-              {t.name}
-            </button>
-          ))}
-          <button type="button" onClick={() => { setRules(EMPTY); setEditing(null); setResult(null); }}
-            className="shrink-0 rounded-full border border-dashed border-border px-3.5 py-1.5 text-sm text-muted transition-colors hover:text-foreground">
-            Start blank
-          </button>
+      {/* Hero */}
+      <section className="relative overflow-hidden rounded-3xl border border-gold/25 bg-gradient-to-br from-surface-2 via-surface to-background p-6 sm:p-10">
+        <div aria-hidden className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-gold/20 blur-3xl" />
+        <div aria-hidden className="pointer-events-none absolute -bottom-32 left-1/3 h-64 w-64 rounded-full bg-calm/10 blur-3xl" />
+        <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgb(255_255_255/0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgb(255_255_255/0.03)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_at_top_right,black,transparent_75%)]" />
+        <div className="relative">
+          <span className="inline-flex items-center gap-2 rounded-full border border-gold/30 bg-gold/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-gold">
+            <Icon name="bolt" className="h-3.5 w-3.5" /> Strategy studio
+          </span>
+          <h1 className="mt-4 max-w-3xl text-3xl font-bold tracking-tight sm:text-5xl">
+            Design a strategy.{" "}
+            <span className="bg-gradient-to-r from-gold via-[#f5d77a] to-gold bg-clip-text text-transparent">Watch it trade.</span>
+          </h1>
+          <p className="mt-4 max-w-2xl text-muted">
+            Snap indicators together into rules. Every change is tested on real gold prices in a moment, with each buy and
+            sell drawn on the chart.
+          </p>
+          <ol className="mt-7 flex flex-wrap gap-x-8 gap-y-3 text-sm">
+            {["Pick an idea", "Shape the rules", "See every trade"].map((s, i) => (
+              <li key={s} className="flex items-center gap-2.5">
+                <span className="font-mono text-lg font-bold text-gold">0{i + 1}</span>
+                <span className="text-foreground/90">{s}</span>
+              </li>
+            ))}
+          </ol>
         </div>
-      </div>
+      </section>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]">
+      {/* Templates */}
+      <section className="mt-8">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-lg font-bold">Start from an idea</h2>
+          <button type="button" onClick={() => start(EMPTY, null)} className="text-sm text-muted transition-colors hover:text-gold">Start blank</button>
+        </div>
+        <div className="-mx-4 mt-3 flex snap-x gap-3 overflow-x-auto px-4 pb-2">
+          {cat.templates.map((t) => {
+            const on = template === t.key;
+            return (
+              <button key={t.key} type="button" onClick={() => start({ ...t.rules, name: t.name }, t.key)}
+                className={`group relative w-60 shrink-0 snap-start overflow-hidden rounded-2xl border p-4 text-left transition-colors ${on ? "border-gold/70 bg-gold/10" : "border-border bg-surface hover:border-gold/40"}`}>
+                <div className="flex items-center justify-between">
+                  <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${on ? "bg-gold text-black" : "bg-gold/10 text-gold"}`}>
+                    <Icon name={TEMPLATE_ICON[t.key] ?? "bolt"} className="h-4 w-4" />
+                  </span>
+                  <span className="rounded-full border border-border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-muted">{TAGS[t.key] ?? "Idea"}</span>
+                </div>
+                <p className="mt-3 font-semibold">{t.name}</p>
+                <p className="mt-1 line-clamp-3 text-xs leading-relaxed text-muted">{t.summary}</p>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
+        {/* Rules */}
         <div className="min-w-0 space-y-4">
-          <label className="block">
-            <span className="text-sm text-muted">Name</span>
-            <input className={`${input} mt-1 text-base font-medium`} value={rules.name} maxLength={60}
-              onChange={(e) => setRules({ ...rules, name: e.target.value })} />
-          </label>
+          <div className="flex items-center gap-3">
+            <input value={rules.name} maxLength={60} aria-label="Strategy name" onChange={(e) => setRules({ ...rules, name: e.target.value })}
+              className="min-w-0 flex-1 border-b border-transparent bg-transparent pb-1 text-2xl font-bold tracking-tight outline-none transition-colors hover:border-border focus:border-gold" />
+            <span className="shrink-0 rounded-full bg-surface-2 px-3 py-1 text-xs text-muted">{count} condition{count === 1 ? "" : "s"}</span>
+          </div>
 
-          {GROUPS.map((g) => (
-            <section key={g.key} className="card p-4">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h2 className={`font-semibold ${g.tone}`}>{g.title}</h2>
-                <span className="text-xs text-muted">{g.hint}</span>
-              </div>
-              <div className="mt-3 space-y-2">
-                {rules[g.key].map((c, i) => (
-                  <div key={i}>
-                    {i > 0 && <p className="py-1 text-center text-[11px] font-medium uppercase tracking-wider text-muted">and</p>}
-                    <ConditionRow c={c} cat={cat}
-                      onChange={(n) => setGroup(g.key, rules[g.key].map((x, j) => (j === i ? n : x)))}
-                      onRemove={() => setGroup(g.key, rules[g.key].filter((_, j) => j !== i))} />
-                  </div>
-                ))}
-                {rules[g.key].length < cat.max_conditions && (
-                  <button type="button" onClick={() => setGroup(g.key, [...rules[g.key], newCondition()])}
-                    className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2 text-sm text-muted transition-colors hover:border-gold/50 hover:text-gold">
-                    + Add a condition
-                  </button>
-                )}
-              </div>
-            </section>
-          ))}
+          {LANES.map((l) => {
+            const list = rules[l.key];
+            const color = l.tone === "up" ? "var(--up)" : "var(--down)";
+            return (
+              <section key={l.key} className={`card relative overflow-hidden ${l.exit ? "ml-4 sm:ml-8" : ""}`}>
+                <div aria-hidden className="absolute inset-y-0 left-0 w-1" style={{ background: `linear-gradient(${color}, transparent)` }} />
+                <div className="flex flex-wrap items-center gap-3 border-b border-border/70 px-5 py-3">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg" style={{ background: `color-mix(in srgb, ${color} 18%, transparent)`, color }}>
+                    <Icon name={l.icon} className="h-4 w-4" strokeWidth={2.4} />
+                  </span>
+                  <h3 className="font-semibold" style={{ color }}>{l.title}</h3>
+                  <span className="ml-auto text-xs text-muted">{l.hint}</span>
+                </div>
+                <div className="space-y-3 px-5 py-4">
+                  {list.length === 0 && <p className="text-sm text-muted/80">No conditions yet.</p>}
+                  {list.map((c, i) => (
+                    <Rule key={i} c={c} i={i} cat={cat}
+                      onChange={(n) => setLane(l.key, list.map((x, j) => (j === i ? n : x)))}
+                      onRemove={() => setLane(l.key, list.filter((_, j) => j !== i))} />
+                  ))}
+                  {list.length < cat.max_conditions && (
+                    <button type="button" onClick={() => setLane(l.key, [...list, newCondition(l.exit)])}
+                      className="ml-[3.25rem] inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-3 py-1 text-sm text-muted transition-colors hover:border-gold/60 hover:text-gold">
+                      <span className="text-base leading-none">+</span> {list.length ? "And…" : "Add a condition"}
+                    </button>
+                  )}
+                </div>
+              </section>
+            );
+          })}
+
+          <div className="flex flex-wrap gap-4 px-1 text-xs text-muted">
+            {Object.entries(TINT).filter(([g]) => g !== "Number").map(([g, c]) => (
+              <span key={g} className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: c }} />{g}</span>
+            ))}
+            <span>Signals are read on each candle&apos;s close and filled at the next open.</span>
+          </div>
         </div>
 
+        {/* Live preview */}
         <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
+          <div className="card overflow-hidden">
+            <div className="flex items-center gap-2 border-b border-border/70 px-4 py-3">
+              <span className={`h-2 w-2 rounded-full ${loading ? "animate-pulse bg-gold" : live ? "breathe bg-up" : "bg-muted"}`} />
+              <h2 className="font-semibold">Live preview</h2>
+              <span className="ml-auto text-xs text-muted">{loading ? "Testing…" : live ? `${live.trades.length} trades` : ""}</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5 px-4 pt-3">
+              {(["1d", "1h"] as const).map((tf) => (
+                <button key={tf} type="button" onClick={() => setTest({ ...test, tf, years: tf === "1h" ? 1 : 5 })}
+                  className={`rounded-full px-2.5 py-1 text-xs transition-colors ${test.tf === tf ? "bg-gold text-black" : "bg-surface-2 text-muted hover:text-foreground"}`}>
+                  {tf === "1d" ? "Daily" : "Hourly"}
+                </button>
+              ))}
+              <span className="mx-1 w-px bg-border" />
+              {(test.tf === "1h" ? [0.5, 1, 2] : [1, 3, 5, 10, 20]).map((y) => (
+                <button key={y} type="button" onClick={() => setTest({ ...test, years: y })}
+                  className={`rounded-full px-2.5 py-1 text-xs tabular-nums transition-colors ${test.years === y ? "bg-foreground text-background" : "bg-surface-2 text-muted hover:text-foreground"}`}>
+                  {y < 1 ? "6M" : `${y}Y`}
+                </button>
+              ))}
+              <label className="ml-auto flex items-center gap-1 text-xs text-muted">
+                Stop
+                <input type="number" value={test.stop ?? ""} min={0.1} step="any" placeholder="off" aria-label="Stop loss %"
+                  onChange={(e) => setTest({ ...test, stop: e.target.value === "" ? null : Number(e.target.value) })}
+                  className="w-12 rounded-md border border-border bg-background px-1.5 py-0.5 text-center tabular-nums outline-none focus:border-gold" />%
+              </label>
+            </div>
+            <div className={`relative mt-2 transition-opacity duration-500 ${loading && live ? "opacity-50" : ""}`}>
+              {!ready ? (
+                <p className="px-4 py-16 text-center text-sm text-muted">Add a condition to <b>Buy when</b> or <b>Sell short when</b> to see it trade.</p>
+              ) : liveErr && !live ? (
+                <p className="px-4 py-16 text-center text-sm text-down">{liveErr}</p>
+              ) : live ? (
+                <TradeChart data={live} height={260} />
+              ) : (
+                <div className="mx-4 h-[260px] animate-pulse rounded-xl bg-surface-2" />
+              )}
+            </div>
+            {st && ready && (
+              <div className="space-y-3 p-4">
+                <div className="grid grid-cols-2 gap-2">
+                  <Stat label="Return" value={ret} format={pct} tone={(ret ?? 0) >= 0 ? "text-up" : "text-down"} />
+                  <Stat label="Worst drop" value={st.max_drawdown_pct} format={(v) => `${v.toFixed(1)}%`} tone="text-down" />
+                  <Stat label="Win rate" value={st.win_rate_pct} format={(v) => `${v.toFixed(0)}%`} />
+                  <Stat label="In the market" value={live!.in_market_pct} format={(v) => `${v.toFixed(0)}%`} />
+                </div>
+                <div className="space-y-1.5 rounded-xl border border-border bg-background/60 p-3 text-xs">
+                  {[["Your rules", ret, "var(--gold)"], ["Owning gold", hold, "var(--muted)"]].map(([l, v, c]) => (
+                    <div key={l as string} className="flex items-center gap-2">
+                      <span className="w-20 shrink-0 text-muted">{l as string}</span>
+                      <div className="relative h-2 flex-1 rounded-full bg-surface-2">
+                        <div className="bar-grow absolute inset-y-0 left-0 rounded-full" style={{ width: `${Math.min(Math.abs((v as number) ?? 0) / scale, 1) * 100}%`, background: c as string, opacity: (v as number) < 0 ? 0.5 : 1 }} />
+                      </div>
+                      <span className="w-16 text-right font-semibold tabular-nums">{v == null ? "–" : pct(v as number)}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[11px] leading-relaxed text-muted">
+                  $10,000, each trade the size of the account (no leverage), with spread and swap. Past results don&apos;t predict future ones.
+                </p>
+              </div>
+            )}
+          </div>
+
           <div className="card space-y-3 p-4">
-            <h2 className="font-semibold">In plain words</h2>
-            <p className="text-sm leading-relaxed text-muted">{text || "Add a condition for buying or selling to begin."}</p>
-            <p className="text-xs text-muted">Signals are read on each candle&apos;s close and filled at the next open, like every backtest here.</p>
-            <button type="button" onClick={save} disabled={busy}
-              className="w-full rounded-full bg-gradient-to-b from-[#f2c95a] to-gold py-2.5 text-sm font-semibold text-black transition-[filter] hover:brightness-105 disabled:opacity-60">
+            <p className="text-xs font-medium uppercase tracking-widest text-muted">In plain words</p>
+            <p className="text-sm leading-relaxed">{text || "Add a condition to begin."}</p>
+            <button type="button" onClick={save} disabled={busy || !ready}
+              className="w-full rounded-full bg-gradient-to-b from-[#f2c95a] to-gold py-2.5 text-sm font-semibold text-black shadow-[0_10px_30px_-14px_var(--gold),inset_0_1px_0_rgb(255_255_255/0.35)] transition-[filter] hover:brightness-105 disabled:opacity-50">
               {editing ? "Save changes" : "Save strategy"}
             </button>
             {editing && (
@@ -235,78 +390,44 @@ export default function BuilderPage() {
             )}
             {msg && <p className={`text-sm ${msg.ok ? "text-up" : "text-down"}`}>{msg.text}</p>}
           </div>
-
-          <div className="card space-y-3 p-4">
-            <h2 className="font-semibold">Quick test</h2>
-            <div className="grid grid-cols-3 gap-2 text-xs">
-              <label className="text-muted">Candles
-                <select className={`${input} mt-1`} value={test.tf}
-                  onChange={(e) => { const tf = e.target.value as "1d" | "1h"; setTest({ ...test, tf, years: tf === "1h" ? 2 : 10 }); }}>
-                  <option value="1d">Daily</option><option value="1h">Hourly</option>
-                </select>
-              </label>
-              <label className="text-muted">Years
-                <select className={`${input} mt-1`} value={test.years} onChange={(e) => setTest({ ...test, years: Number(e.target.value) })}>
-                  {(test.tf === "1h" ? [1, 2] : [3, 5, 10, 20]).map((y) => <option key={y} value={y}>{y}</option>)}
-                </select>
-              </label>
-              <label className="text-muted">Stop %
-                <input type="number" className={`${input} mt-1`} value={test.stop ?? ""} min={0.1} step="any" placeholder="none"
-                  onChange={(e) => setTest({ ...test, stop: e.target.value === "" ? null : Number(e.target.value) })} />
-              </label>
-            </div>
-            <button type="button" onClick={runTest} disabled={busy}
-              className="w-full rounded-full border border-border bg-surface-2 py-2 text-sm font-medium transition-colors hover:border-gold/60 disabled:opacity-60">
-              {busy ? "Working…" : "Test on past prices"}
-            </button>
-            <p className="text-xs text-muted">$10,000, each trade the size of the account (no leverage), with spread and swap.</p>
-            {st && (
-              <div className="rise-in space-y-3">
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  {[["Return", fmtPct(st.total_return_pct)], ["Worst drop", fmtPct(st.max_drawdown_pct)],
-                    ["Trades", String(st.trades)], ["Winners", st.win_rate_pct == null ? "–" : `${st.win_rate_pct.toFixed(0)}%`]].map(([k, v]) => (
-                    <div key={k} className="rounded-lg bg-background p-2">
-                      <p className="text-[11px] uppercase tracking-wider text-muted">{k}</p>
-                      <p className="font-semibold tabular-nums">{v}</p>
-                    </div>
-                  ))}
-                </div>
-                <EquityChart equity={result!.equity} height={160} />
-                <p className="text-xs text-muted">Owning gold over the same days: {fmtPct(st.buy_and_hold_pct)}. Past results don&apos;t predict future ones.</p>
-              </div>
-            )}
-          </div>
         </aside>
       </div>
 
-      <section className="mt-10">
-        <h2 className="text-lg font-semibold">Your strategies</h2>
+      {/* Library */}
+      <section className="mt-12">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-lg font-bold">Your library</h2>
+          <span className="text-xs text-muted">Also tried by the <Link href="/strategies" className="underline hover:text-foreground">strategy finder</Link></span>
+        </div>
         {mine.length === 0 ? (
-          <div className="mt-3"><Empty icon="bolt" title="Nothing saved yet">Build a strategy above and save it to use it anywhere on the site.</Empty></div>
+          <p className="mt-3 rounded-2xl border border-dashed border-border px-6 py-8 text-center text-sm text-muted">
+            Strategies you save appear here, ready for the backtester, the finder and the agent.
+          </p>
         ) : (
-          <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <div className="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             {mine.map((s) => (
-              <div key={s.id} className={`card flex flex-col p-4 ${editing === s.id ? "border-gold/50" : ""}`}>
-                <p className="font-semibold">{s.name}</p>
-                <p className="mt-1 flex-1 text-sm leading-relaxed text-muted">{s.description}</p>
-                <div className="mt-3 flex flex-wrap gap-2 text-sm">
-                  <button onClick={() => load(s)} className="rounded-full border border-border px-3 py-1 transition-colors hover:border-gold/50">Edit</button>
-                  <Link href={`/backtest?custom=${s.id}`} className="rounded-full border border-border px-3 py-1 transition-colors hover:border-gold/50">Backtest</Link>
-                  <Link href={`/paper/agent?custom=${s.id}`} className="rounded-full border border-border px-3 py-1 transition-colors hover:border-gold/50">Run as agent</Link>
+              <div key={s.id} className={`card flex flex-col p-4 transition-colors ${editing === s.id ? "border-gold/60" : "hover:border-gold/30"}`}>
+                <div className="flex items-center gap-2">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gold/10 text-gold"><Icon name="bolt" className="h-4 w-4" /></span>
+                  <p className="min-w-0 flex-1 truncate font-semibold">{s.name}</p>
+                </div>
+                <p className="mt-2 line-clamp-3 flex-1 text-xs leading-relaxed text-muted">{s.description}</p>
+                <div className="mt-3 flex flex-wrap gap-1.5 text-xs">
+                  <button onClick={() => { start(s.rules, null, s.id); window.scrollTo({ top: 300, behavior: "smooth" }); }}
+                    className="rounded-full bg-surface-2 px-3 py-1 transition-colors hover:text-gold">Edit</button>
+                  <Link href={`/backtest?custom=${s.id}`} className="rounded-full bg-surface-2 px-3 py-1 transition-colors hover:text-gold">Backtest</Link>
+                  <Link href={`/paper/agent?custom=${s.id}`} className="rounded-full bg-surface-2 px-3 py-1 transition-colors hover:text-gold">Agent</Link>
                   <button onClick={async () => {
                     if (await guard(() => api.customDelete(s.id), "Deleted")) {
                       setMine(mine.filter((x) => x.id !== s.id));
                       if (editing === s.id) setEditing(null);
                     }
-                  }} className="ml-auto rounded-full px-3 py-1 text-muted transition-colors hover:text-down">Delete</button>
+                  }} className="ml-auto rounded-full px-2 py-1 text-muted transition-colors hover:text-down">Delete</button>
                 </div>
               </div>
             ))}
           </div>
         )}
-        <p className="mt-4 text-xs text-muted">
-          Your saved strategies also appear in the <Link href="/strategies" className="underline">strategy finder</Link>, which tries them with stops and sizes that fit your risk profile.
-        </p>
       </section>
     </div>
   );

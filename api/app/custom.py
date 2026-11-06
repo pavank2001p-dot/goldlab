@@ -264,6 +264,41 @@ class SavedIn(BaseModel):
     rules: Rules
 
 
+class PreviewIn(BaseModel):
+    rules: Rules
+    tf: Literal["1d", "1h"] = "1d"
+    years: float = Field(3, ge=0.25, le=25)
+    stop_loss_pct: float | None = Field(None, gt=0, le=50)
+
+
+PREVIEW_BARS = 4000  # candles sent back for the chart; the test itself uses the whole period
+
+
+def preview(body: PreviewIn) -> dict:
+    """Run the rules on past prices without saving anything, for the builder's live chart."""
+    from datetime import date, timedelta
+
+    from . import backtest as bt
+
+    start = date.today() - timedelta(days=round(body.years * 365.25))
+    cfg = bt.BacktestIn(strategy="custom", rules=body.rules, tf=body.tf, start=start, capital=10_000, size_pct=100,
+                        stop_loss_pct=body.stop_loss_pct)
+    bars = bt.load_bars(cfg.tf, cfg.start, None)
+    if len(bars) < 30:
+        raise HTTPException(422, "Not enough price history for that period yet")
+    rep = bt.run(cfg, bars)
+    sig = bt.signals("custom", {}, bars, body.rules)
+    return {
+        "stats": rep["stats"],
+        "equity": rep["equity"],
+        "trades": [{k: t.get(k) for k in ("side", "entry_time", "entry_price", "exit_time", "exit_price", "pnl", "exit_reason")}
+                   for t in rep["trades"]],
+        "candles": [{k: b[k] for k in ("t", "o", "h", "l", "c")} for b in bars[-PREVIEW_BARS:]],
+        "in_market_pct": round(sum(1 for x in sig if x) / len(sig) * 100, 1),
+        "description": describe(body.rules),
+    }
+
+
 def _row(r: dict) -> dict:
     rules = Rules(**r["rules"])
     return {"id": r["id"], "name": rules.name, "rules": rules.model_dump(), "description": describe(rules),
@@ -294,6 +329,14 @@ def saved(user_id: int) -> list[dict]:
     with db.conn() as c:
         rows = c.execute("SELECT * FROM custom_strategies WHERE user_id = %s ORDER BY updated_at DESC", (user_id,)).fetchall()
     return [_row(r) for r in rows]
+
+
+@router.post("/preview")
+def preview_route(body: PreviewIn, user: UserOut = Depends(current_user)):
+    try:
+        return preview(body)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
 
 
 @router.get("")
