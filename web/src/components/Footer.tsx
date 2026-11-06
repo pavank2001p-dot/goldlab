@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { TourLink } from "./Tour";
 
 export default function Footer() {
   return (
@@ -13,7 +14,7 @@ export default function Footer() {
           <a href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">
             TradingView
           </a>{" "}
-          Lightweight Charts™.
+          Lightweight Charts™. New here? <TourLink className="underline hover:text-foreground" />.
         </p>
       </div>
     </footer>

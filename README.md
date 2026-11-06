@@ -29,6 +29,12 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
   RSI, MACD, ADX, Bollinger bands, ATR and more) with "is above", "is below", "crosses above" and "crosses below" into
   rules for opening and closing longs and shorts, starting from a template or from scratch. Saved strategies run in
   the backtester, the strategy finder (with stops and sizes fitted to the profile), the agent and the assistant.
+  A live preview (`/custom-strategies/preview`) re-tests the rules on every edit and marks each trade on a chart.
+- **Habits** (`api/app/achievements.py`, `/achievements`): badges for disciplined process (risk quiz done, ideas
+  backtested, a stop on every paper trade, risk inside the profile's limit, a steady pace, notes in the trade log)
+  and a journal streak. They never reward profit. Shown on the signed-in home dashboard and the account page.
+- **Look and feel**: dark, light or follow-the-device themes and four accent colours (`web/src/lib/theme.ts`), a
+  first-visit tour, fill confirmations, and shareable result images drawn in the browser (`ShareCard.tsx`).
 - **Trade log** (`api/app/trades.py`): manual entry or CSV import (MetaTrader 4/5 and most broker exports; gold
   rows only; re-imports skip known tickets). Produces the same report as a backtest (`api/app/report.py`).
 

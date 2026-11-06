@@ -417,7 +417,11 @@ export type AgentState = {
   price: { bid: number; ask: number; open: boolean } | null;
 };
 
+export type Badge = { key: string; title: string; blurb: string; icon: string; progress: number; goal: number; earned: boolean };
+export type Achievements = { badges: Badge[]; earned: number; streak: { current: number; best: number; logged_today: boolean } };
+
 export const api = {
+  achievements: () => call<Achievements>("/achievements"),
   customCatalog: () => call<CustomCatalog>("/custom-strategies/catalog"),
   customList: () => call<SavedStrategy[]>("/custom-strategies"),
   customSave: (rules: Rules, id?: number) =>

@@ -1,7 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import Badges from "@/components/Badges";
+import { TourLink } from "@/components/Tour";
 import { Icon } from "@/components/ui";
+import { api, type Achievements } from "@/lib/api";
 import { useUser } from "@/lib/useUser";
 
 const next = [
@@ -16,6 +20,10 @@ const next = [
 
 export default function AccountPage() {
   const { user } = useUser();
+  const [habits, setHabits] = useState<Achievements | null>(null);
+  useEffect(() => {
+    if (user) api.achievements().then(setHabits, () => {});
+  }, [user]);
   if (user === undefined) return null;
   if (user === null)
     return (
@@ -26,9 +34,9 @@ export default function AccountPage() {
       </div>
     );
   return (
-    <div className="mx-auto max-w-4xl px-4 py-10">
+    <div className="mx-auto max-w-5xl px-4 py-10">
       <div className="flex items-center gap-4">
-        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-gold to-[#b8860b] text-lg font-semibold text-black">
+        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-gold to-gold-deep text-lg font-semibold text-black">
           {(user.name || user.email)[0].toUpperCase()}
         </span>
         <div>
@@ -36,6 +44,13 @@ export default function AccountPage() {
           <p className="text-sm text-muted">Signed in as {user.email}</p>
         </div>
       </div>
+      <section id="habits" className="mt-10 scroll-mt-24">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="text-lg font-semibold">Your habits</h2>
+          <TourLink className="text-sm text-muted transition-colors hover:text-gold" />
+        </div>
+        <div className="mt-4">{habits ? <Badges data={habits} /> : <div className="h-64 animate-pulse rounded-2xl bg-surface" />}</div>
+      </section>
       <h2 className="mt-10 text-sm font-medium text-muted">Where to next</h2>
       <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {next.map((n) => {

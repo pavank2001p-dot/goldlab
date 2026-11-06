@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 import FitPanel from "@/components/FitPanel";
 import ReportView from "@/components/ReportView";
+import ShareButton, { resultShare } from "@/components/ShareCard";
 import SignInPrompt from "@/components/SignInPrompt";
 import { Chips, Empty, Icon, PageHeader } from "@/components/ui";
 import Link from "next/link";
-import { api, asStrategy, fmtPct, type Backtest, type BacktestParams, type BacktestSummary, type SavedStrategy, type Strategy } from "@/lib/api";
+import { api, asStrategy, fmtPct, fmtUsd, type Backtest, type BacktestParams, type BacktestSummary, type SavedStrategy, type Strategy } from "@/lib/api";
 import { useUser } from "@/lib/useUser";
 
 const input = "w-full rounded-lg border border-border bg-background px-3 py-1.5 outline-none focus:border-gold";
@@ -269,7 +270,14 @@ export default function BacktestPage() {
       <section id="results" className="min-w-0 space-y-6">
         {result ? (
           <div>
-            <h2 className="mb-3 flex items-center gap-2 font-medium"><Icon name="backtest" className="h-4 w-4 text-gold" />{label(strategies, result.params)}</h2>
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <h2 className="flex min-w-0 flex-1 items-center gap-2 font-medium"><Icon name="backtest" className="h-4 w-4 text-gold" />{label(strategies, result.params)}</h2>
+              {result.stats.trades > 0 && (
+                <ShareButton data={resultShare("Backtest", label(strategies, result.params),
+                  `XAU/USD · ${result.params.tf} candles · ${result.params.start.slice(0, 4)} to ${(result.params.end ?? new Date().toISOString()).slice(0, 4)} · ${fmtUsd(result.params.capital)} start`,
+                  result.stats, result.equity)} />
+              )}
+            </div>
             <div className="space-y-4">
               <FitPanel load={() => api.backtestFit(result.id)} deps={[result.id]} />
               <ReportView report={result} kind="backtest" />

@@ -2,11 +2,13 @@
 
 import { useEffect, useRef } from "react";
 import { CandlestickSeries, ColorType, createChart, createSeriesMarkers, type SeriesMarker, type UTCTimestamp } from "lightweight-charts";
+import { useThemeKey } from "@/lib/theme";
 import type { CustomPreview } from "@/lib/api";
 
 /** Candles with an arrow at every entry and a dot at every exit, so a rule change shows up as moved trades. */
 export default function TradeChart({ data, height = 300 }: { data: CustomPreview; height?: number }) {
   const box = useRef<HTMLDivElement>(null);
+  const themeKey = useThemeKey();
 
   useEffect(() => {
     const el = box.current!;
@@ -48,7 +50,7 @@ export default function TradeChart({ data, height = 300 }: { data: CustomPreview
     createSeriesMarkers(s, marks);
     chart.timeScale().fitContent();
     return () => chart.remove();
-  }, [data]);
+  }, [data, themeKey]);
 
   return <div ref={box} style={{ height }} className="w-full" />;
 }

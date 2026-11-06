@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import SignInPrompt from "@/components/SignInPrompt";
+import ShareButton, { resultShare } from "@/components/ShareCard";
 import TradeChart from "@/components/TradeChart";
 import { CountUp, Icon } from "@/components/ui";
 import {
@@ -211,7 +212,7 @@ export default function BuilderPage() {
       <section className="relative overflow-hidden rounded-3xl border border-gold/25 bg-gradient-to-br from-surface-2 via-surface to-background p-6 sm:p-10">
         <div aria-hidden className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-gold/20 blur-3xl" />
         <div aria-hidden className="pointer-events-none absolute -bottom-32 left-1/3 h-64 w-64 rounded-full bg-calm/10 blur-3xl" />
-        <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgb(255_255_255/0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgb(255_255_255/0.03)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_at_top_right,black,transparent_75%)]" />
+        <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,color-mix(in_srgb,var(--foreground)_3%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_srgb,var(--foreground)_3%,transparent)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_at_top_right,black,transparent_75%)]" />
         <div className="relative">
           <span className="inline-flex items-center gap-2 rounded-full border border-gold/30 bg-gold/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-gold">
             <Icon name="bolt" className="h-3.5 w-3.5" /> Strategy studio
@@ -368,9 +369,14 @@ export default function BuilderPage() {
                     </div>
                   ))}
                 </div>
-                <p className="text-[11px] leading-relaxed text-muted">
-                  $10,000, each trade the size of the account (no leverage), with spread and swap. Past results don&apos;t predict future ones.
-                </p>
+                <div className="flex items-start gap-3">
+                  <p className="flex-1 text-[11px] leading-relaxed text-muted">
+                    $10,000, each trade the size of the account (no leverage), with spread and swap. Past results don&apos;t predict future ones.
+                  </p>
+                  <ShareButton className="shrink-0" data={resultShare("Strategy studio", rules.name || "My strategy",
+                    `XAU/USD · ${test.tf === "1d" ? "daily" : "hourly"} candles · last ${test.years} year${test.years === 1 ? "" : "s"}${test.stop ? ` · ${test.stop}% stop` : ""}`,
+                    st, live!.equity)} />
+                </div>
               </div>
             )}
           </div>
@@ -379,7 +385,7 @@ export default function BuilderPage() {
             <p className="text-xs font-medium uppercase tracking-widest text-muted">In plain words</p>
             <p className="text-sm leading-relaxed">{text || "Add a condition to begin."}</p>
             <button type="button" onClick={save} disabled={busy || !ready}
-              className="w-full rounded-full bg-gradient-to-b from-[#f2c95a] to-gold py-2.5 text-sm font-semibold text-black shadow-[0_10px_30px_-14px_var(--gold),inset_0_1px_0_rgb(255_255_255/0.35)] transition-[filter] hover:brightness-105 disabled:opacity-50">
+              className="w-full rounded-full bg-gradient-to-b from-gold-hi to-gold py-2.5 text-sm font-semibold text-black shadow-[0_10px_30px_-14px_var(--gold),inset_0_1px_0_rgb(255_255_255/0.35)] transition-[filter] hover:brightness-105 disabled:opacity-50">
               {editing ? "Save changes" : "Save strategy"}
             </button>
             {editing && (
