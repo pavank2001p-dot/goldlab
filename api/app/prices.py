@@ -61,9 +61,28 @@ def candles(
         )
     with db.conn() as c:
         rows = c.execute(sql, (*args, limit)).fetchall()
+        if tf == "1mo":
+            rows = _with_history(c, rows, where, args, order, limit)
     if order == "DESC":
         rows.reverse()
     return {"symbol": config.SYMBOL, "tf": tf, "bars": rows}
+
+
+def _with_history(c, rows: list[dict], where: list[str], args: list, order: str, limit: int) -> list[dict]:
+    """Months before the first daily bar come from the stored monthly history (since 1833)."""
+    first = c.execute("SELECT min(ts) AS t FROM candles WHERE symbol = %s AND tf = '1d'", (config.SYMBOL,)).fetchone()["t"]
+    hist_where = [w for w in where if w != "tf = %s"] + ["tf = '1mo'"]
+    hist_args = [a for i, a in enumerate(args) if i != 1]  # drop the tf argument
+    if first is not None:
+        hist_where.append("ts < date_trunc('month', %s AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'")
+        hist_args.append(first)
+    hist = c.execute(
+        "SELECT extract(epoch FROM ts)::bigint AS t, open AS o, high AS h, low AS l, close AS c, volume AS v "
+        f"FROM candles WHERE {' AND '.join(hist_where)} ORDER BY ts {order} LIMIT %s",
+        (*hist_args, limit),
+    ).fetchall()
+    merged = sorted(rows + hist, key=lambda r: r["t"], reverse=order == "DESC")
+    return merged[:limit]
 
 
 @router.get("/summary")
@@ -78,6 +97,8 @@ def summary():
             "SELECT min(ts) AS first, max(ts) AS last, count(*) AS n FROM candles WHERE symbol = %s AND tf = %s",
             (config.SYMBOL, "1h"),
         ).fetchone()
+        monthly = c.execute("SELECT min(ts) AS first FROM candles WHERE symbol = %s AND tf = '1mo'",
+                            (config.SYMBOL,)).fetchone()
         prev = None
         if last:
             prev = c.execute(
@@ -98,6 +119,7 @@ def summary():
         "change_24h_pct": (change / prev["close"] * 100) if prev else None,
         "first_bar": int(span["first"].timestamp()),
         "hourly_bars": span["n"],
+        "first_month": int(monthly["first"].timestamp()) if monthly and monthly["first"] else None,
         "source": source,
         "updated_at": updated,
     }

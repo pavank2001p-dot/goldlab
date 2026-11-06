@@ -33,6 +33,7 @@ async def _news_updater():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.migrate()
+    ingest.load_monthly_history()
     calendar.seed_fomc()
     tasks = [asyncio.create_task(_price_updater()), asyncio.create_task(_news_updater())] if config.ENABLE_SCHEDULER else []
     if config.ENABLE_SCHEDULER and config.LIVE_PRICES and config.FINNHUB_API_KEY and config.PRICE_SOURCE != "sample":

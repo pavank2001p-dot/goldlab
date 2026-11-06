@@ -5,6 +5,7 @@ import {
   CandlestickSeries,
   ColorType,
   createChart,
+  PriceScaleMode,
   type CandlestickData,
   type IChartApi,
   type ISeriesApi,
@@ -24,6 +25,7 @@ const SIZE: Partial<Record<ChartTf, number>> = {
   "1s": 1, "5s": 5, "15s": 15, "30s": 30, "1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "4h": 14400,
 };
 const PAGE = 2000;
+const ALL_MONTHS = 5000; // the whole monthly history (since 1833) in one request
 const VISIBLE = 150; // bars shown when a timeframe opens
 const isSeconds = (tf: ChartTf) => tf.endsWith("s");
 
@@ -56,6 +58,8 @@ export default function PriceChart({ height = 520, initialTf = "1h" }: { height?
   const [empty, setEmpty] = useState(false);
   const [full, setFull] = useState(false);
   const [quote, setQuote] = useState<LiveQuote | null>(null);
+  const [all, setAll] = useState(false); // whole history on monthly candles
+  const [logScale, setLogScale] = useState(false);
 
   // Create the chart once.
   useEffect(() => {
@@ -100,13 +104,14 @@ export default function PriceChart({ height = 520, initialTf = "1h" }: { height?
     series.setData([]);
     chart.applyOptions({ timeScale: { secondsVisible: isSeconds(tf) } });
 
-    api.candles(tf, { limit: PAGE }).then(
+    api.candles(tf, { limit: tf === "1mo" ? ALL_MONTHS : PAGE }).then(
       (data) => {
         if (cancelled) return;
         bars = data;
         setEmpty(!data.length);
         series.setData(bars.map(toCandle));
-        chart.timeScale().setVisibleLogicalRange({ from: bars.length - VISIBLE, to: bars.length + 5 });
+        if (all) chart.timeScale().fitContent();
+        else chart.timeScale().setVisibleLogicalRange({ from: bars.length - VISIBLE, to: bars.length + 5 });
       },
       (e) => !cancelled && setError(e.message),
     );
@@ -170,7 +175,7 @@ export default function PriceChart({ height = 520, initialTf = "1h" }: { height?
       clearInterval(poll);
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRange);
     };
-  }, [tf]);
+  }, [tf, all]);
 
   // Full screen: the browser's own where it exists (desktop, Android), otherwise fill the window (iPhone).
   const toggleFull = useCallback(async () => {
@@ -198,6 +203,21 @@ export default function PriceChart({ height = 520, initialTf = "1h" }: { height?
   useEffect(() => {
     document.body.style.overflow = full ? "hidden" : "";
   }, [full]);
+
+  useEffect(() => {
+    chartRef.current?.priceScale("right").applyOptions({ mode: logScale ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal });
+  }, [logScale]);
+
+  const pick = (t: ChartTf) => {
+    setAll(false);
+    setTf(t);
+  };
+  const showAll = () => {
+    setAll(true);
+    setLogScale(true); // from $19 to $4,000+, a log scale keeps early moves readable
+    if (tf === "1mo") chartRef.current?.timeScale().fitContent();
+    setTf("1mo");
+  };
 
   function zoom(factor: number) {
     const ts = chartRef.current?.timeScale();
@@ -235,6 +255,11 @@ export default function PriceChart({ height = 520, initialTf = "1h" }: { height?
           </span>
         )}
         <div className="ml-auto flex items-center gap-0.5">
+          <button onClick={() => setLogScale(!logScale)} aria-pressed={logScale}
+            title={logScale ? "Switch to a normal price scale" : "Switch to a log scale, where equal % moves look the same size"}
+            className={`rounded px-1.5 py-1 text-xs ${logScale ? "bg-background text-gold" : "text-muted hover:bg-background hover:text-foreground"}`}>
+            Log
+          </button>
           <button onClick={() => zoom(0.7)} className={btn} title="Zoom in" aria-label="Zoom in">
             <Icon d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM21 21l-4.3-4.3M11 8v6M8 11h6" />
           </button>
@@ -254,16 +279,26 @@ export default function PriceChart({ height = 520, initialTf = "1h" }: { height?
               {g.tfs.map(([t, label]) => (
                 <button
                   key={t}
-                  onClick={() => setTf(t)}
-                  className={`rounded px-2 py-1 tabular-nums ${tf === t ? "bg-gold text-black" : "text-muted hover:text-foreground"}`}
+                  onClick={() => pick(t)}
+                  className={`rounded px-2 py-1 tabular-nums ${tf === t && !all ? "bg-gold text-black" : "text-muted hover:text-foreground"}`}
                 >
                   {label}
                 </button>
               ))}
             </div>
           ))}
+          <button onClick={showAll} title="Every month since 1833"
+            className={`shrink-0 rounded px-2 py-1 ${all ? "bg-gold text-black" : "text-muted hover:text-foreground"}`}>
+            All
+          </button>
         </div>
       </div>
+      {all && !error && (
+        <p className="px-3 py-1.5 text-xs text-muted">
+          Monthly prices since 1833. Before 1960 there is one price per year (official and market averages), and
+          before the daily data starts each candle runs from one month&apos;s average to the next, so wicks are not real highs and lows.
+        </p>
+      )}
       {error && <p className="px-3 py-2 text-sm text-down">Couldn&apos;t load prices: {error}</p>}
       {empty && !error && (
         <p className="px-3 py-2 text-sm text-muted">

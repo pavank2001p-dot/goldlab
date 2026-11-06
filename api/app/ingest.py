@@ -3,6 +3,9 @@
     python -m app.ingest backfill [--source dukascopy|sample] [--since 2010-01-01]
     python -m app.ingest update   [--source dukascopy|sample]
 
+Long-run history: monthly prices since 1833 (bundled, public domain) are stored as '1mo' bars
+and fill the monthly chart before the first daily bar. See load_monthly_history.
+
 Hourly bars are the stored source of truth; daily bars are rebuilt from them so the
 two timeframes always agree. Minute bars (last MINUTE_DAYS) and one-second bars (last
 SECOND_DAYS) are kept for short-term charts; other timeframes are aggregated on request. A daily bar runs from 17:00 New York to 17:00 New York
@@ -314,6 +317,34 @@ def sample_fine(start: datetime, end: datetime, step: int) -> Iterator[list[Bar]
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Monthly history since 1833
+# ---------------------------------------------------------------------------
+
+HISTORY_CSV = Path(__file__).parent / "data" / "gold_history_monthly.csv"
+
+
+def monthly_history() -> list[Bar]:
+    """Monthly gold prices in USD per ounce since 1833, from the public-domain datahub.io
+    "gold-prices" dataset: annual averages from Timothy Green's tables to 1959 (the same value
+    for every month of a year), then World Bank monthly averages. Each month has one price, so a
+    bar opens at the previous month's price and closes at this month's."""
+    bars, prev = [], None
+    for line in HISTORY_CSV.read_text().splitlines()[1:]:
+        ym, price = line.split(",")
+        y, m = map(int, ym.split("-"))
+        p = float(price)
+        o = prev if prev is not None else p
+        bars.append(Bar(datetime(y, m, 1, tzinfo=UTC), o, max(o, p), min(o, p), p))
+        prev = p
+    return bars
+
+
+def load_monthly_history() -> int:
+    """Store the monthly history (idempotent; a few thousand rows)."""
+    return upsert(monthly_history(), "1mo")
+
+
 def upsert(bars: list[Bar], tf: str = "1h") -> int:
     if not bars:
         return 0
@@ -398,7 +429,7 @@ def load(source: str, start: datetime, end: datetime) -> int:
     if previous and previous != source:
         # Never mix sources: replace demo data entirely once real data arrives (and vice versa).
         with db.conn() as c:
-            c.execute("DELETE FROM candles WHERE symbol = %s", (config.SYMBOL,))
+            c.execute("DELETE FROM candles WHERE symbol = %s AND tf <> '1mo'", (config.SYMBOL,))
     total = 0
     for chunk in fetch(start, end):
         total += upsert(chunk)
@@ -415,14 +446,38 @@ def backfill(source: str, since: date) -> int:
     return n
 
 
+def _first_hour() -> datetime | None:
+    with db.conn() as c:
+        row = c.execute("SELECT min(ts) AS t FROM candles WHERE symbol = %s AND tf = '1h'", (config.SYMBOL,)).fetchone()
+    return row["t"] if row else None
+
+
+def extend_history(source: str) -> int:
+    """Once, fetch the hourly history from HISTORY_SINCE up to the oldest stored hour, so
+    databases first filled from 2010 reach back as far as the feed goes."""
+    since = config.HISTORY_SINCE
+    first = _first_hour()
+    if source != "dukascopy" or first is None or db.get_meta("history_since") == since.isoformat():
+        return 0
+    start = datetime(since.year, since.month, since.day, tzinfo=UTC)
+    n = load(source, start, first) if first > start + timedelta(days=7) else 0
+    db.set_meta("history_since", since.isoformat())
+    log.info("extended hourly history back to %s: %d bars", since, n)
+    return n
+
+
 def update(source: str) -> int:
-    """Refresh from a day before the newest stored hour (or backfill from 2010 if empty)."""
+    """Refresh from a day before the newest stored hour (or backfill from HISTORY_SINCE if empty)."""
     last = _last_hour()
     if last is None or db.get_meta("price_source") != source:
-        return backfill(source, date(2010, 1, 1))
+        start = config.HISTORY_SINCE if source == "dukascopy" else date(2010, 1, 1)
+        n = backfill(source, start)
+        if source == "dukascopy":
+            db.set_meta("history_since", config.HISTORY_SINCE.isoformat())
+        return n
     n = load(source, last - timedelta(days=1), datetime.now(UTC))
     _load_fine_safely(source)
-    return n
+    return n + extend_history(source)
 
 
 def main() -> None:
@@ -430,9 +485,10 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("command", choices=["backfill", "update"])
     p.add_argument("--source", choices=["dukascopy", "sample"], default=config.PRICE_SOURCE)
-    p.add_argument("--since", type=date.fromisoformat, default=date(2010, 1, 1))
+    p.add_argument("--since", type=date.fromisoformat, default=config.HISTORY_SINCE)
     a = p.parse_args()
     db.migrate()
+    load_monthly_history()
     n = backfill(a.source, a.since) if a.command == "backfill" else update(a.source)
     log.info("%s: stored %d hourly bars from %s", a.command, n, a.source)
     db.close()
