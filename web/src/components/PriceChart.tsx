@@ -64,7 +64,7 @@ export default function PriceChart({ height = 520, initialTf = "1h" }: { height?
     const v = (name: string) => css.getPropertyValue(name).trim();
     const chart = createChart(el, {
       autoSize: true,
-      layout: { background: { type: ColorType.Solid, color: v("--surface") }, textColor: v("--muted") },
+      layout: { background: { type: ColorType.Solid, color: v("--surface") }, textColor: v("--muted"), attributionLogo: false },
       grid: { vertLines: { color: v("--border") }, horzLines: { color: v("--border") } },
       rightPriceScale: { borderColor: v("--border") },
       timeScale: { borderColor: v("--border"), timeVisible: true, secondsVisible: false },

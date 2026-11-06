@@ -13,7 +13,7 @@ export default function EquityChart({ equity, height = 360 }: { equity: Report["
     const v = (n: string) => css.getPropertyValue(n).trim();
     const chart = createChart(el, {
       autoSize: true,
-      layout: { background: { type: ColorType.Solid, color: v("--surface") }, textColor: v("--muted") },
+      layout: { background: { type: ColorType.Solid, color: v("--surface") }, textColor: v("--muted"), attributionLogo: false },
       grid: { vertLines: { color: v("--border") }, horzLines: { color: v("--border") } },
       rightPriceScale: { borderColor: v("--border") },
       timeScale: { borderColor: v("--border") },
