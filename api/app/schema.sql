@@ -118,9 +118,12 @@ CREATE TABLE IF NOT EXISTS paper_accounts (
     user_id          BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     starting_balance DOUBLE PRECISION NOT NULL,
     balance          DOUBLE PRECISION NOT NULL,          -- cash after closed positions
+    leverage         INTEGER NOT NULL DEFAULT 20,        -- 1:N; margin held is 1/N of each position's value
     checked_at       TIMESTAMPTZ NOT NULL DEFAULT now(), -- prices up to here have been applied
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE paper_accounts ADD COLUMN IF NOT EXISTS leverage INTEGER NOT NULL DEFAULT 20;
 
 -- Limit and stop orders waiting for the price to reach them. Market orders open a position at once.
 CREATE TABLE IF NOT EXISTS paper_orders (

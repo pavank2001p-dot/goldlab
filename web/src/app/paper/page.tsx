@@ -17,7 +17,9 @@ type Tab = "positions" | "orders" | "history" | "report";
 
 const POLL_MS = 5000;
 const SIZES = [1, 5, 10, 50, 100];
-const BALANCES = [1_000, 10_000, 50_000, 100_000];
+const BALANCES = [1_000, 10_000, 100_000, 1_000_000, 10_000_000];
+const short = (v: number) =>
+  v >= 1e12 ? `$${+(v / 1e12).toFixed(2)}T` : v >= 1e9 ? `$${+(v / 1e9).toFixed(2)}B` : v >= 1e6 ? `$${+(v / 1e6).toFixed(2)}M` : v >= 1e3 ? `$${+(v / 1e3).toFixed(1)}k` : `$${v}`;
 const REASON: Record<string, string> = {
   manual: "Closed by you",
   stop_loss: "Stop loss hit",
@@ -285,6 +287,13 @@ function Ticket({ state, profile, onPlaced, busy, setBusy }: {
               {s} oz
             </button>
           ))}
+          {entry != null && state.account.free_margin > 0 && (
+            <button type="button" title={`The most your free margin allows at 1:${state.account.leverage}`}
+              onClick={() => setUnits(String(Math.max(Math.floor((state.account.free_margin / (entry * state.settings.margin_rate_pct / 100)) * 100) / 100, 0.01)))}
+              className="rounded-full border border-border px-2.5 py-0.5 text-xs text-muted transition hover:border-gold hover:text-foreground">
+              Max
+            </button>
+          )}
         </div>
       </div>
 
@@ -308,7 +317,7 @@ function Ticket({ state, profile, onPlaced, busy, setBusy }: {
       })}
 
       <div className="space-y-1.5 rounded-lg bg-background p-3 text-xs">
-        <div className="flex justify-between"><span className="text-muted">Margin needed</span><span className="tabular-nums">{fmtUsd(margin)} of {fmtUsd(state.account.free_margin)} free</span></div>
+        <div className="flex justify-between"><span className="text-muted">Margin needed at 1:{state.account.leverage}</span><span className="tabular-nums">{fmtUsd(margin)} of {fmtUsd(state.account.free_margin)} free</span></div>
         <div className="flex justify-between">
           <span className="text-muted">If the stop is hit</span>
           <span className={`tabular-nums ${over ? "text-down" : ""}`}>
@@ -341,6 +350,97 @@ function Ticket({ state, profile, onPlaced, busy, setBusy }: {
         {long ? "Buy" : "Sell"} {u || ""} oz {kind === "market" ? "at market" : `${kind} at ${px(num(price))}`}
       </button>
     </form>
+  );
+}
+
+/** Leverage, adding or taking out virtual money, and starting over. */
+function Settings({ state, busy, act, onClose }: {
+  state: PaperState;
+  busy: boolean;
+  act: (fn: () => Promise<unknown>, done?: string) => Promise<boolean>;
+  onClose: () => void;
+}) {
+  const a = state.account, st = state.settings;
+  const [amount, setAmount] = useState("10000");
+  const [balance, setBalance] = useState(String(a.starting_balance));
+  const [lev, setLev] = useState(a.leverage);
+  const [custom, setCustom] = useState("");
+  const [confirm, setConfirm] = useState(false);
+  const amt = Number(amount) || 0, bal = Number(balance) || 0;
+  const example = 10 * (state.price?.bid ?? 2000);
+  const levBtn = (l: number, on: boolean, click: () => void) => (
+    <button key={l} type="button" disabled={busy} onClick={click} aria-pressed={on}
+      className={`rounded-full border px-2.5 py-1 text-xs tabular-nums transition disabled:opacity-50 ${on ? "border-gold bg-gold/15 text-foreground" : "border-border text-muted hover:border-muted hover:text-foreground"}`}>
+      1:{l}
+    </button>
+  );
+  return (
+    <div className="quiz-in mt-6 grid gap-5 rounded-xl border border-gold/30 bg-surface p-4 lg:grid-cols-3">
+      <section>
+        <h3 className="flex items-center gap-2 text-sm font-medium"><Icon name="layers" className="h-4 w-4 text-gold" />Leverage</h3>
+        <p className="mt-1 text-xs text-muted">
+          At 1:{a.leverage}, every $1 of margin controls ${a.leverage} of gold, so 10 oz (about {fmtUsd(example)}) needs{" "}
+          {fmtUsd(example / a.leverage)} of margin. Higher leverage lets you open bigger trades, and losses grow just as fast.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {st.leverages.map((l) => levBtn(l, a.leverage === l, () => act(() => api.paperLeverage(l), `Leverage set to 1:${l}`)))}
+        </div>
+        <form className="mt-2 flex gap-2" onSubmit={(e) => {
+          e.preventDefault();
+          const l = Math.round(Number(custom));
+          if (l >= 1) act(() => api.paperLeverage(l), `Leverage set to 1:${l}`).then((ok) => ok && setCustom(""));
+        }}>
+          <input value={custom} onChange={(e) => setCustom(e.target.value)} inputMode="numeric" placeholder={`Other, up to ${st.max_leverage}`} className={`${input} w-44`} aria-label="Other leverage" />
+          <button disabled={busy || !custom} className="rounded-md border border-border px-3 text-xs transition hover:border-gold disabled:opacity-50">Set</button>
+        </form>
+        <p className="mt-2 text-[11px] text-muted">Applies to open positions too. Positions close automatically if equity falls below {st.stop_out_pct}% of the margin in use.</p>
+      </section>
+
+      <section>
+        <h3 className="flex items-center gap-2 text-sm font-medium"><Icon name="wallet" className="h-4 w-4 text-gold" />Add or take out money</h3>
+        <p className="mt-1 text-xs text-muted">It&apos;s virtual, so add as much as you like, up to {short(st.max_balance)}. Deposits count toward what you started with, so your return stays honest.</p>
+        <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" className={`${input} mt-3`} aria-label="Amount in dollars" />
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {[1_000, 10_000, 100_000, 1_000_000].map((v) => (
+            <button key={v} type="button" onClick={() => setAmount(String(v))}
+              className={`rounded-full border px-2.5 py-0.5 text-xs tabular-nums transition ${amt === v ? "border-gold text-foreground" : "border-border text-muted hover:border-muted"}`}>{short(v)}</button>
+          ))}
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <button disabled={busy || amt <= 0} onClick={() => act(() => api.paperFunds(amt), `Added ${fmtUsd(amt)}`)}
+            className="rounded-md bg-up py-2 text-sm font-medium text-black disabled:opacity-50">Add</button>
+          <button disabled={busy || amt <= 0} onClick={() => act(() => api.paperFunds(-amt), `Took out ${fmtUsd(amt)}`)}
+            className="rounded-md border border-border py-2 text-sm transition hover:border-muted disabled:opacity-50">Take out</button>
+        </div>
+      </section>
+
+      <section>
+        <h3 className="flex items-center gap-2 text-sm font-medium"><Icon name="clock" className="h-4 w-4 text-gold" />Start over</h3>
+        <p className="mt-1 text-xs text-muted">A fresh account with any balance and leverage. This deletes every paper position, order and result.</p>
+        <input value={balance} onChange={(e) => { setBalance(e.target.value); setConfirm(false); }} inputMode="decimal" className={`${input} mt-3`} aria-label="Starting balance in dollars" />
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {BALANCES.map((v) => (
+            <button key={v} type="button" onClick={() => { setBalance(String(v)); setConfirm(false); }}
+              className={`rounded-full border px-2.5 py-0.5 text-xs tabular-nums transition ${bal === v ? "border-gold text-foreground" : "border-border text-muted hover:border-muted"}`}>{short(v)}</button>
+          ))}
+        </div>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {st.leverages.filter((l) => [1, 10, 30, 100, 500].includes(l)).map((l) => levBtn(l, lev === l, () => { setLev(l); setConfirm(false); }))}
+        </div>
+        {confirm ? (
+          <div className="quiz-in mt-3 grid grid-cols-2 gap-2">
+            <button disabled={busy} onClick={async () => { if (await act(() => api.paperReset(bal, lev), `New account: ${fmtUsd(bal)} at 1:${lev}`)) onClose(); }}
+              className="rounded-md bg-down py-2 text-sm font-medium text-black disabled:opacity-50">Yes, start over</button>
+            <button onClick={() => setConfirm(false)} className="rounded-md border border-border py-2 text-sm">Keep my account</button>
+          </div>
+        ) : (
+          <button disabled={busy || bal < 1 || bal > st.max_balance} onClick={() => setConfirm(true)}
+            className="mt-3 w-full rounded-md border border-border py-2 text-sm transition hover:border-gold disabled:opacity-50">
+            Start over with {bal >= 1 ? short(bal) : "…"} at 1:{lev}
+          </button>
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -414,28 +514,20 @@ export default function PaperPage() {
       <PageHeader icon="wallet" title="Paper trading"
         subtitle="Practise trading gold with virtual money on real XAU/USD prices. Orders fill at the real bid and ask, with spread and overnight swap, but no real money or broker is involved."
         right={
-          <div className="relative">
-            <button onClick={() => setResetOpen(!resetOpen)} className="rounded-md border border-border px-3 py-1.5 text-sm transition hover:border-muted">
-              Reset account
-            </button>
-            {resetOpen && (
-              <div className="quiz-in absolute right-0 z-20 mt-2 w-64 rounded-xl border border-border bg-surface p-3 shadow-2xl">
-                <p className="text-sm">Start again with a fresh balance?</p>
-                <p className="mt-1 text-xs text-muted">This deletes every paper position, order and result.</p>
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  {BALANCES.map((b) => (
-                    <button key={b} disabled={busy} onClick={async () => {
-                      if (await act(() => api.paperReset(b), `Account reset to ${fmtUsd(b)}`)) setResetOpen(false);
-                    }} className="rounded-md border border-border px-2 py-1.5 text-sm tabular-nums transition hover:border-gold disabled:opacity-50">
-                      {fmtUsd(b).replace(".00", "")}
-                    </button>
-                  ))}
-                </div>
-              </div>
+          <div className="flex items-center gap-2">
+            {state && (
+              <button onClick={() => setResetOpen(true)} className="rounded-full border border-gold/40 bg-gold/10 px-2.5 py-1 text-xs tabular-nums text-gold transition hover:bg-gold/20">
+                Leverage 1:{state.account.leverage}
+              </button>
             )}
+            <button onClick={() => setResetOpen(!resetOpen)} aria-expanded={resetOpen}
+              className={`rounded-md border px-3 py-1.5 text-sm transition ${resetOpen ? "border-gold" : "border-border hover:border-muted"}`}>
+              {resetOpen ? "Done" : "Account settings"}
+            </button>
           </div>
         } />
 
+      {state && resetOpen && <Settings state={state} busy={busy} act={act} onClose={() => setResetOpen(false)} />}
       {error && !state && <p className="mt-6 text-sm text-down">{error}</p>}
       {!state && !error && <div className="mt-6 h-40 animate-pulse rounded-xl bg-surface" />}
 
@@ -464,7 +556,7 @@ export default function PaperPage() {
                   </span>
                   <span className="mt-1 block">Margin level {level.toFixed(0)}% · stop-out at {state.settings.stop_out_pct}%</span>
                 </span>
-              ) : `Up to ${state.settings.max_leverage}x leverage`}>
+              ) : `Leverage 1:${a.leverage}`}>
               {fmtUsd(a.free_margin)}
             </Stat>
           </div>

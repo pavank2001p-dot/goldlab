@@ -251,6 +251,7 @@ export type PaperOrder = {
 };
 export type PaperAccount = {
   starting_balance: number;
+  leverage: number;
   balance: number;
   equity: number;
   unrealized: number;
@@ -270,7 +271,10 @@ export type PaperState = {
   orders: PaperOrder[];
   cancelled_orders: PaperOrder[];
   history: PaperPosition[];
-  settings: { spread: number; swap_long: number; swap_short: number; margin_rate_pct: number; max_leverage: number; stop_out_pct: number };
+  settings: {
+    spread: number; swap_long: number; swap_short: number; margin_rate_pct: number; stop_out_pct: number;
+    leverage: number; leverages: number[]; max_leverage: number; max_balance: number;
+  };
 };
 export type PaperOrderInput = {
   side: "long" | "short";
@@ -321,7 +325,10 @@ export const api = {
   paperClose: (id: number) => call<{ position: PaperPosition }>(`/paper/positions/${id}/close`, { method: "POST" }),
   paperProtect: (id: number, stop_loss: number | null, take_profit: number | null) =>
     call<{ position: PaperPosition }>(`/paper/positions/${id}`, { method: "PATCH", body: JSON.stringify({ stop_loss, take_profit }) }),
-  paperReset: (balance: number) => call<PaperState>("/paper/reset", { method: "POST", body: JSON.stringify({ balance }) }),
+  paperReset: (balance: number, leverage: number) =>
+    call<PaperState>("/paper/reset", { method: "POST", body: JSON.stringify({ balance, leverage }) }),
+  paperLeverage: (leverage: number) => call<PaperState>("/paper/settings", { method: "PATCH", body: JSON.stringify({ leverage }) }),
+  paperFunds: (amount: number) => call<PaperState>("/paper/funds", { method: "POST", body: JSON.stringify({ amount }) }),
   paperReport: () => call<Report>("/paper/report"),
   paperFit: () => call<Fit>("/paper/fit"),
   assistantStatus: () => call<AssistantStatus>("/assistant/status"),

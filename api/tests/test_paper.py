@@ -141,7 +141,7 @@ def test_edit_protection_report_and_reset(client):
 
 def test_needs_login(client):
     assert client.get("/paper").status_code == 401
-    assert paper.MARGIN_RATE == 0.05
+    assert paper.DEFAULT_LEVERAGE == 20 and 500 in paper.LEVERAGES
 
 
 def test_assistant_paper_tool(client):
@@ -153,3 +153,45 @@ def test_assistant_paper_tool(client):
     uid = client.get("/auth/me").json()["id"]
     out, err = assistant.call_tool("my_paper_account", {}, uid)
     assert not err and '"open_positions": [{"side": "short"' in out
+
+
+def test_leverage_sets_margin(client):
+    signup(client)
+    bar(-2, 2000, 2001, 1999, 2000)
+    # 1:1 means the position can't be worth more than the account: 5 oz x 2000 = 10,000 fits, 6 oz doesn't.
+    s = client.post("/paper/reset", json={"balance": 10_000, "leverage": 1}).json()
+    assert s["account"]["leverage"] == 1 and s["settings"]["margin_rate_pct"] == 100
+    assert client.post("/paper/orders", json={"side": "long", "units": 6}).status_code == 422
+    pid = client.post("/paper/orders", json={"side": "long", "units": 4}).json()["position"]["id"]
+    assert client.get("/paper").json()["account"]["margin_used"] == 8000
+
+    # Raising leverage frees margin on the open position at once.
+    s = client.patch("/paper/settings", json={"leverage": 500}).json()
+    assert s["account"]["margin_used"] == 16 and s["account"]["leverage"] == 500
+    # At 1:500 the same $10,000 can open 2,000 oz (worth $4m).
+    assert client.post("/paper/orders", json={"side": "long", "units": 2000}).status_code == 201
+    # Dropping back to 1:1 would need $4m of margin, so it is refused.
+    r = client.patch("/paper/settings", json={"leverage": 1})
+    assert r.status_code == 422 and "1:1" in r.json()["detail"]
+    assert client.patch("/paper/settings", json={"leverage": 1001}).status_code == 422
+    assert client.post(f"/paper/positions/{pid}/close").status_code == 200
+
+
+def test_any_balance_and_funds(client):
+    signup(client)
+    bar(-2, 2000, 2001, 1999, 2000)
+    s = client.post("/paper/reset", json={"balance": 250_000_000, "leverage": 100}).json()
+    assert s["account"]["balance"] == 250_000_000 and s["account"]["leverage"] == 100
+    assert client.post("/paper/reset", json={"balance": 10**13}).status_code == 422
+
+    s = client.post("/paper/funds", json={"amount": 50_000_000}).json()
+    assert s["account"]["balance"] == 300_000_000 and s["account"]["starting_balance"] == 300_000_000
+    assert s["account"]["return_pct"] == 0
+
+    client.post("/paper/reset", json={"balance": 1000, "leverage": 10})
+    client.post("/paper/orders", json={"side": "long", "units": 4})  # $800 margin
+    r = client.post("/paper/funds", json={"amount": -500})
+    assert r.status_code == 422 and "at most" in r.json()["detail"]
+    s = client.post("/paper/funds", json={"amount": -100}).json()
+    assert s["account"]["balance"] == 900
+    assert client.post("/paper/funds", json={"amount": 0}).status_code == 422
