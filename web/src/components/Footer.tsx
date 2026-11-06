@@ -8,6 +8,13 @@ export default function Footer() {
         buy or sell. Trading gold and other leveraged products carries a high risk of loss. Past performance and
         backtests do not guarantee future results. AI answers can be wrong.{" "}
         <Link href="/disclaimer" className="underline hover:text-foreground">Read the full disclaimer</Link>.
+        <p className="mt-2">
+          Charts by{" "}
+          <a href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">
+            TradingView
+          </a>{" "}
+          Lightweight Charts™.
+        </p>
       </div>
     </footer>
   );
