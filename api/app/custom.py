@@ -299,6 +299,141 @@ def preview(body: PreviewIn) -> dict:
     }
 
 
+class SweepIn(PreviewIn):
+    lane: Literal["long_entry", "long_exit", "short_entry", "short_exit"]
+    index: int = Field(ge=0, lt=MAX_CONDITIONS)
+    side: Literal["left", "right"]
+    field: Literal["n", "m", "value"]
+    values: list[float] = Field(min_length=2, max_length=12)
+
+
+def sweep(body: SweepIn) -> list[dict]:
+    """Re-test the rules with one setting changed to each of several values, to show how sensitive they are."""
+    from datetime import date, timedelta
+
+    from . import backtest as bt
+
+    conds = getattr(body.rules, body.lane)
+    if body.index >= len(conds):
+        raise ValueError("That condition doesn't exist")
+    start = date.today() - timedelta(days=round(body.years * 365.25))
+    bars = bt.load_bars(body.tf, start, None)
+    if len(bars) < 30:
+        raise ValueError("Not enough price history for that period yet")
+    out = []
+    for v in body.values:
+        raw = body.rules.model_dump()
+        raw[body.lane][body.index][body.side][body.field] = v
+        try:
+            rules = Rules(**raw)
+        except ValueError:
+            out.append({"value": v, "ok": False})
+            continue
+        cfg = bt.BacktestIn(strategy="custom", rules=rules, tf=body.tf, start=start, capital=10_000, size_pct=100,
+                            stop_loss_pct=body.stop_loss_pct)
+        st = bt.run(cfg, bars)["stats"]
+        out.append({"value": v, "ok": True, "return_pct": st["total_return_pct"], "max_drawdown_pct": st["max_drawdown_pct"],
+                    "trades": st["trades"], "win_rate_pct": st["win_rate_pct"]})
+    return out
+
+
+# Describe-it drafting: a model turns a plain-English idea into rules for the builder.
+DRAFT_DAILY_LIMIT = 20
+_drafts: dict[tuple[int, str], int] = {}
+
+_OPERAND = {
+    "type": "object",
+    "properties": {
+        "ind": {"type": "string", "enum": list(INDICATORS)},
+        "n": {"type": ["number", "null"]},
+        "m": {"type": ["number", "null"]},
+        "value": {"type": ["number", "null"]},
+    },
+    "required": ["ind", "n", "m", "value"],
+    "additionalProperties": False,
+}
+_COND = {"type": "array", "items": {"type": "object", "properties": {
+    "left": _OPERAND, "op": {"type": "string", "enum": list(OPS)}, "right": _OPERAND},
+    "required": ["left", "op", "right"], "additionalProperties": False}}
+DRAFT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "possible": {"type": "boolean"},
+        "explanation": {"type": "string"},
+        "rules": {"type": "object", "properties": {"name": {"type": "string"}, "long_entry": _COND, "long_exit": _COND,
+                                                   "short_entry": _COND, "short_exit": _COND},
+                  "required": ["name", "long_entry", "long_exit", "short_entry", "short_exit"], "additionalProperties": False},
+    },
+    "required": ["possible", "explanation", "rules"],
+    "additionalProperties": False,
+}
+
+
+def _draft_system() -> str:
+    inds = "\n".join(
+        f"- {k}: {v['label']}" + (f"; n = {v['n'][0].lower()} (default {v['n'][1]})" if "n" in v else "")
+        + (f"; m = {v['m'][0].lower()} (default {v['m'][1]})" if "m" in v else "") for k, v in INDICATORS.items())
+    return f"""You turn a trader's description of a gold (XAU/USD) trading idea into rules for a strategy builder.
+
+A strategy has four lists of conditions: long_entry, long_exit, short_entry, short_exit. All conditions in a list
+must hold on a candle's close for it to fire. An entry on the other side also closes a position, so exits are optional.
+Each condition is left op right, where op is one of {', '.join(OPS)} ("crosses_above" means left was at or below right
+on the previous candle and is above it now). Use at most {MAX_CONDITIONS} conditions per list.
+
+Operands (set unused fields to null; "value" is only for ind = "value", a fixed number):
+{inds}
+
+The left operand can never be a plain number. "highest" and "lowest" look at the previous n candles, not the current one.
+Keep the user's numbers when they give them; otherwise use common defaults. Give the strategy a short name (under 40
+characters). Set possible to false only if the idea needs something these indicators can't express (such as volume,
+news or other markets); then build the closest version you can and say what you left out. In explanation, write one or
+two plain sentences for a beginner about what the rules do, without predicting whether gold will rise or fall and
+without recommending the strategy."""
+
+
+def draft(user_id: int, text: str) -> dict:
+    import json
+    from datetime import date
+
+    import anthropic
+
+    from . import config
+
+    if not config.ANTHROPIC_API_KEY:
+        raise HTTPException(503, "Describing a strategy needs the AI assistant, which isn't set up on this server")
+    key = (user_id, date.today().isoformat())
+    if _drafts.get(key, 0) >= DRAFT_DAILY_LIMIT:
+        raise HTTPException(429, f"You've used today's {DRAFT_DAILY_LIMIT} drafts. Build it by hand, or try again tomorrow.")
+    client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY, max_retries=2)
+    try:
+        resp = client.beta.messages.create(
+            model=config.ASSISTANT_MODEL,
+            max_tokens=4000,
+            system=_draft_system(),
+            messages=[{"role": "user", "content": text}],
+            output_config={"effort": "low", "format": {"type": "json_schema", "schema": DRAFT_SCHEMA}},
+            betas=["server-side-fallback-2026-07-01"],
+            fallbacks="default",
+        )
+    except anthropic.APIError:
+        raise HTTPException(502, "The AI couldn't draft that just now. Try again in a moment.")
+    if resp.stop_reason in ("refusal", "max_tokens"):
+        raise HTTPException(422, "I couldn't turn that into rules. Try describing when to buy and when to sell.")
+    _drafts[key] = _drafts.get(key, 0) + 1
+    out = json.loads(next(b.text for b in resp.content if b.type == "text"))
+    try:
+        rules = Rules(**out["rules"])
+    except ValueError as e:
+        msg = e.errors()[0]["msg"] if hasattr(e, "errors") else str(e)
+        raise HTTPException(422, f"The draft didn't quite work ({msg.removeprefix('Value error, ')}). Try rephrasing it.")
+    return {"rules": rules.model_dump(), "explanation": out["explanation"], "possible": out["possible"],
+            "description": describe(rules)}
+
+
+class DraftIn(BaseModel):
+    text: str = Field(min_length=8, max_length=600)
+
+
 def _row(r: dict) -> dict:
     rules = Rules(**r["rules"])
     return {"id": r["id"], "name": rules.name, "rules": rules.model_dump(), "description": describe(rules),
@@ -337,6 +472,19 @@ def preview_route(body: PreviewIn, user: UserOut = Depends(current_user)):
         return preview(body)
     except ValueError as e:
         raise HTTPException(422, str(e))
+
+
+@router.post("/sweep")
+def sweep_route(body: SweepIn, user: UserOut = Depends(current_user)):
+    try:
+        return sweep(body)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
+@router.post("/draft")
+def draft_route(body: DraftIn, user: UserOut = Depends(current_user)):
+    return draft(user.id, body.text.strip())
 
 
 @router.get("")

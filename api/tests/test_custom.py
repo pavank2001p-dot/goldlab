@@ -187,3 +187,44 @@ def test_strategy_finder_includes_saved_strategies(client, fresh_cache):
     assert len(mine) == 1 and mine[0]["label"] == "Dip buyer" and mine[0]["rules"]["long_entry"]
     keys = {x["strategy"] for x in r.json()["results"]}
     assert set(NEW) <= keys
+
+
+def test_sweep_tries_each_value(client):
+    signup(client, "sweep@example.com")
+    daily(walk(700, seed=3))
+    body = {"rules": TEMPLATE, "years": 1.5, "lane": "long_entry", "index": 0, "side": "right", "field": "value",
+            "values": [30, 40, 50]}
+    r = client.post("/custom-strategies/sweep", json=body)
+    assert r.status_code == 200, r.text
+    rows = r.json()
+    assert [x["value"] for x in rows] == [30, 40, 50] and all(x["ok"] for x in rows)
+    assert rows[0]["trades"] <= rows[2]["trades"]  # a looser dip level trades at least as often
+    assert client.post("/custom-strategies/sweep", json={**body, "index": 3}).status_code == 422
+
+
+def test_draft_turns_words_into_rules(client, monkeypatch):
+    import json
+    from types import SimpleNamespace
+
+    from app import config
+
+    signup(client, "draft@example.com")
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "")
+    assert client.post("/custom-strategies/draft", json={"text": "buy dips when RSI is low"}).status_code == 503
+
+    reply = {"possible": True, "explanation": "Buys when RSI is low.", "rules": {
+        "name": "RSI dip", "long_entry": [{"left": {"ind": "rsi", "n": 14, "m": None, "value": None}, "op": "<",
+                                           "right": {"ind": "value", "n": None, "m": None, "value": 30}}],
+        "long_exit": [], "short_entry": [], "short_exit": []}}
+
+    class Fake:
+        def __init__(self, **kw):
+            self.beta = SimpleNamespace(messages=SimpleNamespace(create=lambda **kw: SimpleNamespace(
+                stop_reason="end_turn", content=[SimpleNamespace(type="text", text=json.dumps(reply))])))
+
+    import anthropic
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "test")
+    monkeypatch.setattr(anthropic, "Anthropic", Fake)
+    r = client.post("/custom-strategies/draft", json={"text": "buy dips when RSI is low"})
+    assert r.status_code == 200, r.text
+    assert r.json()["rules"]["long_entry"][0]["left"]["ind"] == "rsi" and "RSI (14) is below 30" in r.json()["description"]

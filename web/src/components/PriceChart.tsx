@@ -5,13 +5,19 @@ import {
   CandlestickSeries,
   ColorType,
   createChart,
+  HistogramSeries,
+  LineSeries,
+  LineStyle,
   PriceScaleMode,
   type CandlestickData,
   type IChartApi,
   type ISeriesApi,
+  type SeriesType,
   type UTCTimestamp,
 } from "lightweight-charts";
 import { useThemeKey } from "@/lib/theme";
+import Drawings from "./chart/Drawings";
+import { IND_LIST, ema, macd, pts, rsi, sma, stdev, type IndKey } from "./chart/indicators";
 import { api, fmtPrice, type Bar, type ChartTf, type LiveQuote } from "@/lib/api";
 
 const GROUPS: { label: string; tfs: [ChartTf, string][] }[] = [
@@ -49,7 +55,9 @@ function Icon({ d }: { d: string }) {
   );
 }
 
-export default function PriceChart({ height = 520, initialTf = "1h" }: { height?: number; initialTf?: ChartTf }) {
+const IND_KEY = "goldlab-indicators";
+
+export default function PriceChart({ height = 520, initialTf = "1h", tools = false }: { height?: number; initialTf?: ChartTf; tools?: boolean }) {
   const wrap = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -63,6 +71,26 @@ export default function PriceChart({ height = 520, initialTf = "1h" }: { height?
   const [logScale, setLogScale] = useState(false);
   const [loading, setLoading] = useState(true);
   const themeKey = useThemeKey();
+  // For drawings and indicators: the bars on the chart, and a counter that changes when they are reloaded.
+  const barsRef = useRef<Bar[]>([]);
+  const [ver, setVer] = useState(0);
+  const [ready, setReady] = useState<{ chart: IChartApi; series: ISeriesApi<"Candlestick"> } | null>(null);
+  const [inds, setInds] = useState<IndKey[]>([]);
+  const [indOpen, setIndOpen] = useState(false);
+  const [legend, setLegend] = useState<Bar | null>(null);
+  const [accent, setAccent] = useState("#e8b53e");
+  useEffect(() => {
+    if (!tools) return;
+    try { setInds(JSON.parse(localStorage.getItem(IND_KEY) ?? "[]")); } catch {}
+  }, [tools]);
+  useEffect(() => {
+    setAccent(getComputedStyle(document.documentElement).getPropertyValue("--gold").trim() || "#e8b53e");
+  }, [themeKey]);
+  const toggleInd = (k: IndKey) => setInds((xs) => {
+    const next = xs.includes(k) ? xs.filter((x) => x !== k) : [...xs, k];
+    try { localStorage.setItem(IND_KEY, JSON.stringify(next)); } catch {}
+    return next;
+  });
 
   // Create the chart once.
   useEffect(() => {
@@ -87,7 +115,9 @@ export default function PriceChart({ height = 520, initialTf = "1h" }: { height?
       priceFormat: { type: "price", precision: 2, minMove: 0.01 },
     });
     chartRef.current = chart;
+    setReady({ chart, series: seriesRef.current });
     return () => {
+      setReady(null);
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
@@ -126,6 +156,8 @@ export default function PriceChart({ height = 520, initialTf = "1h" }: { height?
       (data) => {
         if (cancelled) return;
         bars = data;
+        barsRef.current = bars;
+        setVer((v) => v + 1);
         setLoading(false);
         setEmpty(!data.length);
         series.setData(bars.map(toCandle));
@@ -148,7 +180,9 @@ export default function PriceChart({ height = 520, initialTf = "1h" }: { height?
         if (!older.length) reachedStart = true;
         else {
           bars = [...older, ...bars];
+          barsRef.current = bars;
           series.setData(bars.map(toCandle));
+          setVer((v) => v + 1);
         }
       } finally {
         loadingOlder = false;
@@ -168,6 +202,7 @@ export default function PriceChart({ height = 520, initialTf = "1h" }: { height?
           if (b.t === bars[bars.length - 1].t) bars[bars.length - 1] = b;
           else bars.push(b);
         }
+        if (fresh.length) setVer((v) => v + 1);
       } catch {}
     }, isSeconds(tf) ? 15_000 : 60_000);
 
@@ -199,6 +234,67 @@ export default function PriceChart({ height = 520, initialTf = "1h" }: { height?
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRange);
     };
   }, [tf, all]);
+
+  // Legend: the candle under the crosshair (or the latest), like other charting platforms.
+  useEffect(() => {
+    if (!ready) return;
+    const on = (e: { time?: unknown }) => {
+      const bs = barsRef.current;
+      if (e.time == null) return setLegend(bs[bs.length - 1] ?? null);
+      setLegend(bs.find((b) => b.t === e.time) ?? null);
+    };
+    ready.chart.subscribeCrosshairMove(on);
+    return () => ready.chart.unsubscribeCrosshairMove(on);
+  }, [ready]);
+  useEffect(() => setLegend(barsRef.current[barsRef.current.length - 1] ?? null), [ver]);
+
+  // Indicators: lines over the candles, and RSI or MACD in their own panes underneath.
+  useEffect(() => {
+    if (!ready || !inds.length) return;
+    const { chart } = ready;
+    const bs = barsRef.current;
+    if (bs.length < 2) return;
+    const closes = bs.map((b) => b.c);
+    const added: ISeriesApi<SeriesType>[] = [];
+    const line = (data: { time: number; value: number }[], color: string, pane = 0, width: 1 | 2 = 2, dashed = false) => {
+      const sr = chart.addSeries(LineSeries, { color, lineWidth: width, lineStyle: dashed ? LineStyle.Dashed : LineStyle.Solid,
+        priceLineVisible: false, lastValueVisible: pane > 0, crosshairMarkerVisible: false }, pane);
+      sr.setData(data.map((d) => ({ time: d.time as UTCTimestamp, value: d.value })));
+      added.push(sr);
+      return sr;
+    };
+    let pane = 1;
+    for (const k of inds) {
+      const spec = IND_LIST.find((i) => i.key === k)!;
+      if (k === "sma20" || k === "sma50" || k === "sma200") line(pts(bs, sma(closes, Number(k.slice(3)))), spec.color);
+      else if (k === "ema21") line(pts(bs, ema(closes, 21)), spec.color);
+      else if (k === "bb") {
+        const m = sma(closes, 20), sd = stdev(closes, 20);
+        line(pts(bs, m), spec.color, 0, 1, true);
+        line(pts(bs, m.map((v, i) => (v == null ? null : v + 2 * sd[i]!))), spec.color, 0, 1);
+        line(pts(bs, m.map((v, i) => (v == null ? null : v - 2 * sd[i]!))), spec.color, 0, 1);
+      } else if (k === "rsi") {
+        const sr = line(pts(bs, rsi(closes, 14)), spec.color, pane, 2);
+        sr.createPriceLine({ price: 70, color: "#ef5a55", lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: "" });
+        sr.createPriceLine({ price: 30, color: "#26b89a", lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: "" });
+        pane++;
+      } else if (k === "macd") {
+        const m = macd(closes);
+        const hist = chart.addSeries(HistogramSeries, { priceLineVisible: false, lastValueVisible: false }, pane);
+        hist.setData(pts(bs, m.hist).map((d) => ({ time: d.time as UTCTimestamp, value: d.value, color: d.value >= 0 ? "rgba(38,184,154,0.5)" : "rgba(239,90,85,0.5)" })));
+        added.push(hist);
+        line(pts(bs, m.line), spec.color, pane, 2);
+        line(pts(bs, m.signal), "#e8b53e", pane, 1);
+        pane++;
+      }
+    }
+    const panes = chart.panes();
+    for (let i = 1; i < panes.length; i++) panes[i].setHeight(Math.round(height * 0.22));
+    return () => {
+      for (const sr of added) { try { chart.removeSeries(sr); } catch {} }
+      for (let i = chart.panes().length - 1; i > 0; i--) { try { chart.removePane(i); } catch {} }
+    };
+  }, [ready, inds, ver, height, themeKey]);
 
   // Full screen: the browser's own where it exists (desktop, Android), otherwise fill the window (iPhone).
   const toggleFull = useCallback(async () => {
@@ -278,6 +374,27 @@ export default function PriceChart({ height = 520, initialTf = "1h" }: { height?
           </span>
         )}
         <div className="ml-auto flex items-center gap-0.5">
+          {tools && (
+            <div className="relative">
+              <button onClick={() => setIndOpen(!indOpen)} aria-expanded={indOpen}
+                className={`flex items-center gap-1 rounded px-2 py-1 text-xs ${inds.length ? "text-gold" : "text-muted"} hover:bg-background hover:text-foreground`}>
+                <Icon d="M3 17l5-6 4 3 5-7 4 4" /> Indicators{inds.length ? ` · ${inds.length}` : ""}
+              </button>
+              {indOpen && (
+                <div className="rise-in absolute left-0 top-full z-20 mt-1 w-60 sm:left-auto sm:right-0 rounded-xl border border-border bg-surface p-1.5 shadow-2xl">
+                  {IND_LIST.map((i) => (
+                    <label key={i.key} className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm hover:bg-surface-2">
+                      <input type="checkbox" checked={inds.includes(i.key)} onChange={() => toggleInd(i.key)} className="accent-[var(--gold)]" />
+                      <span className="h-2 w-2 rounded-full" style={{ background: i.color }} />
+                      <span className="flex-1">{i.label}</span>
+                      {i.pane && <span className="text-[10px] text-muted">pane</span>}
+                    </label>
+                  ))}
+                  <p className="px-2 pb-1 pt-1.5 text-[11px] text-muted">Worked out from the candles on screen. Your picks are remembered.</p>
+                </div>
+              )}
+            </div>
+          )}
           <button onClick={() => setLogScale(!logScale)} aria-pressed={logScale}
             title={logScale ? "Switch to a normal price scale" : "Switch to a log scale, where equal % moves look the same size"}
             className={`rounded px-1.5 py-1 text-xs ${logScale ? "bg-background text-gold" : "text-muted hover:bg-background hover:text-foreground"}`}>
@@ -330,7 +447,20 @@ export default function PriceChart({ height = 520, initialTf = "1h" }: { height?
             : "No prices loaded yet."}
         </p>
       )}
-      <div ref={box} data-loading={loading} className={`chart-swap ${full ? "min-h-0 flex-1" : ""}`} style={full ? undefined : { height }} />
+      <div className={`relative ${full ? "min-h-0 flex-1" : ""}`} style={full ? undefined : { height }}>
+        <div ref={box} data-loading={loading} className="chart-swap h-full w-full" />
+        {legend && (
+          <div className={`pointer-events-none absolute top-2 z-[1] flex flex-wrap gap-x-2.5 text-[11px] tabular-nums ${tools ? "left-14" : "left-3"}`}>
+            {(["o", "h", "l", "c"] as const).map((k) => (
+              <span key={k}><span className="text-muted">{k.toUpperCase()}</span> <span className={legend.c >= legend.o ? "text-up" : "text-down"}>{fmtPrice(legend[k])}</span></span>
+            ))}
+            <span className={legend.c >= legend.o ? "text-up" : "text-down"}>
+              {legend.c >= legend.o ? "+" : ""}{(((legend.c - legend.o) / legend.o) * 100).toFixed(2)}%
+            </span>
+          </div>
+        )}
+        {tools && ready && <Drawings chart={ready.chart} series={ready.series} bars={barsRef} accent={accent} />}
+      </div>
     </div>
   );
 }

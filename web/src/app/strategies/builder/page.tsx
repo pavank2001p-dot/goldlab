@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import SignInPrompt from "@/components/SignInPrompt";
 import ShareButton, { resultShare } from "@/components/ShareCard";
+import DescribeBox from "@/components/studio/DescribeBox";
+import TunePanel from "@/components/studio/TunePanel";
 import TradeChart from "@/components/TradeChart";
 import { CountUp, Icon } from "@/components/ui";
 import {
@@ -130,6 +132,7 @@ export default function BuilderPage() {
   const [live, setLive] = useState<CustomPreview | null>(null);
   const [liveErr, setLiveErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
   const seq = useRef(0);
 
   useEffect(() => {
@@ -194,10 +197,24 @@ export default function BuilderPage() {
   }
 
   function start(r: Rules, key: string | null, id: number | null = null) {
+    setNote(null);
     setRules(r);
     setTemplate(key);
     setEditing(id);
     setMsg(null);
+  }
+
+  /** A random idea with its numbers nudged, for playing around. */
+  function surprise() {
+    const t = cat!.templates[Math.floor(Math.random() * cat!.templates.length)];
+    const jig = (o: Operand): Operand => ({
+      ...o,
+      n: o.n != null && !o.ind.startsWith("macd") ? Math.max(2, Math.round(o.n * (0.6 + Math.random() * 0.8))) : o.n,
+      value: o.value != null && o.ind === "value" ? Math.round(o.value * (0.8 + Math.random() * 0.4)) : o.value,
+    });
+    const r = structuredClone(t.rules);
+    for (const l of LANES) r[l.key] = r[l.key].map((c) => ({ ...c, left: jig(c.left), right: jig(c.right) }));
+    start({ ...r, name: `${t.name}, remixed` }, t.key);
   }
 
   const st = live?.stats;
@@ -219,7 +236,7 @@ export default function BuilderPage() {
           </span>
           <h1 className="mt-4 max-w-3xl text-3xl font-bold tracking-tight sm:text-5xl">
             Design a strategy.{" "}
-            <span className="bg-gradient-to-r from-gold via-[#f5d77a] to-gold bg-clip-text text-transparent">Watch it trade.</span>
+            <span className="bg-gradient-to-r from-gold via-gold-hi to-gold bg-clip-text text-transparent">Watch it trade.</span>
           </h1>
           <p className="mt-4 max-w-2xl text-muted">
             Snap indicators together into rules. Every change is tested on real gold prices in a moment, with each buy and
@@ -236,11 +253,21 @@ export default function BuilderPage() {
         </div>
       </section>
 
+      <div className="mt-6">
+        <DescribeBox onRules={(r, n) => { start(r, null); setNote(n); }} />
+      </div>
+
       {/* Templates */}
       <section className="mt-8">
         <div className="flex items-baseline justify-between">
           <h2 className="text-lg font-bold">Start from an idea</h2>
-          <button type="button" onClick={() => start(EMPTY, null)} className="text-sm text-muted transition-colors hover:text-gold">Start blank</button>
+          <div className="flex gap-4">
+            <button type="button" onClick={surprise} className="flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-gold">
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden><rect x="4" y="4" width="16" height="16" rx="3" /><circle cx="9" cy="9" r="1.2" fill="currentColor" /><circle cx="15" cy="15" r="1.2" fill="currentColor" /><circle cx="15" cy="9" r="1.2" fill="currentColor" /><circle cx="9" cy="15" r="1.2" fill="currentColor" /></svg>
+              Surprise me
+            </button>
+            <button type="button" onClick={() => start(EMPTY, null)} className="text-sm text-muted transition-colors hover:text-gold">Start blank</button>
+          </div>
         </div>
         <div className="-mx-4 mt-3 flex snap-x gap-3 overflow-x-auto px-4 pb-2">
           {cat.templates.map((t) => {
@@ -265,6 +292,13 @@ export default function BuilderPage() {
       <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
         {/* Rules */}
         <div className="min-w-0 space-y-4">
+          {note && (
+            <div className="rise-in flex items-start gap-3 rounded-2xl border border-gold/30 bg-gold/10 p-4 text-sm">
+              <Icon name="assistant" className="mt-0.5 h-4 w-4 shrink-0 text-gold" />
+              <p className="flex-1">{note}</p>
+              <button type="button" onClick={() => setNote(null)} aria-label="Dismiss" className="text-muted hover:text-foreground">×</button>
+            </div>
+          )}
           <div className="flex items-center gap-3">
             <input value={rules.name} maxLength={60} aria-label="Strategy name" onChange={(e) => setRules({ ...rules, name: e.target.value })}
               className="min-w-0 flex-1 border-b border-transparent bg-transparent pb-1 text-2xl font-bold tracking-tight outline-none transition-colors hover:border-border focus:border-gold" />
@@ -308,6 +342,7 @@ export default function BuilderPage() {
             ))}
             <span>Signals are read on each candle&apos;s close and filled at the next open.</span>
           </div>
+          <TunePanel rules={rules} cat={cat} test={test} onChange={setRules} />
         </div>
 
         {/* Live preview */}
