@@ -200,3 +200,39 @@ CREATE TABLE IF NOT EXISTS custom_strategies (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS custom_strategies_user ON custom_strategies (user_id, updated_at DESC);
+
+-- Price alerts: checked while the site is open, against every minute bar since the alert was set.
+CREATE TABLE IF NOT EXISTS price_alerts (
+    id              BIGSERIAL PRIMARY KEY,
+    user_id         BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    price           DOUBLE PRECISION NOT NULL CHECK (price > 0),
+    direction       TEXT NOT NULL CHECK (direction IN ('above', 'below')),
+    note            TEXT NOT NULL DEFAULT '',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    triggered_at    TIMESTAMPTZ,
+    triggered_price DOUBLE PRECISION
+);
+CREATE INDEX IF NOT EXISTS price_alerts_user_idx ON price_alerts (user_id, triggered_at);
+
+-- Weekly replay challenge: one stretch of candles per ISO week, the same for everyone.
+CREATE TABLE IF NOT EXISTS challenges (
+    week     TEXT PRIMARY KEY,               -- e.g. 2026-W45
+    tf       TEXT NOT NULL,
+    start_ts BIGINT NOT NULL,
+    end_ts   BIGINT NOT NULL
+);
+
+-- One go per user per week. Shown on the leaderboard only when public, under a nickname.
+CREATE TABLE IF NOT EXISTS challenge_entries (
+    user_id          BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    week             TEXT NOT NULL,
+    return_pct       DOUBLE PRECISION NOT NULL,
+    max_drawdown_pct DOUBLE PRECISION NOT NULL,
+    trades           INTEGER NOT NULL,
+    wins             INTEGER NOT NULL,
+    public           BOOLEAN NOT NULL DEFAULT false,
+    nickname         TEXT,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, week)
+);
+CREATE INDEX IF NOT EXISTS challenge_entries_week_idx ON challenge_entries (week, return_pct DESC);

@@ -12,10 +12,13 @@ import {
 } from "@/lib/api";
 import { toast } from "@/components/Toaster";
 import { useUser } from "@/lib/useUser";
+import AlertsCard from "@/components/practice/AlertsCard";
+import Insights from "@/components/practice/Insights";
+import SizeCalculator from "@/components/practice/SizeCalculator";
 
 type Side = "long" | "short";
 type Kind = "market" | "limit" | "stop";
-type Tab = "positions" | "orders" | "history" | "report";
+type Tab = "positions" | "orders" | "history" | "report" | "habits";
 
 const POLL_MS = 5000;
 const SIZES = [1, 5, 10, 50, 100];
@@ -180,7 +183,8 @@ function OrderRow({ o, price, onCancel, busy }: { o: PaperOrder; price: PaperSta
   );
 }
 
-function Ticket({ state, profile, onPlaced, busy, setBusy }: {
+function Ticket({ state, profile, onPlaced, busy, setBusy, preset }: {
+  preset?: { oz: number; n: number } | null;
   state: PaperState;
   profile: RiskProfile | null;
   onPlaced: (msg: string | null) => Promise<void>;
@@ -196,6 +200,7 @@ function Ticket({ state, profile, onPlaced, busy, setBusy }: {
   const [sl, setSl] = useState("");
   const [tp, setTp] = useState("");
   const [error, setError] = useState<string | null>(null);
+  useEffect(() => { if (preset) setUnits(String(preset.oz)); }, [preset]);
   // Orders go through a short review first, so the loss is read in plain words before anything is placed.
   const [review, setReview] = useState(false);
   useEffect(() => setReview(false), [side, kind, units, price, useSl, useTp, sl, tp]);
@@ -515,6 +520,7 @@ export default function PaperPage() {
   const [tab, setTab] = useState<Tab>("positions");
   const [busy, setBusy] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
+  const [preset, setPreset] = useState<{ oz: number; n: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const seen = useRef<Set<number> | null>(null);
   const openIds = useRef<Set<number> | null>(null);
@@ -641,7 +647,10 @@ export default function PaperPage() {
                 { key: "orders", label: "Pending orders", count: state.orders.length },
                 { key: "history", label: "History", count: a.closed_trades },
                 { key: "report", label: "Report" },
+                { key: "habits", label: "Habits" },
               ]} />
+
+              {tab === "habits" && <Insights source="paper" refresh={a.closed_trades} />}
 
               {tab === "positions" && (
                 <div className="space-y-3">
@@ -697,13 +706,20 @@ export default function PaperPage() {
 
             <aside className="order-first space-y-3 lg:sticky lg:top-20 lg:order-none lg:self-start">
               <h2 className="flex items-center gap-2 font-medium"><Icon name="bolt" className="h-4 w-4 text-gold" />New order</h2>
-              <Ticket state={state} profile={profile} busy={busy} setBusy={setBusy}
+              <Ticket state={state} profile={profile} busy={busy} setBusy={setBusy} preset={preset}
                 onPlaced={async (msg) => { await load(); setTab((t) => (t === "report" || t === "history" ? "positions" : t)); if (msg) say(msg, "up"); }} />
               <p className="text-xs leading-relaxed text-muted">
                 Spread {state.settings.spread.toFixed(2)} per ounce. Overnight swap {state.settings.swap_long.toFixed(2)} long and{" "}
                 +{state.settings.swap_short.toFixed(2)} short per ounce. Stops and targets are checked against every minute of real prices,
                 even while this page is closed. Practice only, not advice.
               </p>
+              <SizeCalculator equity={a.equity} leverage={a.leverage} price={state.price?.ask ?? null}
+                riskPct={profile?.max_risk_per_trade_pct ?? 1} onUse={(oz) => setPreset((p) => ({ oz, n: (p?.n ?? 0) + 1 }))} />
+              <AlertsCard price={state.price?.bid ?? null} />
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <Link href="/paper/replay" className="card flex items-center gap-2 p-3 hover:border-gold/40"><Icon name="clock" className="h-4 w-4 text-gold" />Replay a day</Link>
+                <Link href="/paper/challenge" className="card flex items-center gap-2 p-3 hover:border-gold/40"><Icon name="trophy" className="h-4 w-4 text-gold" />Weekly challenge</Link>
+              </div>
             </aside>
           </div>
         </>

@@ -4,6 +4,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import Toaster from "@/components/Toaster";
 import Tour from "@/components/Tour";
+import AlertWatcher from "@/components/practice/AlertWatcher";
 import { UserProvider } from "@/lib/useUser";
 import { THEME_SCRIPT } from "@/lib/themeScript";
 import "./globals.css";
@@ -35,6 +36,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           <Footer />
           <Toaster />
           <Tour />
+          <AlertWatcher />
         </UserProvider>
       </body>
     </html>
