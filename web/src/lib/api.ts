@@ -63,6 +63,7 @@ export type CustomCatalog = {
 export type SavedStrategy = { id: number; name: string; rules: Rules; description: string; created_at: string; updated_at: string };
 
 export type PreviewTrade = { side: "long" | "short"; entry_time: number; entry_price: number; exit_time: number | null; exit_price: number | null; pnl: number | null; exit_reason: string | null };
+export type SweepRow = { value: number; ok: boolean; return_pct?: number | null; max_drawdown_pct?: number; trades?: number; win_rate_pct?: number | null };
 export type CustomPreview = {
   stats: Report["stats"]; equity: Report["equity"]; trades: PreviewTrade[];
   candles: { t: number; o: number; h: number; l: number; c: number }[]; in_market_pct: number; description: string;
@@ -283,6 +284,7 @@ export type PaperAccount = {
   margin_used: number;
   free_margin: number;
   margin_level_pct: number | null;
+  margin_call?: boolean;
   return_pct: number;
   created_at: string;
   closed_trades: number;
@@ -297,7 +299,7 @@ export type PaperState = {
   cancelled_orders: PaperOrder[];
   history: PaperPosition[];
   settings: {
-    spread: number; swap_long: number; swap_short: number; margin_rate_pct: number; stop_out_pct: number;
+    spread: number; swap_long: number; swap_short: number; margin_rate_pct: number; stop_out_pct: number; margin_call_pct?: number;
     leverage: number; leverages: number[]; max_leverage: number; max_balance: number;
   };
 };
@@ -428,6 +430,11 @@ export const api = {
     call<SavedStrategy>(id ? `/custom-strategies/${id}` : "/custom-strategies", { method: id ? "PUT" : "POST", body: JSON.stringify({ rules }) }),
   customPreview: (b: { rules: Rules; tf: "1d" | "1h"; years: number; stop_loss_pct: number | null }) =>
     call<CustomPreview>("/custom-strategies/preview", { method: "POST", body: JSON.stringify(b) }),
+  customSweep: (b: { rules: Rules; tf: "1d" | "1h"; years: number; stop_loss_pct: number | null; lane: string; index: number;
+    side: "left" | "right"; field: "n" | "m" | "value"; values: number[] }) =>
+    call<SweepRow[]>("/custom-strategies/sweep", { method: "POST", body: JSON.stringify(b) }),
+  customDraft: (text: string) =>
+    call<{ rules: Rules; explanation: string; possible: boolean; description: string }>("/custom-strategies/draft", { method: "POST", body: JSON.stringify({ text }) }),
   customDelete: (id: number) => call<{ ok: boolean }>(`/custom-strategies/${id}`, { method: "DELETE" }),
   me: () => call<User>("/auth/me"),
   signup: (email: string, password: string, name: string) =>

@@ -30,6 +30,7 @@ DEFAULT_LEVERAGE = 20    # 1:20, so a position can be worth up to 20 times the a
 MAX_LEVERAGE = 1000      # forex brokers offer from 1:1 up to 1:500 or more
 LEVERAGES = [1, 2, 5, 10, 20, 30, 50, 100, 200, 300, 500, 1000]
 MAX_BALANCE = 1_000_000_000_000  # virtual money, so effectively unlimited
+MARGIN_CALL_PCT = 100    # below this margin level a broker warns you and blocks new trades
 STOP_OUT_PCT = 50        # positions are closed when equity falls below half the margin in use
 MAX_PRICE_AGE = 3 * 3600  # older than this and the market is treated as closed
 LIVE_AGE = 120           # a live quote younger than this is used ahead of saved bars
@@ -247,6 +248,7 @@ def summary(user_id: int) -> dict:
             "margin_used": r2(used),
             "free_margin": r2(equity - used),
             "margin_level_pct": r2(equity / used * 100) if used else None,
+            "margin_call": bool(used) and equity < used * MARGIN_CALL_PCT / 100,
             "return_pct": r2((equity / acct["starting_balance"] - 1) * 100),
             "created_at": acct["created_at"],
             "closed_trades": counts["n"],
@@ -261,7 +263,7 @@ def summary(user_id: int) -> dict:
         "settings": {"spread": SPREAD, "swap_long": SWAP["long"], "swap_short": SWAP["short"],
                      "margin_rate_pct": round(book.rate * 100, 4), "leverage": acct["leverage"],
                      "leverages": LEVERAGES, "max_leverage": MAX_LEVERAGE, "max_balance": MAX_BALANCE,
-                     "stop_out_pct": STOP_OUT_PCT},
+                     "stop_out_pct": STOP_OUT_PCT, "margin_call_pct": MARGIN_CALL_PCT},
     }
 
 

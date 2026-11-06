@@ -10,6 +10,8 @@ import { Chips, CountUp, Empty, Icon, PageHeader, SidePill } from "@/components/
 import {
   api, fmtUsd, type PaperOrder, type PaperOrderInput, type PaperPosition, type PaperState, type Report, type RiskProfile,
 } from "@/lib/api";
+import AccountSetup, { SETUP_KEY } from "@/components/paper/AccountSetup";
+import LeveragePicker from "@/components/paper/LeveragePicker";
 import { toast } from "@/components/Toaster";
 import { useUser } from "@/lib/useUser";
 
@@ -430,7 +432,6 @@ function Settings({ state, busy, act, onClose }: {
   const [custom, setCustom] = useState("");
   const [confirm, setConfirm] = useState(false);
   const amt = Number(amount) || 0, bal = Number(balance) || 0;
-  const example = 10 * (state.price?.bid ?? 2000);
   const levBtn = (l: number, on: boolean, click: () => void) => (
     <button key={l} type="button" disabled={busy} onClick={click} aria-pressed={on}
       className={`rounded-full border px-2.5 py-1 text-xs tabular-nums transition disabled:opacity-50 ${on ? "border-gold bg-gold/15 text-foreground" : "border-border text-muted hover:border-muted hover:text-foreground"}`}>
@@ -438,15 +439,14 @@ function Settings({ state, busy, act, onClose }: {
     </button>
   );
   return (
-    <div className="quiz-in mt-6 grid gap-5 rounded-2xl border border-gold/30 bg-surface p-4 lg:grid-cols-3">
+    <div id="account-settings" className="quiz-in mt-6 grid scroll-mt-24 gap-5 rounded-2xl border border-gold/30 bg-surface p-4 lg:grid-cols-[1.5fr_1fr_1fr]">
       <section>
         <h3 className="flex items-center gap-2 text-sm font-medium"><Icon name="layers" className="h-4 w-4 text-gold" />Leverage</h3>
-        <p className="mt-1 text-xs text-muted">
-          At 1:{a.leverage}, every $1 of margin controls ${a.leverage} of gold, so 10 oz (about {fmtUsd(example)}) needs{" "}
-          {fmtUsd(example / a.leverage)} of margin. Higher leverage lets you open bigger trades, and losses grow just as fast.
-        </p>
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {st.leverages.map((l) => levBtn(l, a.leverage === l, () => act(() => api.paperLeverage(l), `Leverage set to 1:${l}`)))}
+        <p className="mt-1 text-xs text-muted">Applies to open positions too, as it does at a broker.</p>
+        <div className="mt-3">
+          <LeveragePicker value={a.leverage} disabled={busy} balance={a.equity} price={state.price?.bid ?? 2000}
+            stopOut={st.stop_out_pct} marginCall={st.margin_call_pct}
+            onPick={(l) => act(() => api.paperLeverage(l), `Leverage set to 1:${l}`)} />
         </div>
         <form className="mt-2 flex gap-2" onSubmit={(e) => {
           e.preventDefault();
@@ -456,7 +456,6 @@ function Settings({ state, busy, act, onClose }: {
           <input value={custom} onChange={(e) => setCustom(e.target.value)} inputMode="numeric" placeholder={`Other, up to ${st.max_leverage}`} className={`${input} w-44`} aria-label="Other leverage" />
           <button disabled={busy || !custom} className="rounded-lg border border-border px-3 text-xs transition hover:border-gold disabled:opacity-50">Set</button>
         </form>
-        <p className="mt-2 text-[11px] text-muted">Applies to open positions too. Positions close automatically if equity falls below {st.stop_out_pct}% of the margin in use.</p>
       </section>
 
       <section>
@@ -515,6 +514,10 @@ export default function PaperPage() {
   const [tab, setTab] = useState<Tab>("positions");
   const [busy, setBusy] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
+  const [setupDone, setSetupDone] = useState(true);
+  useEffect(() => {
+    try { setSetupDone(!!localStorage.getItem(SETUP_KEY)); } catch {}
+  }, []);
   const [error, setError] = useState<string | null>(null);
   const seen = useRef<Set<number> | null>(null);
   const openIds = useRef<Set<number> | null>(null);
@@ -597,6 +600,20 @@ export default function PaperPage() {
           </div>
         } />
 
+      {state && !setupDone && !resetOpen && state.account.closed_trades === 0 && !state.positions.length && !state.orders.length && (
+        <AccountSetup state={state} onDone={async (m) => { setSetupDone(true); if (m) { await load(); toast(m, { tone: "fill" }); } }} />
+      )}
+      {state?.account.margin_call && (
+        <div role="alert" className="rise-in mt-6 flex flex-wrap items-center gap-3 rounded-2xl border border-down/50 bg-down/10 p-4">
+          <span className="breathe h-2.5 w-2.5 rounded-full bg-down" />
+          <p className="min-w-0 flex-1 text-sm">
+            <b className="text-down">Margin call.</b> Your equity is below the margin your positions use
+            ({state.account.margin_level_pct?.toFixed(0)}% margin level). New trades are blocked, and at {state.settings.stop_out_pct}% your
+            positions close automatically. Close or shrink a position, add funds, or raise leverage.
+          </p>
+          <button onClick={() => setResetOpen(true)} className="rounded-full border border-down/50 px-3 py-1.5 text-sm">Account settings</button>
+        </div>
+      )}
       {state && resetOpen && <Settings state={state} busy={busy} act={act} onClose={() => setResetOpen(false)} />}
       {error && !state && <p className="mt-6 text-sm text-down">{error}</p>}
       {!state && !error && <div className="mt-6 h-40 animate-pulse rounded-2xl bg-surface" />}
@@ -605,7 +622,10 @@ export default function PaperPage() {
         <>
           <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
             <div className="col-span-2 rounded-2xl border border-gold/40 bg-gradient-to-br from-gold/15 to-transparent p-3.5 lg:col-span-1">
-              <p className="flex items-center gap-1.5 text-xs text-gold"><Icon name="wallet" className="h-3.5 w-3.5" />Account value (equity)</p>
+              <p className="flex items-center gap-1.5 text-xs text-gold"><Icon name="wallet" className="h-3.5 w-3.5" />Account value (equity)
+                <button type="button" onClick={() => { setResetOpen(true); setTimeout(() => document.getElementById("account-settings")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }}
+                  className="ml-auto rounded-full border border-gold/40 px-2 py-0.5 text-[11px] text-gold transition hover:bg-gold/15">Edit balance</button>
+              </p>
               <p className="mt-1 text-2xl font-semibold tabular-nums"><CountUp value={a.equity} format={(v) => fmtUsd(v)} /></p>
               <p className={`text-xs tabular-nums ${tone(a.return_pct)}`}>
                 {a.return_pct > 0 ? "+" : ""}{a.return_pct.toFixed(2)}% since you started with {fmtUsd(a.starting_balance)}
@@ -620,11 +640,13 @@ export default function PaperPage() {
             <Stat icon="scale" label="Free margin"
               hint={level != null ? (
                 <span className="block">
-                  <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-border">
+                  <span className="relative mt-1 block h-1.5 overflow-hidden rounded-full bg-border">
                     <span className={`block h-full rounded-full transition-all ${level < 150 ? "bg-down" : level < 400 ? "bg-gold" : "bg-up"}`}
                           style={{ width: `${Math.min(level / 10, 100)}%` }} />
+                    <span aria-hidden className="absolute inset-y-0 w-px bg-down" style={{ left: `${state.settings.stop_out_pct / 10}%` }} />
+                    <span aria-hidden className="absolute inset-y-0 w-px bg-gold" style={{ left: `${(state.settings.margin_call_pct ?? 100) / 10}%` }} />
                   </span>
-                  <span className="mt-1 block">Margin level {level.toFixed(0)}% · stop-out at {state.settings.stop_out_pct}%</span>
+                  <span className="mt-1 block">Margin level {level.toFixed(0)}% · call at {state.settings.margin_call_pct ?? 100}% · stop-out at {state.settings.stop_out_pct}%</span>
                 </span>
               ) : `Leverage 1:${a.leverage}`}>
               {fmtUsd(a.free_margin)}
