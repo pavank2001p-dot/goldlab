@@ -16,6 +16,8 @@ from pydantic import BaseModel, Field, model_validator
 
 from . import config, db
 from .auth import UserOut, current_user
+from .custom import Rules
+from .custom import signals as custom_signals
 from .report import build_report, trading_date
 
 router = APIRouter(prefix="/backtests", tags=["backtests"])
@@ -170,6 +172,89 @@ STRATEGIES = {
             {"key": "upper", "label": "Overbought level", "default": -20, "min": -50, "max": -1, "step": 1},
         ],
     },
+    "ichimoku": {
+        "label": "Ichimoku cloud",
+        "kind": "trend",
+        "summary": "Long when the close is above the cloud and the conversion line is above the base line, short "
+        "in the mirror case, flat once price falls back into the cloud.",
+        "params": [
+            {"key": "tenkan", "label": "Conversion line (bars)", "default": 9, "min": 2, "max": 100, "step": 1},
+            {"key": "kijun", "label": "Base line (bars)", "default": 26, "min": 5, "max": 200, "step": 1},
+            {"key": "senkou", "label": "Leading span B (bars)", "default": 52, "min": 10, "max": 300, "step": 1},
+        ],
+    },
+    "triple_ma": {
+        "label": "Triple moving average",
+        "kind": "trend",
+        "summary": "Long when the fast, middle and slow exponential averages are stacked upward, short when they are "
+        "stacked downward, flat when they are mixed.",
+        "params": [
+            {"key": "fast", "label": "Fast average (bars)", "default": 10, "min": 2, "max": 100, "step": 1},
+            {"key": "mid", "label": "Middle average (bars)", "default": 20, "min": 3, "max": 200, "step": 1},
+            {"key": "slow", "label": "Slow average (bars)", "default": 50, "min": 5, "max": 400, "step": 1},
+        ],
+    },
+    "heikin_ashi": {
+        "label": "Heikin-Ashi trend",
+        "kind": "trend",
+        "summary": "Smooths candles the Heikin-Ashi way and follows them: long after a run of rising candles, "
+        "short after a run of falling ones.",
+        "params": [
+            {"key": "confirm", "label": "Candles in a row to enter", "default": 2, "min": 1, "max": 10, "step": 1},
+        ],
+    },
+    "aroon": {
+        "label": "Aroon trend",
+        "kind": "trend",
+        "summary": "Aroon measures how recently the highest high and lowest low were set. Long when Aroon Up is "
+        "strong and above Aroon Down, short in the mirror case.",
+        "params": [
+            {"key": "period", "label": "Aroon period (bars)", "default": 25, "min": 5, "max": 200, "step": 1},
+            {"key": "threshold", "label": "Strong level", "default": 70, "min": 50, "max": 100, "step": 5},
+        ],
+    },
+    "squeeze": {
+        "label": "Bollinger squeeze breakout",
+        "kind": "trend",
+        "summary": "Waits for the Bollinger bands to narrow to their tightest in a while, then trades the breakout "
+        "beyond a band and exits at the middle band.",
+        "params": [
+            {"key": "period", "label": "Band period (bars)", "default": 20, "min": 5, "max": 200, "step": 1},
+            {"key": "width", "label": "Band width (std devs)", "default": 2, "min": 1, "max": 4, "step": 0.5},
+            {"key": "lookback", "label": "Squeeze lookback (bars)", "default": 100, "min": 20, "max": 500, "step": 1},
+        ],
+    },
+    "inside_bar": {
+        "label": "Inside-bar breakout",
+        "kind": "trend",
+        "summary": "After a candle that sits inside the one before it, trades a close beyond that earlier candle's "
+        "high or low, and exits after a set number of bars or on the opposite breakout.",
+        "params": [
+            {"key": "hold", "label": "Bars to hold", "default": 10, "min": 1, "max": 100, "step": 1},
+        ],
+    },
+    "rsi2_pullback": {
+        "label": "RSI(2) pullback",
+        "kind": "reversion",
+        "summary": "A short-term dip buyer in the direction of the long trend: buys when 2-bar RSI is very low while "
+        "price is above its long average, and exits when the close gets back above a short average.",
+        "params": [
+            {"key": "period", "label": "RSI period (bars)", "default": 2, "min": 2, "max": 10, "step": 1},
+            {"key": "level", "label": "Oversold level", "default": 10, "min": 1, "max": 40, "step": 1},
+            {"key": "trend", "label": "Trend average (bars)", "default": 200, "min": 20, "max": 400, "step": 1},
+        ],
+    },
+    "fib_pullback": {
+        "label": "Fibonacci pullback",
+        "kind": "reversion",
+        "summary": "In an uptrend, buys when price pulls back to a Fibonacci level of the recent swing and exits at "
+        "the swing high or if the swing low breaks. The mirror for downtrends.",
+        "params": [
+            {"key": "lookback", "label": "Swing lookback (bars)", "default": 50, "min": 10, "max": 300, "step": 1},
+            {"key": "level", "label": "Retracement level (%)", "default": 61.8, "min": 23.6, "max": 78.6, "step": 0.1},
+            {"key": "trend", "label": "Trend average (bars)", "default": 200, "min": 20, "max": 400, "step": 1},
+        ],
+    },
     "buy_and_hold": {
         "label": "Buy and hold",
         "kind": "benchmark",
@@ -179,7 +264,17 @@ STRATEGIES = {
     },
 }
 
-KINDS = {"trend": "Trend following", "reversion": "Mean reversion", "benchmark": "Benchmark"}
+KINDS = {"trend": "Trend following", "reversion": "Mean reversion", "benchmark": "Benchmark", "custom": "Custom"}
+
+
+def kind_of(strategy: str) -> str:
+    return STRATEGIES[strategy]["kind"] if strategy in STRATEGIES else "custom"
+
+
+def label_of(strategy: str, rules: "Rules | None" = None) -> str:
+    if strategy == "custom":
+        return rules.name if rules else "Custom strategy"
+    return STRATEGIES[strategy]["label"]
 
 
 def _sma(xs: list[float], n: int) -> list[float | None]:
@@ -228,6 +323,19 @@ def _rolling(xs: list[float], n: int, fn) -> list[float | None]:
     for x in xs:
         out.append(fn(win) if len(win) == n else None)  # uses the previous n values only
         win.append(x)
+    return out
+
+
+def _stdev(xs: list[float], n: int) -> list[float | None]:
+    """Population standard deviation of the last n values (including the current one)."""
+    out: list[float | None] = []
+    for i in range(len(xs)):
+        if i < n - 1:
+            out.append(None)
+            continue
+        w = xs[i - n + 1 : i + 1]
+        m = sum(w) / n
+        out.append(math.sqrt(sum((y - m) ** 2 for y in w) / n))
     return out
 
 
@@ -388,8 +496,12 @@ def _oscillator(vals: list[float | None], lower: float, upper: float, mid: float
     return out
 
 
-def signals(strategy: str, p: dict, bars: list[dict]) -> list[int]:
+def signals(strategy: str, p: dict, bars: list[dict], rules: Rules | None = None) -> list[int]:
     """Desired position after each bar's close: 1 long, -1 short, 0 flat."""
+    if strategy == "custom":
+        if rules is None:
+            raise ValueError("A custom strategy needs its rules")
+        return custom_signals(rules, bars)
     c = [b["c"] for b in bars]
     pos, out = 0, []
     if strategy == "ma_cross":
@@ -503,6 +615,134 @@ def signals(strategy: str, p: dict, bars: list[dict]) -> list[int]:
     if strategy == "williams_r":
         wr = [None if v is None else v - 100 for v in _range_position(bars, int(p["period"]))]
         return _oscillator(wr, p["lower"], p["upper"], -50)
+    if strategy == "ichimoku":
+        hs, ls = [b["h"] for b in bars], [b["l"] for b in bars]
+
+        def mid(n: int) -> list[float | None]:
+            return [None if i < n - 1 else (max(hs[i - n + 1 : i + 1]) + min(ls[i - n + 1 : i + 1])) / 2 for i in range(len(bars))]
+
+        tk, kj, sb = mid(int(p["tenkan"])), mid(int(p["kijun"])), mid(int(p["senkou"]))
+        shift = int(p["kijun"])
+        for i, x in enumerate(c):
+            j = i - shift  # the cloud plotted at bar i was computed shift bars earlier
+            a = None if j < 0 or tk[j] is None or kj[j] is None else (tk[j] + kj[j]) / 2
+            b = None if j < 0 else sb[j]
+            if a is None or b is None or tk[i] is None or kj[i] is None:
+                out.append(0)
+                continue
+            top, bot = max(a, b), min(a, b)
+            if x > top and tk[i] > kj[i]:
+                pos = 1
+            elif x < bot and tk[i] < kj[i]:
+                pos = -1
+            elif bot <= x <= top:
+                pos = 0
+            out.append(pos)
+        return out
+    if strategy == "triple_ma":
+        f, m, s = _ema(c, int(p["fast"])), _ema(c, int(p["mid"])), _ema(c, int(p["slow"]))
+        return [0 if None in (a, b, d) else 1 if a > b > d else -1 if a < b < d else 0 for a, b, d in zip(f, m, s)]
+    if strategy == "heikin_ashi":
+        need, run_, ho, hc = int(p["confirm"]), 0, None, None
+        for b in bars:
+            nc = (b["o"] + b["h"] + b["l"] + b["c"]) / 4
+            no = (b["o"] + b["c"]) / 2 if ho is None else (ho + hc) / 2
+            ho, hc = no, nc
+            d = 1 if hc > ho else -1 if hc < ho else 0
+            run_ = run_ + d if d and (run_ == 0 or (run_ > 0) == (d > 0)) else d
+            if run_ >= need:
+                pos = 1
+            elif run_ <= -need:
+                pos = -1
+            out.append(pos)
+        return out
+    if strategy == "aroon":
+        n, th = int(p["period"]), p["threshold"]
+        for i in range(len(bars)):
+            if i < n:
+                out.append(0)
+                continue
+            w = bars[i - n : i + 1]
+            hi = max(range(n + 1), key=lambda k: (w[k]["h"], k))
+            lo = min(range(n + 1), key=lambda k: (w[k]["l"], -k))
+            up, dn = hi / n * 100, lo / n * 100
+            if up >= th and up > dn:
+                pos = 1
+            elif dn >= th and dn > up:
+                pos = -1
+            out.append(pos)
+        return out
+    if strategy == "squeeze":
+        n, k, look = int(p["period"]), p["width"], int(p["lookback"])
+        mid, sd = _sma(c, n), _stdev(c, n)
+        bw = [None if m is None else 2 * k * s / m for m, s in zip(mid, sd)]
+        recent = deque(maxlen=look)
+        armed = 0  # bars left in which a breakout counts after a squeeze
+        for i, x in enumerate(c):
+            if bw[i] is None:
+                out.append(0)
+                continue
+            if len(recent) == look and bw[i] <= min(recent) * 1.05:
+                armed = n
+            recent.append(bw[i])
+            up, lo = mid[i] + k * sd[i], mid[i] - k * sd[i]
+            if pos == 1 and x <= mid[i] or pos == -1 and x >= mid[i]:
+                pos = 0
+            if armed and x > up:
+                pos, armed = 1, 0
+            elif armed and x < lo:
+                pos, armed = -1, 0
+            armed = max(armed - 1, 0)
+            out.append(pos)
+        return out
+    if strategy == "inside_bar":
+        hold, held, mother = int(p["hold"]), 0, None
+        for i, b in enumerate(bars):
+            if pos:
+                held += 1
+                if held >= hold:
+                    pos = 0
+            if mother and b["c"] > mother[0]:
+                pos, held, mother = 1, 0, None
+            elif mother and b["c"] < mother[1]:
+                pos, held, mother = -1, 0, None
+            if i and b["h"] <= bars[i - 1]["h"] and b["l"] >= bars[i - 1]["l"]:
+                mother = (bars[i - 1]["h"], bars[i - 1]["l"])
+            out.append(pos)
+        return out
+    if strategy == "rsi2_pullback":
+        r, trend, short = _rsi(c, int(p["period"])), _sma(c, int(p["trend"])), _sma(c, 5)
+        lvl = p["level"]
+        for x, v, t, s5 in zip(c, r, trend, short):
+            if v is None or t is None or s5 is None:
+                out.append(0)
+                continue
+            if pos == 1 and x > s5 or pos == -1 and x < s5:
+                pos = 0
+            if x > t and v < lvl:
+                pos = 1
+            elif x < t and v > 100 - lvl:
+                pos = -1
+            out.append(pos)
+        return out
+    if strategy == "fib_pullback":
+        n, f = int(p["lookback"]), p["level"] / 100
+        hi, lo, trend = _rolling([b["h"] for b in bars], n, max), _rolling([b["l"] for b in bars], n, min), _sma(c, int(p["trend"]))
+        target = stop = None
+        for i, x in enumerate(c):
+            if hi[i] is None or trend[i] is None:
+                out.append(0)
+                continue
+            if pos == 1 and (x >= target or x < stop) or pos == -1 and (x <= target or x > stop):
+                pos = 0
+            if not pos:
+                swing = hi[i] - lo[i]
+                if x > trend[i] and lo[i] < x <= hi[i] - swing * f:
+                    pos, target, stop = 1, hi[i], lo[i]
+                elif x < trend[i] and hi[i] > x >= lo[i] + swing * f:
+                    pos, target, stop = -1, lo[i], hi[i]
+            out.append(pos)
+        return out
     if strategy == "buy_and_hold":
         return [1] * len(bars)
     raise ValueError(f"unknown strategy {strategy}")
@@ -514,8 +754,9 @@ def signals(strategy: str, p: dict, bars: list[dict]) -> list[int]:
 
 
 class BacktestIn(BaseModel):
-    strategy: Literal[tuple(STRATEGIES)]  # type: ignore[valid-type]
+    strategy: Literal[tuple(STRATEGIES) + ("custom",)]  # type: ignore[valid-type]
     params: dict[str, float] = {}
+    rules: Rules | None = Field(None, description="The conditions of a custom strategy (strategy = custom)")
     tf: Literal["1h", "1d"] = "1d"
     start: date = date(2015, 1, 1)
     end: date | None = None
@@ -533,6 +774,14 @@ class BacktestIn(BaseModel):
 
     @model_validator(mode="after")
     def _check(self):
+        if self.strategy == "custom":
+            if self.rules is None:
+                raise ValueError("A custom strategy needs its rules")
+            if self.end and self.end <= self.start:
+                raise ValueError("The end date must be after the start date")
+            self.params = {}
+            return self
+        self.rules = None
         spec = {d["key"]: d for d in STRATEGIES[self.strategy]["params"]}
         unknown = set(self.params) - set(spec)
         if unknown:
@@ -545,6 +794,10 @@ class BacktestIn(BaseModel):
             raise ValueError("The fast average must be shorter than the slow average")
         if self.strategy == "macd" and full["fast"] >= full["slow"]:
             raise ValueError("The fast average must be shorter than the slow average")
+        if self.strategy == "triple_ma" and not full["fast"] < full["mid"] < full["slow"]:
+            raise ValueError("The averages must go from fast to middle to slow")
+        if self.strategy == "ichimoku" and not full["tenkan"] < full["kijun"] < full["senkou"]:
+            raise ValueError("The Ichimoku lengths must go from conversion to base to leading span B")
         if "lower" in full and full["lower"] >= full["upper"]:
             raise ValueError("The oversold level must be below the overbought level")
         if self.end and self.end <= self.start:
@@ -556,7 +809,7 @@ class BacktestIn(BaseModel):
 def run(cfg: BacktestIn, bars: list[dict]) -> dict:
     if len(bars) < 2:
         raise ValueError("Not enough price data in that date range")
-    target = signals(cfg.strategy, cfg.params, bars)
+    target = signals(cfg.strategy, cfg.params, bars, cfg.rules)
     allow = {"both": (1, -1), "long_only": (1,), "short_only": (-1,)}[cfg.direction]
     sp, u = cfg.spread, cfg.units
 

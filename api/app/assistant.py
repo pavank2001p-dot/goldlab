@@ -16,7 +16,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
-from . import backtest, calendar, config, db, fit, news, paper, prices, risk
+from . import backtest, calendar, config, custom, db, fit, news, paper, prices, risk
 from .auth import UserOut, current_user
 from .trades import log_report
 
@@ -75,11 +75,18 @@ TOOLS = [
         "input_schema": _obj({}),
     },
     {
+        "name": "my_custom_strategies",
+        "description": "The custom strategies this user built and saved: id, name and their rules in plain words.",
+        "input_schema": _obj({}),
+    },
+    {
         "name": "run_backtest",
         "description": "Run a backtest on stored gold prices and return its statistics (not saved). Fills at the "
         "next bar's open and charges spread and overnight swap. Settings not given use the defaults.",
         "input_schema": _obj({
             "strategy": {"type": "string", "enum": list(backtest.STRATEGIES)},
+            "custom_id": {"type": "integer", "description": "Run one of the user's saved custom strategies (id from "
+                          "my_custom_strategies) instead of a built-in one; strategy and params are then ignored"},
             "params": {"type": "object", "description": "Strategy settings by key, from list_strategies",
                        "additionalProperties": {"type": "number"}},
             "tf": {"type": "string", "enum": ["1h", "1d"], "description": "Bar size; default 1d"},
@@ -143,6 +150,8 @@ TOOLS = [
         "the last 30% alone. Trades are sized as a % of the account.",
         "input_schema": _obj({
             "strategy": {"type": "string", "enum": [k for k in backtest.STRATEGIES if k != "buy_and_hold"]},
+            "custom_id": {"type": "integer", "description": "Run one of the user's saved custom strategies (id from "
+                          "my_custom_strategies) instead of a built-in one; strategy and params are then ignored"},
             "params": {"type": "object", "additionalProperties": {"type": "number"}},
             "tf": {"type": "string", "enum": ["1h", "1d"]},
             "direction": {"type": "string", "enum": ["both", "long_only", "short_only"]},
@@ -269,8 +278,21 @@ def t_list_strategies(_: dict, user_id: int) -> list:
     return backtest.strategies()
 
 
+def _with_custom(i: dict, user_id: int) -> dict:
+    """Swap a custom_id for the saved rules, checking the strategy belongs to this user."""
+    i = {k: v for k, v in i.items() if v is not None}
+    sid = i.pop("custom_id", None)
+    if sid is not None:
+        i.update(strategy="custom", params={}, rules=custom.owned(user_id, int(sid)))
+    return i
+
+
+def t_my_custom_strategies(_: dict, user_id: int) -> list:
+    return [{"id": r["id"], "name": r["name"], "rules": r["description"]} for r in custom.saved(user_id)]
+
+
 def t_run_backtest(i: dict, user_id: int) -> dict:
-    cfg = backtest.BacktestIn(**{k: v for k, v in i.items() if v is not None})
+    cfg = backtest.BacktestIn(**_with_custom(i, user_id))
     rep = backtest.run(cfg, backtest.load_bars(cfg.tf, cfg.start, cfg.end))
     return {"settings": cfg.model_dump(mode="json"), "stats": rep["stats"],
             "period": {"start": _day(rep["period"]["start"]), "end": _day(rep["period"]["end"])}}
@@ -358,7 +380,7 @@ def t_my_agent(_: dict, user_id: int) -> dict:
 def t_diagnose_strategy(i: dict, user_id: int) -> dict:
     from . import agent
 
-    body = agent.PastIn(**{k: v for k, v in i.items() if v is not None})
+    body = agent.PastIn(**_with_custom(i, user_id))
     out = agent.past(body, user_id)
     return {k: out[k] for k in ("config", "years", "period", "diagnosis", "fixes")} | {
         "stats": {k: out["stats"].get(k) for k in ("total_return_pct", "cagr_pct", "max_drawdown_pct", "trades",
@@ -371,6 +393,7 @@ HANDLERS = {
     "price_summary": t_price_summary,
     "price_history": t_price_history,
     "list_strategies": t_list_strategies,
+    "my_custom_strategies": t_my_custom_strategies,
     "run_backtest": t_run_backtest,
     "my_backtests": t_my_backtests,
     "my_trade_log": t_my_trade_log,

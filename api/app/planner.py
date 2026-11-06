@@ -12,9 +12,10 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, ValidationError
 
-from . import config
+from . import config, db
 from .auth import UserOut, current_user
 from .backtest import KINDS, STRATEGIES, BacktestIn, load_bars, run
+from .custom import Rules, describe
 from .fit import assess
 from .risk import PROFILES, profile_of
 
@@ -24,9 +25,10 @@ IN_SAMPLE = 0.7
 # Stop distances to try (% of entry price) on daily candles; hourly candles use half.
 STOPS = {"conservative": (1, 2, 4), "moderate": (1.5, 3, 5), "aggressive": (2, 4, 8)}
 # Settings that are lengths in bars, which the faster and slower variants halve and double.
-LENGTHS = {"fast", "slow", "signal", "period", "entry", "exit", "lookback", "atr", "smooth"}
+LENGTHS = {"fast", "mid", "slow", "signal", "period", "entry", "exit", "lookback", "atr", "smooth", "tenkan", "kijun", "senkou", "trend"}
 YEARS = {"1d": (3, 5, 10, 20), "1h": (1, 2)}
 MIN_TRADES = 5
+MAX_CUSTOM = 10  # saved custom strategies tried per search
 BASE_CAPITAL = 100_000.0  # trades are sized as a share of the account, so results don't depend on it
 # Quiz answers that set the defaults: how long trades are held, and how much leverage feels fine.
 HORIZON_TF = ["1d", "1d", "1d", "1h"]
@@ -60,9 +62,10 @@ def _variants(key: str) -> list[dict]:
     return out
 
 
-def _cfg(key: str, params: dict, tf: str, direction: str, size_pct: float, stop: float | None) -> BacktestIn | None:
+def _cfg(key: str, params: dict, tf: str, direction: str, size_pct: float, stop: float | None,
+         rules: Rules | None = None) -> BacktestIn | None:
     try:
-        return BacktestIn(strategy=key, params=params, tf=tf, start=date(2000, 1, 1), direction=direction,
+        return BacktestIn(strategy=key, params=params, rules=rules, tf=tf, start=date(2000, 1, 1), direction=direction,
                           capital=BASE_CAPITAL, size_pct=size_pct, stop_loss_pct=stop)
     except ValidationError:
         return None
@@ -95,50 +98,36 @@ def _sized_run(cfg: BacktestIn, bars: list[dict], profile: str) -> tuple[Backtes
     return cfg, rep, fit
 
 
-def _search(profile: str, tf: str, years: int, style: str, direction: str, max_lev: float) -> dict:
-    limits = PROFILES[profile]
+def _window(tf: str, years: int) -> tuple[list[dict], list[dict], list[dict]]:
     start = date.today() - timedelta(days=round(years * 365.25))
     bars = load_bars(tf, start, None)
     if len(bars) < 300:
         raise HTTPException(422, "Not enough price history for that period yet")
     cut = int(len(bars) * IN_SAMPLE)
-    ins, outs = bars[:cut], bars[cut:]
-    stops = [s / 2 if tf == "1h" else s for s in STOPS[profile]]
+    return bars, bars[:cut], bars[cut:]
 
-    def size_for(stop: float) -> float:
-        # Risk the profile's share of the account if the stop is hit, within the leverage cap.
-        return min(limits["max_risk_per_trade_pct"] / stop, max_lev) * 100
 
+def _pick(cands: dict[str, list[BacktestIn]], ins: list[dict], outs: list[dict], profile: str) -> list[dict]:
+    """For each strategy, the candidate settings that did best on the first 70%, re-run on the last 30%."""
     best: dict[str, dict] = {}
-    for key, spec in STRATEGIES.items():
-        if spec["kind"] == "benchmark" or (style != "any" and spec["kind"] != style):
-            continue
-        for params in _variants(key):
-            for stop in stops:
-                cfg = _cfg(key, params, tf, direction, size_for(stop), stop)
-                if cfg is None:
-                    continue
-                cfg, rep, fit = _sized_run(cfg, ins, profile)
-                s = _summary(rep)
-                ok = fit["verdict"] == "fits" and (s["trades"] or 0) >= MIN_TRADES and (s["cagr_pct"] or 0) > 0
-                score = _calmar(s) if ok else float("-inf")
-                cur = best.get(key)
-                if cur is None or score > cur["score"] or (score == cur["score"] == float("-inf") and _calmar(s) > _calmar(cur["in_sample"])):
-                    best[key] = {"cfg": cfg, "in_sample": s, "in_fit": fit, "score": score}
-
-    results = []
+    for key, cfgs in cands.items():
+        for cfg in cfgs:
+            cfg, rep, fit = _sized_run(cfg, ins, profile)
+            s = _summary(rep)
+            ok = fit["verdict"] == "fits" and (s["trades"] or 0) >= MIN_TRADES and (s["cagr_pct"] or 0) > 0
+            score = _calmar(s) if ok else float("-inf")
+            cur = best.get(key)
+            if cur is None or score > cur["score"] or (score == cur["score"] == float("-inf") and _calmar(s) > _calmar(cur["in_sample"])):
+                best[key] = {"cfg": cfg, "in_sample": s, "in_fit": fit, "score": score}
+    out = []
     for key, b in best.items():
         cfg = b["cfg"]
         oos = run(cfg, outs)
         oos_fit = assess(oos["trades"], oos["stats"], BASE_CAPITAL, profile, cfg.stop_loss_pct)
-        results.append({
-            "strategy": key,
-            "label": STRATEGIES[key]["label"],
-            "kind": STRATEGIES[key]["kind"],
-            "kind_label": KINDS[STRATEGIES[key]["kind"]],
-            "summary": STRATEGIES[key]["summary"],
+        out.append({
+            "key": key,
+            "strategy": cfg.strategy,
             "params": cfg.params,
-            "param_labels": {p["key"]: p["label"] for p in STRATEGIES[key]["params"]},
             "stop_loss_pct": cfg.stop_loss_pct,
             "size_pct": round(cfg.size_pct, 2),
             "in_sample": b["in_sample"],
@@ -148,7 +137,37 @@ def _search(profile: str, tf: str, years: int, style: str, direction: str, max_l
             "qualifies": b["score"] != float("-inf"),
             "score": None if b["score"] == float("-inf") else round(b["score"], 3),
         })
+    return out
+
+
+def _sort(results: list[dict]) -> None:
     results.sort(key=lambda r: (r["qualifies"], r["score"] or 0, _calmar(r["in_sample"])), reverse=True)
+
+
+def _stops(profile: str, tf: str) -> list[float]:
+    return [s / 2 if tf == "1h" else s for s in STOPS[profile]]
+
+
+def _size_for(profile: str, stop: float, max_lev: float) -> float:
+    # Risk the profile's share of the account if the stop is hit, within the leverage cap.
+    return min(PROFILES[profile]["max_risk_per_trade_pct"] / stop, max_lev) * 100
+
+
+def _search(profile: str, tf: str, years: int, style: str, direction: str, max_lev: float) -> dict:
+    bars, ins, outs = _window(tf, years)
+    stops = _stops(profile, tf)
+    cands: dict[str, list[BacktestIn]] = {}
+    for key, spec in STRATEGIES.items():
+        if spec["kind"] == "benchmark" or (style != "any" and spec["kind"] != style):
+            continue
+        cands[key] = [c for params in _variants(key) for stop in stops
+                      if (c := _cfg(key, params, tf, direction, _size_for(profile, stop, max_lev), stop)) is not None]
+    results = []
+    for r in _pick(cands, ins, outs, profile):
+        spec = STRATEGIES[r["strategy"]]
+        results.append({**r, "label": spec["label"], "kind": spec["kind"], "kind_label": KINDS[spec["kind"]],
+                        "summary": spec["summary"], "param_labels": {p["key"]: p["label"] for p in spec["params"]}})
+    _sort(results)
 
     # Simply owning gold with no leverage, as a yardstick.
     hold_cfg = _cfg("buy_and_hold", {}, tf, "long_only", 100, None)
@@ -165,9 +184,29 @@ def _search(profile: str, tf: str, years: int, style: str, direction: str, max_l
         "benchmark": {"in_sample": _summary(hold_in), "in_sample_fit": hold_fit["verdict"],
                       "out_of_sample": _summary(hold_out), "out_of_sample_fit": hold_out_fit["verdict"],
                       "size_pct": 100},
-        "tried": sum(len(_variants(k)) * len(stops) for k in best),
+        "tried": sum(len(c) for c in cands.values()),
         "last_price": bars[-1]["c"],
     }
+
+
+def _custom(user_id: int, profile: str, tf: str, years: int, direction: str, max_lev: float) -> tuple[list[dict], int]:
+    """The user's own saved strategies, tried with the same stops and sizing (their rules stay as written)."""
+    with db.conn() as c:
+        rows = c.execute("SELECT id, rules FROM custom_strategies WHERE user_id = %s ORDER BY updated_at DESC LIMIT %s",
+                         (user_id, MAX_CUSTOM)).fetchall()
+    if not rows:
+        return [], 0
+    _, ins, outs = _window(tf, years)
+    stops = _stops(profile, tf)
+    saved = {f"custom:{r['id']}": (r["id"], Rules(**r["rules"])) for r in rows}
+    cands = {k: [c for stop in stops if (c := _cfg("custom", {}, tf, direction, _size_for(profile, stop, max_lev), stop, rules)) is not None]
+             for k, (_, rules) in saved.items()}
+    out = []
+    for r in _pick(cands, ins, outs, profile):
+        sid, rules = saved[r["key"]]
+        out.append({**r, "custom_id": sid, "rules": rules.model_dump(), "label": rules.name, "kind": "custom",
+                    "kind_label": KINDS["custom"], "summary": describe(rules), "param_labels": {}})
+    return out, sum(len(c) for c in cands.values())
 
 
 def match(body: PlanIn, user_id: int) -> dict:
@@ -189,6 +228,13 @@ def match(body: PlanIn, user_id: int) -> dict:
         _cache[key] = (time.time(), out)
         for k in [k for k, (t, _) in _cache.items() if time.time() - t > CACHE_SECONDS]:
             _cache.pop(k, None)
+    if body.style == "any":
+        # Saved custom strategies change whenever the user edits them, so they are never cached.
+        mine, tried = _custom(user_id, profile, body.tf, body.years, body.direction, max_lev)
+        if mine:
+            results = out["results"] + mine
+            _sort(results)
+            out = {**out, "results": results, "tried": out["tried"] + tried}
 
     # Sizes in ounces for the user's own capital, at the price where each test period starts.
     return {

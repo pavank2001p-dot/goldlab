@@ -18,10 +18,17 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
   candle and are saved as 1s/1m/1h bars until Dukascopy's data for that hour replaces them. The **All**
   button shows every month since 1833 on a log scale (see Data below).
 - **Accounts**: email and password sign-up, cookie sessions.
-- **Backtests** (`api/app/backtest.py`): 15 strategies. Trend following: moving-average crossover, price vs
-  moving average, channel breakout, MACD, Supertrend, Parabolic SAR, ADX, Keltner breakout and momentum. Mean
-  reversion: RSI, Bollinger bands, stochastic, CCI and Williams %R. Plus buy and hold as a benchmark. Signals on each close fill at the next open; spread, overnight swap,
-  stop loss and take profit are modelled, and a test stops if the account reaches zero. Results are saved per user.
+- **Backtests** (`api/app/backtest.py`): 23 strategies. Trend following: moving-average crossover, triple moving
+  average, price vs moving average, channel breakout, MACD, Supertrend, Parabolic SAR, ADX, Keltner breakout, momentum,
+  Ichimoku cloud, Heikin-Ashi, Aroon, Bollinger squeeze breakout and inside-bar breakout. Mean reversion: RSI, RSI(2)
+  pullback, Fibonacci pullback, Bollinger bands, stochastic, CCI and Williams %R. Plus buy and hold as a benchmark.
+  Signals on each close fill at the next open; spread, overnight swap, stop loss and take profit are modelled, and a
+  test stops if the account reaches zero. Results are saved per user. (VWAP and grid strategies aren't included: spot
+  gold has no reliable volume, and a grid holds many positions at once, which this engine doesn't model.)
+- **Strategy builder** (`api/app/custom.py`, `/strategies/builder`): users combine 21 indicators (price, averages,
+  RSI, MACD, ADX, Bollinger bands, ATR and more) with "is above", "is below", "crosses above" and "crosses below" into
+  rules for opening and closing longs and shorts, starting from a template or from scratch. Saved strategies run in
+  the backtester, the strategy finder (with stops and sizes fitted to the profile), the agent and the assistant.
 - **Trade log** (`api/app/trades.py`): manual entry or CSV import (MetaTrader 4/5 and most broker exports; gold
   rows only; re-imports skip known tickets). Produces the same report as a backtest (`api/app/report.py`).
 

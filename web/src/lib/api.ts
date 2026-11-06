@@ -45,10 +45,27 @@ export type Strategy = {
   key: string;
   label: string;
   summary: string;
-  kind: "trend" | "reversion" | "benchmark";
+  kind: "trend" | "reversion" | "benchmark" | "custom";
   kind_label: string;
   params: StrategyParam[];
 };
+
+export type Operand = { ind: string; n?: number | null; m?: number | null; value?: number | null };
+export type Condition = { left: Operand; op: "<" | ">" | "crosses_above" | "crosses_below"; right: Operand };
+export type Rules = { name: string; long_entry: Condition[]; long_exit: Condition[]; short_entry: Condition[]; short_exit: Condition[] };
+export type IndicatorSpec = { key: string; label: string; group: string; n: { label: string; default: number } | null; m: { label: string; default: number } | null };
+export type CustomCatalog = {
+  indicators: IndicatorSpec[];
+  ops: { key: Condition["op"]; label: string }[];
+  templates: { key: string; name: string; summary: string; rules: Rules }[];
+  max_conditions: number;
+};
+export type SavedStrategy = { id: number; name: string; rules: Rules; description: string; created_at: string; updated_at: string };
+
+/** A saved custom strategy shown in the same list as the built-in ones. */
+export const asStrategy = (m: SavedStrategy): Strategy => ({
+  key: `custom:${m.id}`, label: m.name, summary: m.description, kind: "custom", kind_label: "Your strategy", params: [],
+});
 
 export type ReportTrade = {
   id?: number;
@@ -99,6 +116,7 @@ export type Report = {
 export type BacktestParams = {
   strategy: string;
   params: Record<string, number>;
+  rules?: Rules | null;
   tf: Timeframe;
   start: string;
   end?: string | null;
@@ -308,6 +326,8 @@ export type PlanInput = {
 };
 export type PlanResult = {
   strategy: string;
+  custom_id?: number;
+  rules?: Rules;
   label: string;
   kind: Strategy["kind"];
   kind_label: string;
@@ -347,6 +367,7 @@ export type PlanOptions = {
 export type AgentConfig = {
   strategy: string;
   params: Record<string, number>;
+  rules?: Rules | null;
   tf: "1h" | "1d";
   direction: "both" | "long_only" | "short_only";
   stop_loss_pct: number;
@@ -391,6 +412,11 @@ export type AgentState = {
 };
 
 export const api = {
+  customCatalog: () => call<CustomCatalog>("/custom-strategies/catalog"),
+  customList: () => call<SavedStrategy[]>("/custom-strategies"),
+  customSave: (rules: Rules, id?: number) =>
+    call<SavedStrategy>(id ? `/custom-strategies/${id}` : "/custom-strategies", { method: id ? "PUT" : "POST", body: JSON.stringify({ rules }) }),
+  customDelete: (id: number) => call<{ ok: boolean }>(`/custom-strategies/${id}`, { method: "DELETE" }),
   me: () => call<User>("/auth/me"),
   signup: (email: string, password: string, name: string) =>
     call<User>("/auth/signup", { method: "POST", body: JSON.stringify({ email, password, name }) }),

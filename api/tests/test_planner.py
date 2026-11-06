@@ -79,7 +79,8 @@ def test_finder_results_stay_inside_the_profile(client):
     assert out["profile"] == "conservative" and limits["max_drawdown_pct"] == 10
     ins, oos = out["periods"]["in_sample"], out["periods"]["out_of_sample"]
     assert ins["end"] < oos["start"]  # the check period comes after the tuning period
-    assert len(out["results"]) == 14 and out["tried"] > 14
+    n = len(bt.STRATEGIES) - 1  # every strategy but buy and hold
+    assert len(out["results"]) == n and out["tried"] > n
     assert {r["strategy"] for r in out["results"]} == set(bt.STRATEGIES) - {"buy_and_hold"}
 
     for res in out["results"]:
