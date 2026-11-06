@@ -9,6 +9,7 @@ import { useUser } from "@/lib/useUser";
 const NAV = [
   { href: "/chart", label: "Chart", icon: "candles" },
   { href: "/backtest", label: "Backtest", icon: "backtest" },
+  { href: "/strategies", label: "Strategies", icon: "trophy" },
   { href: "/scenarios", label: "Scenarios", icon: "scenarios" },
   { href: "/paper", label: "Paper trading", icon: "wallet" },
   { href: "/trades", label: "Trade log", icon: "trades" },
@@ -36,7 +37,7 @@ export default function Header() {
           <span className="inline-block h-3 w-3 rotate-45 rounded-[3px] bg-gradient-to-br from-gold to-[#b8860b] shadow-[0_0_10px_var(--gold)]" />
           GoldLab
         </Link>
-        <nav className="order-last -mx-4 flex w-[calc(100%+2rem)] gap-3.5 overflow-x-auto whitespace-nowrap px-4 text-sm text-muted sm:order-none sm:mx-0 sm:w-auto sm:px-0">
+        <nav className="order-last -mx-4 flex w-[calc(100%+2rem)] gap-3 overflow-x-auto whitespace-nowrap px-4 text-sm text-muted sm:order-none sm:mx-0 sm:w-auto sm:px-0">
           {NAV.map((n) => {
             const on = path === n.href || path.startsWith(n.href + "/");
             return (
@@ -52,7 +53,11 @@ export default function Header() {
         <div className="ml-auto flex items-center gap-3 text-sm">
           {user === undefined ? null : user ? (
             <>
-              <Link href="/account" className="max-w-40 truncate text-muted hover:text-foreground">{user.name || user.email}</Link>
+              <Link href="/account" title={user.name || user.email} aria-label="Account"
+                className="flex items-center gap-1.5 text-muted hover:text-foreground">
+                <Icon name="account" className="h-4 w-4" />
+                <span className="hidden max-w-40 truncate 2xl:inline">{user.name || user.email}</span>
+              </Link>
               <button onClick={logout} className="rounded-md border border-border px-3 py-1.5 hover:bg-surface">
                 Log out
               </button>

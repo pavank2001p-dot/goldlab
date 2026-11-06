@@ -6,6 +6,7 @@ import { Icon } from "@/components/ui";
 const features = [
   { title: "Live gold chart", body: "Live XAU/USD candles from 1 second to 1 month, with monthly history back to 1833.", href: "/chart", icon: "candles" },
   { title: "Strategy backtests", body: "Test 15 trend and mean-reversion strategies with real spreads and swaps.", href: "/backtest", icon: "backtest" },
+  { title: "Strategy finder", body: "See which strategies stayed inside your risk limits, tuned on past years and checked on later ones.", href: "/strategies", icon: "trophy" },
   { title: "Trade scenarios", body: "See the range of prices and returns gold's past moves make possible for a trade you open today.", href: "/scenarios", icon: "scenarios" },
   { title: "Paper trading", body: "Practise with $10,000 of virtual money: market, limit and stop orders on live gold prices.", href: "/paper", icon: "wallet" },
   { title: "Trade log", body: "Log your own trades or import them from your broker, and get the same report as a backtest.", href: "/trades", icon: "trades" },
@@ -70,7 +71,7 @@ export default function Home() {
             </Link>
           ))}
           <Link href="/signup"
-            className="flex flex-col justify-between rounded-xl border border-gold/40 lg:col-span-2 bg-gradient-to-br from-gold/20 to-gold/5 p-5 transition hover:-translate-y-0.5">
+            className="flex flex-col justify-between rounded-xl border border-gold/40 bg-gradient-to-br from-gold/20 to-gold/5 p-5 transition hover:-translate-y-0.5">
             <div>
               <h3 className="font-medium">Start in a minute</h3>
               <p className="mt-1.5 text-sm text-muted">A free account saves your backtests, trades and risk profile.</p>

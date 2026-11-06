@@ -18,7 +18,7 @@ LABELS = {"fits": "Fits your profile", "close": "Slightly outside your profile",
 
 
 def _level(value: float | None, limit: float) -> str:
-    if value is None or value <= limit:
+    if value is None or value <= limit * 1.001:  # rounding in the sizing shouldn't flip a verdict
         return "fits"
     return "close" if value <= limit * CLOSE else "over"
 

@@ -522,6 +522,9 @@ class BacktestIn(BaseModel):
     direction: Literal["both", "long_only", "short_only"] = "both"
     capital: float = Field(10_000, gt=0, le=100_000_000)
     units: float = Field(5, gt=0, le=100_000, description="Ounces per trade (1 standard lot = 100 oz)")
+    size_pct: float | None = Field(None, gt=0, le=10_000, description=(
+        "If set, each trade's size is this % of the account at entry (100 = 1x, 500 = 5x leverage), "
+        "and units is ignored"))
     spread: float = Field(0.30, ge=0, le=20, description="USD per ounce, paid once per round trip")
     swap_long: float = Field(-0.25, ge=-5, le=5, description="USD per ounce per night held long (negative = cost)")
     swap_short: float = Field(0.05, ge=-5, le=5, description="USD per ounce per night held short")
@@ -575,7 +578,7 @@ def run(cfg: BacktestIn, bars: list[dict]) -> dict:
         cash += pnl
         trades.append({
             "side": "long" if pos == 1 else "short",
-            "units": u,
+            "units": round(u, 4),
             "entry_time": int(entry_t),
             "entry_price": round(entry, 3),
             "exit_time": t,
@@ -588,8 +591,10 @@ def run(cfg: BacktestIn, bars: list[dict]) -> dict:
         pos, swap_acc = 0, 0.0
 
     def open_(t: int, bid: float, side: int):
-        nonlocal pos, entry, entry_t
+        nonlocal pos, entry, entry_t, u
         pos, entry, entry_t = side, (bid + sp if side == 1 else bid), t
+        if cfg.size_pct:
+            u = max(cash, 0) * cfg.size_pct / 100 / entry
 
     for i in range(1, len(bars)):
         b, prev = bars[i], bars[i - 1]
