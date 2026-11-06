@@ -37,7 +37,7 @@ function Mood({ items }: { items: NewsItem[] }) {
   if (tagged.length === 0) return null;
   const pct = (k: keyof typeof IMPACT) => (tagged.filter((n) => n.impact === k).length / tagged.length) * 100;
   return (
-    <div className="rounded-xl border border-border bg-surface p-4">
+    <div className="rounded-2xl border border-border bg-surface p-4">
       <div className="flex items-baseline justify-between">
         <p className="text-sm font-medium">Headline mood</p>
         <p className="text-xs text-muted">{tagged.length} tagged headlines</p>
@@ -119,7 +119,7 @@ export default function NewsPage() {
             const imp = n.impact ? IMPACT[n.impact] : null;
             const expanded = open === n.id;
             return (
-              <article key={n.id} className="rise-in group relative overflow-hidden rounded-xl border border-border bg-surface p-4 pl-5 transition hover:border-muted"
+              <article key={n.id} className="rise-in group relative overflow-hidden rounded-2xl border border-border bg-surface p-4 pl-5 transition hover:border-muted"
                 style={{ animationDelay: `${Math.min(i, 10) * 30}ms` }}>
                 <span className={`absolute inset-y-0 left-0 w-1 ${imp?.bar ?? "bg-border"}`} />
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
@@ -160,7 +160,7 @@ export default function NewsPage() {
         <p className="-mt-2 text-xs text-muted">High-impact US releases for the next three weeks, in your local time.</p>
 
         {next && (
-          <div className="rounded-xl border border-gold/40 bg-gradient-to-br from-gold/15 to-transparent p-4">
+          <div className="rounded-2xl border border-gold/40 bg-gradient-to-br from-gold/15 to-transparent p-4">
             <p className="flex items-center gap-1.5 text-xs text-gold"><Icon name="clock" className="h-3.5 w-3.5" /> Next up · {countdown(next.ts, now)}</p>
             <p className="mt-1.5 font-medium">{next.title}</p>
             <p className="text-xs text-muted">{dayKey(next.ts)}, {time(next.ts)}</p>

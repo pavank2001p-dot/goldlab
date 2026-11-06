@@ -11,7 +11,7 @@ import {
 } from "@/lib/api";
 import { useUser } from "@/lib/useUser";
 
-const input = "w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm outline-none focus:border-gold";
+const input = "w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm outline-none focus:border-gold";
 const POLL_MS = 30_000;
 const SEV = { high: "border-down/50 bg-down/10", medium: "border-gold/40 bg-gold/10", info: "border-border bg-surface" };
 const DOT = { high: "bg-down", medium: "bg-gold", info: "bg-muted" };
@@ -55,7 +55,7 @@ function WorstPeriod({ d }: { d: Diagnosis }) {
   if (!w) return null;
   const events = Object.entries(w.events);
   return (
-    <div className="rounded-xl border border-border bg-surface p-4 text-sm">
+    <div className="rounded-2xl border border-border bg-surface p-4 text-sm">
       <h3 className="font-medium">Worst stretch: {w.from} to {w.to}</h3>
       <p className="mt-1 text-muted">
         The account fell <b className="text-down">{Math.abs(w.depth_pct).toFixed(1)}%</b> from its peak while gold{" "}
@@ -65,7 +65,7 @@ function WorstPeriod({ d }: { d: Diagnosis }) {
       </p>
       {events.length > 0 && (
         <p className="mt-2 flex flex-wrap gap-1.5">
-          {events.map(([k, n]) => <span key={k} className="rounded-md border border-border px-2 py-0.5 text-xs">{n} {k}</span>)}
+          {events.map(([k, n]) => <span key={k} className="rounded-lg border border-border px-2 py-0.5 text-xs">{n} {k}</span>)}
         </p>
       )}
       {w.headlines.length > 0 && (
@@ -121,7 +121,7 @@ function FixRow({ f, base, use }: { f: AgentFix; base: BriefStats; use: (c: Agen
       <td className="px-3 py-2 text-right"><Mark ok={f.better} /></td>
       <td className="px-3 py-2 text-right"><Mark ok={f.late_better} /></td>
       <td className="px-3 py-2 text-right">
-        <button onClick={() => use(f.config)} className="rounded-md border border-border px-2 py-1 text-xs hover:border-gold hover:text-gold">Use</button>
+        <button onClick={() => use(f.config)} className="rounded-lg border border-border px-2 py-1 text-xs hover:border-gold hover:text-gold">Use</button>
       </td>
     </tr>
   );
@@ -158,7 +158,7 @@ function Coach({ hasData }: { hasData: boolean }) {
   }
 
   return (
-    <div className="rounded-xl border border-gold/40 bg-gradient-to-br from-gold/10 to-transparent p-4">
+    <div className="rounded-2xl border border-gold/40 bg-gradient-to-br from-gold/10 to-transparent p-4">
       <h2 className="flex items-center gap-2 font-medium"><Icon name="assistant" className="h-4 w-4 text-gold" />AI coach</h2>
       <p className="mt-1 text-sm text-muted">
         Reads your latest past test and the agent&apos;s live results, then explains what went wrong and what the tested fixes changed.
@@ -168,7 +168,7 @@ function Coach({ hasData }: { hasData: boolean }) {
         placeholder="Optional: describe a situation or ask a question" className={`${input} mt-3 resize-y`} />
       <div className="mt-2 flex items-center justify-between gap-2">
         <span className="text-xs text-muted">{hasData ? "Uses one of your daily assistant questions." : "Run a past test first for the best answer."}</span>
-        <button onClick={ask} disabled={busy} className="rounded-md bg-gold px-3 py-1.5 text-sm font-medium text-black disabled:opacity-60">
+        <button onClick={ask} disabled={busy} className="rounded-lg bg-gold px-3 py-1.5 text-sm font-medium text-black disabled:opacity-60">
           {busy ? "Thinking…" : "Ask the coach"}
         </button>
       </div>
@@ -185,11 +185,11 @@ function LiveCard({ s, act, busy }: { s: AgentState; act: (fn: () => Promise<Age
   const running = a.status === "running";
   const c = a.config;
   return (
-    <div className="rounded-xl border border-border bg-surface p-4">
+    <div className="rounded-2xl border border-border bg-surface p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="flex items-center gap-2 font-medium">
-            <span className={`h-2 w-2 rounded-full ${running ? "animate-pulse bg-up" : "bg-muted"}`} />
+            <span className={`h-2 w-2 rounded-full ${running ? "breathe bg-up" : "bg-muted"}`} />
             {a.label} {running ? "is running on paper" : "is stopped"}
           </h2>
           <p className="mt-0.5 text-xs text-muted">
@@ -204,7 +204,7 @@ function LiveCard({ s, act, busy }: { s: AgentState; act: (fn: () => Promise<Age
               Close its position
             </label>
             <button disabled={busy} onClick={() => act(() => api.agentStop(closeIt))}
-              className="rounded-md border border-down/60 px-3 py-1.5 text-sm text-down hover:bg-down/10 disabled:opacity-60">Stop agent</button>
+              className="rounded-lg border border-down/60 px-3 py-1.5 text-sm text-down hover:bg-down/10 disabled:opacity-60">Stop agent</button>
           </div>
         )}
       </div>
@@ -315,11 +315,11 @@ export default function AgentPage() {
     <div className="mx-auto max-w-6xl px-4 py-8">
       <PageHeader icon="assistant" title="Strategy agent"
         subtitle="Tests a strategy on past gold prices, explains what went wrong and tries fixes, then trades it for you automatically on your paper account."
-        right={<Link href="/paper" className="hidden rounded-md border border-border px-3 py-1.5 text-sm hover:border-muted sm:block">Back to paper trading</Link>} />
+        right={<Link href="/paper" className="hidden rounded-lg border border-border px-3 py-1.5 text-sm hover:border-muted sm:block">Back to paper trading</Link>} />
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[320px_1fr]">
         <aside className="space-y-4">
-          <div className="space-y-3 rounded-xl border border-border bg-surface p-4">
+          <div className="space-y-3 rounded-2xl border border-border bg-surface p-4">
             <h2 className="font-medium">Setup</h2>
             <Field label="Strategy">
               <select className={input} value={form.strategy} onChange={(e) => {
@@ -389,12 +389,12 @@ export default function AgentPage() {
             </Field>
             {error && <p className="text-sm text-down">{error}</p>}
             <button onClick={testPast} disabled={busy}
-              className="w-full rounded-md bg-gold py-2 font-medium text-black shadow-[0_8px_30px_-12px_var(--gold)] transition hover:-translate-y-0.5 disabled:opacity-60">
+              className="w-full rounded-lg bg-gold py-2 font-medium text-black transition disabled:opacity-60">
               {busy ? "Working…" : "Test on the past"}
             </button>
             <button onClick={() => act(() => api.agentStart(config))} disabled={busy || running}
               title={running ? "Stop the running agent first" : undefined}
-              className="w-full rounded-md border border-gold py-2 text-sm font-medium text-gold transition hover:bg-gold/10 disabled:opacity-50">
+              className="w-full rounded-lg border border-gold py-2 text-sm font-medium text-gold transition hover:bg-gold/10 disabled:opacity-50">
               {running ? "Agent is running" : "Start on paper"}
             </button>
             <p className="text-xs leading-relaxed text-muted">
@@ -424,7 +424,7 @@ export default function AgentPage() {
                   <Stat label="Trades">{past.stats.trades}</Stat>
                   <Stat label="Win rate">{fmtPct(past.stats.win_rate_pct)}</Stat>
                 </div>
-                <div className="overflow-hidden rounded-xl border border-border"><EquityChart equity={past.equity} height={240} /></div>
+                <div className="overflow-hidden rounded-2xl border border-border"><EquityChart equity={past.equity} height={240} /></div>
 
                 <div>
                   <h3 className="mb-2 text-sm font-medium">What went wrong</h3>
@@ -440,7 +440,7 @@ export default function AgentPage() {
                   <div>
                     <h3 className="text-sm font-medium">Fixes tested on the same prices</h3>
                     <p className="mb-2 text-xs text-muted">Each fix is re-run on the whole test and on its last 30% alone. A fix that only helps on the whole test may just fit the past.</p>
-                    <div className="overflow-x-auto rounded-xl border border-border">
+                    <div className="overflow-x-auto rounded-2xl border border-border">
                       <table className="w-full min-w-[640px] text-sm">
                         <thead className="bg-surface text-left text-xs text-muted">
                           <tr>

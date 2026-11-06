@@ -34,7 +34,7 @@ const KIND_HELP: Record<Kind, string> = {
   stop: "Waits for the price to break through: a buy above the ask, a sell below the bid.",
 };
 
-const input = "w-full rounded-md border border-border bg-background px-3 py-2 text-base tabular-nums outline-none transition focus:border-gold sm:text-sm";
+const input = "w-full rounded-lg border border-border bg-background px-3 py-2 text-base tabular-nums outline-none transition focus:border-gold sm:text-sm";
 const px = (v: number | null | undefined) => (v == null ? "–" : v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 const signed = (v: number | null | undefined) => (v == null ? "–" : `${v > 0 ? "+" : ""}${fmtUsd(v)}`);
 const tone = (v: number | null | undefined) => (v == null || v === 0 ? "text-muted" : v > 0 ? "text-up" : "text-down");
@@ -75,7 +75,7 @@ function Quote({ price }: { price: PaperState["price"] }) {
         <p className={`text-xl font-semibold tabular-nums transition-colors ${cls}`}>{px(price.ask)}</p>
       </div>
       <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ${price.open ? "bg-up/15 text-up" : "bg-border text-muted"}`}>
-        <span className={`h-1.5 w-1.5 rounded-full ${price.open ? "animate-pulse bg-up" : "bg-muted"}`} />
+        <span className={`h-1.5 w-1.5 rounded-full ${price.open ? "breathe bg-up" : "bg-muted"}`} />
         {price.open ? (price.source === "live" ? "Live" : `Updated ${ago(price.age_seconds)}`) : `Market closed · last price ${ago(price.age_seconds)}`}
       </span>
     </div>
@@ -84,7 +84,7 @@ function Quote({ price }: { price: PaperState["price"] }) {
 
 function Stat({ label, children, hint, icon }: { label: string; children: React.ReactNode; hint?: React.ReactNode; icon: string }) {
   return (
-    <div className="rounded-xl border border-border bg-surface p-3.5">
+    <div className="rounded-2xl border border-border bg-surface p-3.5">
       <p className="flex items-center gap-1.5 text-xs text-muted"><Icon name={icon} className="h-3.5 w-3.5" />{label}</p>
       <p className="mt-1 text-lg font-semibold tabular-nums">{children}</p>
       {hint && <p className="mt-0.5 text-xs text-muted">{hint}</p>}
@@ -105,7 +105,7 @@ function Track({ p }: { p: PaperPosition }) {
     <div className="w-32">
       <div className="relative h-1.5 rounded-full bg-gradient-to-r from-down/60 via-border to-up/60">
         <span className="absolute top-1/2 h-3 w-px -translate-y-1/2 bg-muted" style={{ left: `${entry}%` }} title="Entry" />
-        <span className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gold shadow-[0_0_8px_var(--gold)] transition-all"
+        <span className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gold transition-all"
               style={{ left: `${mark}%` }} />
       </div>
       <div className="mt-1 flex justify-between text-[10px] tabular-nums text-muted">
@@ -127,7 +127,7 @@ function PositionRow({ p, onClose, onSave, busy }: {
   const [sl, setSl] = useState(p.stop_loss?.toString() ?? "");
   const [tp, setTp] = useState(p.take_profit?.toString() ?? "");
   return (
-    <div className="rise-in rounded-xl border border-border bg-surface p-3.5">
+    <div className="rise-in rounded-2xl border border-border bg-surface p-3.5">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <SidePill side={p.side} />
         <span className="text-sm tabular-nums">{p.units} oz</span>
@@ -138,10 +138,10 @@ function PositionRow({ p, onClose, onSave, busy }: {
         <Track p={p} />
         <span className="text-xs text-muted">Opened {when(p.opened_at)}{p.order_kind !== "market" && ` · ${p.order_kind} order`}</span>
         <div className="ml-auto flex gap-2">
-          <button onClick={() => setEdit(!edit)} className="rounded-md border border-border px-3 py-1.5 text-xs transition hover:border-muted">
+          <button onClick={() => setEdit(!edit)} className="rounded-lg border border-border px-3 py-1.5 text-xs transition hover:border-muted">
             {edit ? "Cancel" : "Edit stop / target"}
           </button>
-          <button onClick={onClose} disabled={busy} className="rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background transition hover:opacity-90 disabled:opacity-50">
+          <button onClick={onClose} disabled={busy} className="rounded-lg bg-foreground px-3 py-1.5 text-xs font-medium text-background transition hover:opacity-90 disabled:opacity-50">
             Close
           </button>
         </div>
@@ -153,7 +153,7 @@ function PositionRow({ p, onClose, onSave, busy }: {
         }}>
           <label className="text-xs text-muted">Stop loss<input value={sl} onChange={(e) => setSl(e.target.value)} inputMode="decimal" className={`${input} mt-1 w-32`} placeholder="none" /></label>
           <label className="text-xs text-muted">Take profit<input value={tp} onChange={(e) => setTp(e.target.value)} inputMode="decimal" className={`${input} mt-1 w-32`} placeholder="none" /></label>
-          <button disabled={busy} className="rounded-md bg-gold px-3 py-2 text-xs font-medium text-black disabled:opacity-50">Save</button>
+          <button disabled={busy} className="rounded-lg bg-gold px-3 py-2 text-xs font-medium text-black disabled:opacity-50">Save</button>
         </form>
       )}
     </div>
@@ -164,7 +164,7 @@ function OrderRow({ o, price, onCancel, busy }: { o: PaperOrder; price: PaperSta
   const ref = price ? (o.side === "long" ? price.ask : price.bid) : null;
   const gap = ref != null ? o.price - ref : null;
   return (
-    <div className="rise-in flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-dashed border-border bg-surface/60 p-3.5">
+    <div className="rise-in flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-dashed border-border bg-surface/60 p-3.5">
       <SidePill side={o.side} />
       <span className="rounded-full bg-border px-2 py-0.5 text-[11px] capitalize">{o.kind}</span>
       <span className="text-sm tabular-nums">{o.units} oz at {px(o.price)}</span>
@@ -172,7 +172,7 @@ function OrderRow({ o, price, onCancel, busy }: { o: PaperOrder; price: PaperSta
       <span className="text-xs text-muted tabular-nums">
         {o.stop_loss != null && `SL ${px(o.stop_loss)} `}{o.take_profit != null && `TP ${px(o.take_profit)}`}
       </span>
-      <button onClick={onCancel} disabled={busy} className="ml-auto rounded-md border border-border px-3 py-1.5 text-xs transition hover:border-down hover:text-down disabled:opacity-50">
+      <button onClick={onCancel} disabled={busy} className="ml-auto rounded-lg border border-border px-3 py-1.5 text-xs transition hover:border-down hover:text-down disabled:opacity-50">
         Cancel
       </button>
     </div>
@@ -195,6 +195,9 @@ function Ticket({ state, profile, onPlaced, busy, setBusy }: {
   const [sl, setSl] = useState("");
   const [tp, setTp] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // Orders go through a short review first, so the loss is read in plain words before anything is placed.
+  const [review, setReview] = useState(false);
+  useEffect(() => setReview(false), [side, kind, units, price, useSl, useTp, sl, tp]);
   const q = state.price;
   const long = side === "long";
 
@@ -231,11 +234,16 @@ function Ticket({ state, profile, onPlaced, busy, setBusy }: {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    if (!review) {
+      setReview(true);
+      return;
+    }
     setBusy(true);
     try {
       const body: PaperOrderInput = { side, kind, units: u, stop_loss: slN, take_profit: tpN, price: kind === "market" ? null : num(price) };
       const r = await api.paperOrder(body);
       const verb = long ? "Bought" : "Sold";
+      setReview(false);
       await onPlaced(r.position
         ? `${verb} ${u} oz at ${px(r.position.entry_price)}`
         : `${long ? "Buy" : "Sell"} ${kind} order placed: ${u} oz at ${px(r.order?.price)}`);
@@ -248,7 +256,7 @@ function Ticket({ state, profile, onPlaced, busy, setBusy }: {
 
   const closedForMarket = kind === "market" && q && !q.open;
   return (
-    <form onSubmit={submit} className="space-y-4 rounded-xl border border-border bg-surface p-4">
+    <form onSubmit={submit} className="space-y-4 rounded-2xl border border-border bg-surface p-4">
       <div className="grid grid-cols-2 gap-2">
         {(["long", "short"] as const).map((s) => (
           <button key={s} type="button" onClick={() => setSide(s)} aria-pressed={side === s}
@@ -347,11 +355,59 @@ function Ticket({ state, profile, onPlaced, busy, setBusy }: {
 
       {error && <p className="text-sm text-down">{error}</p>}
       {closedForMarket && <p className="text-xs text-muted">The market looks closed, so market orders are paused. Limit and stop orders still work.</p>}
-      <button disabled={busy || !u || !!closedForMarket}
-        className={`w-full rounded-lg py-2.5 text-sm font-semibold text-black transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:opacity-50 ${long ? "bg-up" : "bg-down"}`}>
-        {long ? "Buy" : "Sell"} {u || ""} oz {kind === "market" ? "at market" : `${kind} at ${px(num(price))}`}
-      </button>
+      {review ? (
+        <div className="rise-in space-y-3 rounded-2xl border border-calm/30 bg-calm/5 p-4 text-sm">
+          <p className="font-medium">Before you place it</p>
+          <p className="leading-relaxed text-muted">
+            You&apos;re {long ? "buying" : "selling"} <span className="text-foreground">{u} oz</span> of gold
+            {kind === "market" ? <> at about <span className="text-foreground">{px(entry)}</span></> : <> if the price reaches <span className="text-foreground">{px(num(price))}</span></>}.
+          </p>
+          <ul className="space-y-1.5">
+            <Check ok={slN != null}>
+              {slN != null && risk != null
+                ? <>If gold {long ? "falls" : "rises"} to {px(slN)}, the most you lose is {fmtUsd(risk)} ({riskPct!.toFixed(1)}% of your account).</>
+                : <>There&apos;s no stop loss, so the loss isn&apos;t limited.</>}
+            </Check>
+            {riskPct != null && (
+              <Check ok={!over}>
+                {over
+                  ? <>That&apos;s {(riskPct / limit).toFixed(1)} times your {limit}% limit. <button type="button" onClick={sizeByRisk} className="text-gold hover:underline">Size it to {limit}%</button></>
+                  : <>That&apos;s within your {limit}% limit for one trade.</>}
+              </Check>
+            )}
+            {reward != null && risk != null && risk > 0 && (
+              <Check ok={reward >= risk}>The target would make {(reward / risk).toFixed(1)} times what the stop would lose.</Check>
+            )}
+          </ul>
+          <p className="text-xs text-muted">Virtual money only. You can change anything, or simply not place it.</p>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => setReview(false)} className="rounded-full border border-border py-2.5 text-sm transition-colors hover:bg-surface-2">
+              Change it
+            </button>
+            <button disabled={busy || !u || !!closedForMarket}
+              className={`rounded-full py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-50 ${long ? "bg-up" : "bg-down"}`}>
+              {busy ? "Placing…" : `Place ${long ? "buy" : "sell"}`}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button disabled={busy || !u || !!closedForMarket}
+          className="w-full rounded-full border border-border bg-surface-2 py-2.5 text-sm font-medium transition-colors hover:border-gold/60 disabled:opacity-50">
+          Review {long ? "buy" : "sell"} of {u || ""} oz {kind === "market" ? "at market" : `${kind} at ${px(num(price))}`}
+        </button>
+      )}
     </form>
+  );
+}
+
+function Check({ ok, children }: { ok: boolean; children: React.ReactNode }) {
+  return (
+    <li className="flex gap-2">
+      <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${ok ? "bg-up/20 text-up" : "bg-gold/20 text-gold"}`}>
+        {ok ? <Icon name="check" className="h-3 w-3" strokeWidth={2.6} /> : <span className="text-[10px] font-bold">!</span>}
+      </span>
+      <span>{children}</span>
+    </li>
   );
 }
 
@@ -377,7 +433,7 @@ function Settings({ state, busy, act, onClose }: {
     </button>
   );
   return (
-    <div className="quiz-in mt-6 grid gap-5 rounded-xl border border-gold/30 bg-surface p-4 lg:grid-cols-3">
+    <div className="quiz-in mt-6 grid gap-5 rounded-2xl border border-gold/30 bg-surface p-4 lg:grid-cols-3">
       <section>
         <h3 className="flex items-center gap-2 text-sm font-medium"><Icon name="layers" className="h-4 w-4 text-gold" />Leverage</h3>
         <p className="mt-1 text-xs text-muted">
@@ -393,7 +449,7 @@ function Settings({ state, busy, act, onClose }: {
           if (l >= 1) act(() => api.paperLeverage(l), `Leverage set to 1:${l}`).then((ok) => ok && setCustom(""));
         }}>
           <input value={custom} onChange={(e) => setCustom(e.target.value)} inputMode="numeric" placeholder={`Other, up to ${st.max_leverage}`} className={`${input} w-44`} aria-label="Other leverage" />
-          <button disabled={busy || !custom} className="rounded-md border border-border px-3 text-xs transition hover:border-gold disabled:opacity-50">Set</button>
+          <button disabled={busy || !custom} className="rounded-lg border border-border px-3 text-xs transition hover:border-gold disabled:opacity-50">Set</button>
         </form>
         <p className="mt-2 text-[11px] text-muted">Applies to open positions too. Positions close automatically if equity falls below {st.stop_out_pct}% of the margin in use.</p>
       </section>
@@ -410,9 +466,9 @@ function Settings({ state, busy, act, onClose }: {
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2">
           <button disabled={busy || amt <= 0} onClick={() => act(() => api.paperFunds(amt), `Added ${fmtUsd(amt)}`)}
-            className="rounded-md bg-up py-2 text-sm font-medium text-black disabled:opacity-50">Add</button>
+            className="rounded-lg bg-up py-2 text-sm font-medium text-black disabled:opacity-50">Add</button>
           <button disabled={busy || amt <= 0} onClick={() => act(() => api.paperFunds(-amt), `Took out ${fmtUsd(amt)}`)}
-            className="rounded-md border border-border py-2 text-sm transition hover:border-muted disabled:opacity-50">Take out</button>
+            className="rounded-lg border border-border py-2 text-sm transition hover:border-muted disabled:opacity-50">Take out</button>
         </div>
       </section>
 
@@ -432,12 +488,12 @@ function Settings({ state, busy, act, onClose }: {
         {confirm ? (
           <div className="quiz-in mt-3 grid grid-cols-2 gap-2">
             <button disabled={busy} onClick={async () => { if (await act(() => api.paperReset(bal, lev), `New account: ${fmtUsd(bal)} at 1:${lev}`)) onClose(); }}
-              className="rounded-md bg-down py-2 text-sm font-medium text-black disabled:opacity-50">Yes, start over</button>
-            <button onClick={() => setConfirm(false)} className="rounded-md border border-border py-2 text-sm">Keep my account</button>
+              className="rounded-lg bg-down py-2 text-sm font-medium text-black disabled:opacity-50">Yes, start over</button>
+            <button onClick={() => setConfirm(false)} className="rounded-lg border border-border py-2 text-sm">Keep my account</button>
           </div>
         ) : (
           <button disabled={busy || bal < 1 || bal > st.max_balance} onClick={() => setConfirm(true)}
-            className="mt-3 w-full rounded-md border border-border py-2 text-sm transition hover:border-gold disabled:opacity-50">
+            className="mt-3 w-full rounded-lg border border-border py-2 text-sm transition hover:border-gold disabled:opacity-50">
             Start over with {bal >= 1 ? short(bal) : "…"} at 1:{lev}
           </button>
         )}
@@ -517,7 +573,7 @@ export default function PaperPage() {
         subtitle="Practise trading gold with virtual money on real XAU/USD prices. Orders fill at the real bid and ask, with spread and overnight swap, but no real money or broker is involved."
         right={
           <div className="flex flex-wrap items-center gap-2">
-            <Link href="/paper/agent" className="flex items-center gap-1.5 rounded-md border border-gold/60 px-3 py-1.5 text-sm text-gold transition hover:bg-gold/10">
+            <Link href="/paper/agent" className="flex items-center gap-1.5 rounded-lg border border-gold/60 px-3 py-1.5 text-sm text-gold transition hover:bg-gold/10">
               <Icon name="assistant" className="h-4 w-4" />Strategy agent
             </Link>
             {state && (
@@ -526,7 +582,7 @@ export default function PaperPage() {
               </button>
             )}
             <button onClick={() => setResetOpen(!resetOpen)} aria-expanded={resetOpen}
-              className={`rounded-md border px-3 py-1.5 text-sm transition ${resetOpen ? "border-gold" : "border-border hover:border-muted"}`}>
+              className={`rounded-lg border px-3 py-1.5 text-sm transition ${resetOpen ? "border-gold" : "border-border hover:border-muted"}`}>
               {resetOpen ? "Done" : "Account settings"}
             </button>
           </div>
@@ -534,12 +590,12 @@ export default function PaperPage() {
 
       {state && resetOpen && <Settings state={state} busy={busy} act={act} onClose={() => setResetOpen(false)} />}
       {error && !state && <p className="mt-6 text-sm text-down">{error}</p>}
-      {!state && !error && <div className="mt-6 h-40 animate-pulse rounded-xl bg-surface" />}
+      {!state && !error && <div className="mt-6 h-40 animate-pulse rounded-2xl bg-surface" />}
 
       {state && a && (
         <>
           <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
-            <div className="col-span-2 rounded-xl border border-gold/40 bg-gradient-to-br from-gold/15 to-transparent p-3.5 lg:col-span-1">
+            <div className="col-span-2 rounded-2xl border border-gold/40 bg-gradient-to-br from-gold/15 to-transparent p-3.5 lg:col-span-1">
               <p className="flex items-center gap-1.5 text-xs text-gold"><Icon name="wallet" className="h-3.5 w-3.5" />Account value (equity)</p>
               <p className="mt-1 text-2xl font-semibold tabular-nums"><CountUp value={a.equity} format={(v) => fmtUsd(v)} /></p>
               <p className={`text-xs tabular-nums ${tone(a.return_pct)}`}>
@@ -568,7 +624,7 @@ export default function PaperPage() {
 
           <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
             <div className="min-w-0 space-y-4">
-              <div className="rounded-xl border border-border bg-surface p-4"><Quote price={state.price} /></div>
+              <div className="rounded-2xl border border-border bg-surface p-4"><Quote price={state.price} /></div>
               <PriceChart height={360} initialTf="1m" />
 
               <Chips<Tab> value={tab} onChange={setTab} options={[
@@ -624,7 +680,7 @@ export default function PaperPage() {
 
               {tab === "report" && (
                 <div className="space-y-4">
-                  {report ? <ReportView report={report} kind="paper" /> : <div className="h-32 animate-pulse rounded-xl bg-surface" />}
+                  {report ? <ReportView report={report} kind="paper" /> : <div className="h-32 animate-pulse rounded-2xl bg-surface" />}
                   {report && report.stats.trades > 0 && <FitPanel load={api.paperFit} deps={[closedCount]} />}
                 </div>
               )}

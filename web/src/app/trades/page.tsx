@@ -8,7 +8,7 @@ import { Empty, Icon, PageHeader, SidePill } from "@/components/ui";
 import { api, fmtUsd, type ImportResult, type Report, type Trade, type TradeInput } from "@/lib/api";
 import { useUser } from "@/lib/useUser";
 
-const input = "w-full rounded-md border border-border bg-background px-3 py-1.5 outline-none focus:border-gold";
+const input = "w-full rounded-lg border border-border bg-background px-3 py-1.5 outline-none focus:border-gold";
 
 const blank = { side: "long", units: "", open_time: "", open_price: "", close_time: "", close_price: "", stop_loss: "", take_profit: "", fees: "", swap: "", notes: "" };
 
@@ -107,12 +107,12 @@ export default function TradesPage() {
         subtitle="Log your gold trades by hand or import your broker's history, and get the same report as a backtest." />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-        <form onSubmit={add} className="rounded-xl border border-border bg-surface/50 p-4">
+        <form onSubmit={add} className="rounded-2xl border border-border bg-surface/50 p-4">
           <h2 className="flex items-center gap-2 font-medium"><Icon name="trades" className="h-4 w-4 text-gold" /> Add a trade</h2>
           <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="text-sm">
               <span className="text-muted">Side</span>
-              <div className="mt-1 grid grid-cols-2 gap-1 rounded-md border border-border bg-background p-0.5">
+              <div className="mt-1 grid grid-cols-2 gap-1 rounded-lg border border-border bg-background p-0.5">
                 {(["long", "short"] as const).map((side) => (
                   <button key={side} type="button" onClick={() => setF({ ...f, side })} aria-pressed={f.side === side}
                     className={`rounded py-1 text-xs font-medium transition-colors ${f.side === side ? (side === "long" ? "bg-up text-black" : "bg-down text-black") : "text-muted hover:text-foreground"}`}>
@@ -133,12 +133,12 @@ export default function TradesPage() {
             <div className="col-span-2"><Field label="Notes"><input maxLength={1000} className={input} value={f.notes} onChange={set("notes")} /></Field></div>
           </div>
           <div className="mt-3 flex items-center gap-3">
-            <button disabled={busy} className="rounded-md bg-gold px-4 py-1.5 font-medium text-black disabled:opacity-60">Save trade</button>
+            <button disabled={busy} className="rounded-lg bg-gold px-4 py-1.5 font-medium text-black disabled:opacity-60">Save trade</button>
             <span className="text-xs text-muted">Leave the close fields empty for a trade that&apos;s still open.</span>
           </div>
         </form>
 
-        <div className="rounded-xl border border-border bg-surface/50 p-4">
+        <div className="rounded-2xl border border-border bg-surface/50 p-4">
           <h2 className="flex items-center gap-2 font-medium"><Icon name="upload" className="h-4 w-4 text-gold" /> Import from your broker</h2>
           <p className="mt-1 text-xs text-muted">
             Upload a CSV of your trade history. MetaTrader 4/5 and most broker exports work. Only gold (XAU) rows are
@@ -195,7 +195,7 @@ export default function TradesPage() {
       {trades.length > 0 && (
         <section>
           <h2 className="mb-2 font-medium">All trades ({trades.length})</h2>
-          <div className="overflow-x-auto rounded-xl border border-border">
+          <div className="overflow-x-auto rounded-2xl border border-border">
             <table className="w-full text-sm tabular-nums">
               <thead className="bg-surface text-left text-xs text-muted">
                 <tr>

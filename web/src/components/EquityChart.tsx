@@ -24,8 +24,8 @@ export default function EquityChart({ equity, height = 360 }: { equity: Report["
       pts.filter((p, i) => i === pts.length - 1 || pts[i + 1].time !== p.time);
     const eq = chart.addSeries(AreaSeries, {
       lineColor: v("--gold"),
-      topColor: "rgba(227,179,65,0.25)",
-      bottomColor: "rgba(227,179,65,0.02)",
+      topColor: "rgba(217,183,110,0.22)",
+      bottomColor: "rgba(217,183,110,0.02)",
       lineWidth: 2,
       priceFormat: { type: "price", precision: 0, minMove: 1 },
     });
@@ -34,8 +34,8 @@ export default function EquityChart({ equity, height = 360 }: { equity: Report["
       AreaSeries,
       {
         lineColor: v("--down"),
-        topColor: "rgba(239,83,80,0.05)",
-        bottomColor: "rgba(239,83,80,0.35)",
+        topColor: "rgba(217,142,134,0.04)",
+        bottomColor: "rgba(217,142,134,0.28)",
         invertFilledArea: true,
         lineWidth: 1,
         priceFormat: { type: "custom", formatter: (x: number) => `${x.toFixed(1)}%` },

@@ -3,97 +3,115 @@ import PriceChart from "@/components/PriceChart";
 import PriceTicker from "@/components/PriceTicker";
 import { Icon } from "@/components/ui";
 
-const features = [
-  { title: "Live gold chart", body: "Live XAU/USD candles from 1 second to 1 month, with monthly history back to 1833.", href: "/chart", icon: "candles" },
-  { title: "Strategy backtests", body: "Test 15 trend and mean-reversion strategies with real spreads and swaps.", href: "/backtest", icon: "backtest" },
-  { title: "Strategy finder", body: "See which strategies stayed inside your risk limits, tuned on past years and checked on later ones.", href: "/strategies", icon: "trophy" },
-  { title: "Trade scenarios", body: "See the range of prices and returns gold's past moves make possible for a trade you open today.", href: "/scenarios", icon: "scenarios" },
-  { title: "Paper trading", body: "Practise with $10,000 of virtual money: market, limit and stop orders on live gold prices.", href: "/paper", icon: "wallet" },
-  { title: "Trade log", body: "Log your own trades or import them from your broker, and get the same report as a backtest.", href: "/trades", icon: "trades" },
-  { title: "News that moves gold", body: "Headlines tagged as good or bad for gold, plus the Fed and inflation calendar.", href: "/news", icon: "news" },
-  { title: "Fits your risk appetite", body: "A 17-question quiz sets your profile and the limits your trading is measured against.", href: "/risk", icon: "risk" },
-  { title: "AI assistant", body: "Ask questions about your trades, backtests and the news, in plain language.", href: "/assistant", icon: "assistant" },
+/** Three steps instead of ten tiles: each path says what it is for and links to its tools. */
+const paths = [
+  {
+    n: 1, title: "Know your limits", icon: "risk",
+    body: "A short quiz sets how much you are comfortable losing on one trade and overall. Every other page checks against it.",
+    links: [{ href: "/risk", label: "Take the risk quiz" }],
+  },
+  {
+    n: 2, title: "Test ideas on the past", icon: "backtest",
+    body: "See how a strategy would have done on more than 20 years of gold prices, with real costs, before you trust it.",
+    links: [{ href: "/strategies", label: "Strategy finder" }, { href: "/backtest", label: "Backtest" }, { href: "/scenarios", label: "Scenarios" }],
+  },
+  {
+    n: 3, title: "Practise without risk", icon: "wallet",
+    body: "Trade live prices with virtual money, or let a strategy trade and explain what went wrong. Nothing real is at stake.",
+    links: [{ href: "/paper", label: "Paper trading" }, { href: "/paper/agent", label: "Strategy agent" }, { href: "/trades", label: "Trade log" }],
+  },
 ];
 
-const steps = [
-  { n: 1, title: "Find your risk profile", body: "Answer 17 questions to set your limits." },
-  { n: 2, title: "Test ideas on history", body: "Backtest strategies and explore scenarios." },
-  { n: 3, title: "Check your real trades", body: "Log them and see if they fit your limits." },
+const habits = [
+  { icon: "drop", title: "Decide the loss first", body: "Set where you would be wrong before you enter, and see it in dollars." },
+  { icon: "scale", title: "Size from the stop", body: "Let the distance to your stop set the size, so one trade can't hurt much." },
+  { icon: "clock", title: "There's always another trade", body: "Missing a move costs nothing. Taking a rushed one can." },
 ];
 
 export default function Home() {
   return (
     <div className="mx-auto max-w-6xl px-4">
-      <section className="relative py-12 sm:py-16">
-        <div aria-hidden className="pointer-events-none absolute -top-24 left-1/2 h-72 w-[42rem] max-w-full -translate-x-1/2 rounded-full bg-gold/15 blur-3xl" />
-        <div className="relative">
-          <span className="inline-flex items-center gap-2 rounded-full border border-gold/30 bg-gold/10 px-3 py-1 text-xs text-gold">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-gold" /> Free, and built for learning
-          </span>
-          <h1 className="mt-4 max-w-2xl text-4xl font-semibold tracking-tight sm:text-5xl">
-            Understand gold <span className="bg-gradient-to-r from-gold to-[#f5d77a] bg-clip-text text-transparent">before you trade it.</span>
-          </h1>
-          <p className="mt-4 max-w-2xl text-muted">
-            Chart XAU/USD live, backtest 15 strategies on 15+ years of data, practise with virtual money, explore what could happen to a trade, and see how
-            the news and your own risk limits relate to it all.
-          </p>
-          <div className="mt-7 flex flex-wrap gap-3">
-            <Link href="/signup" className="group flex items-center gap-2 rounded-md bg-gold px-5 py-2.5 font-medium text-black shadow-[0_8px_30px_-10px_var(--gold)] transition hover:-translate-y-0.5">
-              Create a free account
-              <Icon name="arrow" className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-            </Link>
-            <Link href="/chart" className="rounded-md border border-border px-5 py-2.5 transition hover:border-muted hover:bg-surface">
-              Open the chart
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      <section className="space-y-4">
-        <PriceTicker />
-        <PriceChart height={420} />
-      </section>
-
-      <section className="mt-14">
-        <h2 className="text-lg font-semibold">Everything in one place</h2>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          {features.map((f) => (
-            <Link key={f.title} href={f.href}
-              className="group relative overflow-hidden rounded-xl border border-border bg-surface p-5 transition hover:-translate-y-0.5 hover:border-gold/50 hover:shadow-[0_12px_40px_-20px_var(--gold)]">
-              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gold/10 text-gold transition group-hover:bg-gold group-hover:text-black">
-                <Icon name={f.icon} className="h-5 w-5" />
-              </span>
-              <h3 className="mt-4 font-medium">{f.title}</h3>
-              <p className="mt-1.5 text-sm text-muted">{f.body}</p>
-              <span className="mt-3 flex items-center gap-1 text-xs text-gold opacity-0 transition group-hover:opacity-100">
-                Open <Icon name="arrow" className="h-3 w-3" />
-              </span>
-            </Link>
-          ))}
-          <Link href="/signup"
-            className="flex flex-col justify-between rounded-xl border border-gold/40 bg-gradient-to-br from-gold/20 to-gold/5 p-5 transition hover:-translate-y-0.5">
-            <div>
-              <h3 className="font-medium">Start in a minute</h3>
-              <p className="mt-1.5 text-sm text-muted">A free account saves your backtests, trades and risk profile.</p>
-            </div>
-            <span className="mt-4 flex items-center gap-1 text-sm font-medium text-gold">Sign up free <Icon name="arrow" className="h-4 w-4" /></span>
+      <section className="py-14 sm:py-20">
+        <p className="text-sm text-gold">Free, and built for learning</p>
+        <h1 className="mt-3 max-w-2xl text-4xl font-semibold sm:text-5xl">
+          Understand gold, <span className="text-gold">calmly.</span>
+        </h1>
+        <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted">
+          Learn, test and practise at your own pace. Numbers come from real prices, the risk is shown before you act,
+          and nothing here uses real money.
+        </p>
+        <div className="mt-8 flex flex-wrap gap-3">
+          <Link href="/risk" className="group flex items-center gap-2 rounded-full bg-gold px-6 py-3 font-medium text-black transition-opacity hover:opacity-90">
+            Start with your risk profile
+            <Icon name="arrow" className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5" />
+          </Link>
+          <Link href="/chart" className="rounded-full border border-border px-6 py-3 transition-colors hover:bg-surface">
+            Look at the chart
           </Link>
         </div>
       </section>
 
-      <section className="mt-14 mb-4 rounded-xl border border-border bg-surface p-6">
-        <h2 className="text-lg font-semibold">How to use GoldLab</h2>
-        <ol className="mt-5 grid gap-6 sm:grid-cols-3">
-          {steps.map((s) => (
-            <li key={s.n} className="flex gap-3">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gold/40 text-sm font-semibold text-gold">{s.n}</span>
-              <div>
-                <p className="font-medium">{s.title}</p>
-                <p className="mt-0.5 text-sm text-muted">{s.body}</p>
+      <section className="card space-y-4 p-4 sm:p-6">
+        <PriceTicker />
+        <PriceChart height={380} />
+      </section>
+
+      <section className="mt-20">
+        <h2 className="text-2xl font-semibold">Three steps, at your own pace</h2>
+        <p className="mt-2 max-w-xl text-muted">Start anywhere. Each step uses what you set in the one before.</p>
+        <div className="mt-8 grid gap-5 md:grid-cols-3">
+          {paths.map((p) => (
+            <div key={p.n} className="card flex flex-col p-6">
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gold/10 text-gold">
+                  <Icon name={p.icon} className="h-5 w-5" />
+                </span>
+                <span className="text-sm text-muted">Step {p.n}</span>
               </div>
+              <h3 className="mt-5 text-lg font-medium">{p.title}</h3>
+              <p className="mt-2 flex-1 text-sm leading-relaxed text-muted">{p.body}</p>
+              <div className="mt-5 flex flex-wrap gap-2">
+                {p.links.map((l) => (
+                  <Link key={l.href} href={l.href}
+                    className="flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-sm transition-colors hover:border-gold/60 hover:text-gold">
+                    {l.label} <Icon name="arrow" className="h-3.5 w-3.5" />
+                  </Link>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="mt-20 grid gap-8 rounded-3xl border border-border bg-gradient-to-br from-surface to-background p-6 sm:p-10 md:grid-cols-[1fr_2fr]">
+        <div>
+          <h2 className="text-2xl font-semibold">Habits of a composed trader</h2>
+          <p className="mt-2 text-sm leading-relaxed text-muted">
+            The tools here are built around these, so the next decision feels considered rather than rushed.
+          </p>
+          <Link href="/assistant" className="mt-5 inline-flex items-center gap-1.5 text-sm text-gold hover:underline">
+            <Icon name="assistant" className="h-4 w-4" /> Ask the assistant anything
+          </Link>
+        </div>
+        <ul className="grid gap-6 sm:grid-cols-3">
+          {habits.map((h) => (
+            <li key={h.title}>
+              <Icon name={h.icon} className="h-5 w-5 text-calm" />
+              <p className="mt-3 font-medium">{h.title}</p>
+              <p className="mt-1 text-sm leading-relaxed text-muted">{h.body}</p>
             </li>
           ))}
-        </ol>
+        </ul>
+      </section>
+
+      <section className="mt-20 mb-6 flex flex-col items-start justify-between gap-4 rounded-3xl border border-gold/25 bg-gold/5 p-6 sm:flex-row sm:items-center sm:p-8">
+        <div>
+          <h2 className="text-lg font-medium">Keep your work in one place</h2>
+          <p className="mt-1 text-sm text-muted">A free account saves your risk profile, backtests, paper account and trades.</p>
+        </div>
+        <Link href="/signup" className="rounded-full bg-gold px-5 py-2.5 font-medium text-black transition-opacity hover:opacity-90">
+          Create a free account
+        </Link>
       </section>
     </div>
   );

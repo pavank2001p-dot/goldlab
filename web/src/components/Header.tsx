@@ -2,26 +2,109 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "./ui";
 import { api } from "@/lib/api";
 import { useUser } from "@/lib/useUser";
 
-const NAV = [
-  { href: "/chart", label: "Chart", icon: "candles" },
-  { href: "/backtest", label: "Backtest", icon: "backtest" },
-  { href: "/strategies", label: "Strategies", icon: "trophy" },
-  { href: "/scenarios", label: "Scenarios", icon: "scenarios" },
-  { href: "/paper", label: "Paper trading", icon: "wallet" },
-  { href: "/trades", label: "Trade log", icon: "trades" },
-  { href: "/news", label: "News", icon: "news" },
-  { href: "/risk", label: "Risk quiz", icon: "risk" },
-  { href: "/assistant", label: "Assistant", icon: "assistant" },
+type Item = { href: string; label: string; icon: string; blurb: string };
+
+/** Nine tools grouped into four plain steps, so the bar stays short and each menu says what a page is for. */
+export const GROUPS: { label: string; items: Item[] }[] = [
+  {
+    label: "Market",
+    items: [
+      { href: "/chart", label: "Chart", icon: "candles", blurb: "Gold's price, live and back to 1833" },
+      { href: "/news", label: "News and calendar", icon: "news", blurb: "What's moving gold, and the Fed dates ahead" },
+    ],
+  },
+  {
+    label: "Test ideas",
+    items: [
+      { href: "/strategies", label: "Strategy finder", icon: "trophy", blurb: "Strategies that stayed inside your limits" },
+      { href: "/backtest", label: "Backtest", icon: "backtest", blurb: "Run one strategy on past prices" },
+      { href: "/scenarios", label: "Scenarios", icon: "scenarios", blurb: "The range a trade could take from today" },
+    ],
+  },
+  {
+    label: "Practise",
+    items: [
+      { href: "/paper", label: "Paper trading", icon: "wallet", blurb: "Trade with virtual money, no risk" },
+      { href: "/paper/agent", label: "Strategy agent", icon: "bolt", blurb: "Let a strategy trade on paper and learn why" },
+      { href: "/trades", label: "Trade log", icon: "trades", blurb: "Review your own real trades" },
+    ],
+  },
+  {
+    label: "You",
+    items: [
+      { href: "/risk", label: "Risk profile", icon: "risk", blurb: "Find the limits that suit you" },
+      { href: "/assistant", label: "Assistant", icon: "assistant", blurb: "Ask anything in plain language" },
+    ],
+  },
 ];
+
+function active(path: string, href: string) {
+  // The agent lives under /paper, so Paper trading is only active on its own page.
+  if (href === "/paper") return path === "/paper";
+  return path === href || path.startsWith(href + "/");
+}
+
+function Menu({ group, path }: { group: (typeof GROUPS)[number]; path: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const on = group.items.some((i) => active(path, i.href));
+  useEffect(() => setOpen(false), [path]);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent | KeyboardEvent) => {
+      if (e instanceof KeyboardEvent ? e.key === "Escape" : !ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [open]);
+  return (
+    <div ref={ref} className="relative" onMouseLeave={() => setOpen(false)}>
+      <button type="button" onClick={() => setOpen(!open)} onMouseEnter={() => setOpen(true)} aria-expanded={open}
+        className={`flex items-center gap-1 rounded-full px-3.5 py-1.5 transition-colors ${on ? "bg-surface-2 text-foreground" : "text-muted hover:text-foreground"}`}>
+        {group.label}
+        <Icon name="down" className={`h-3 w-3 transition-transform duration-300 ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="absolute left-1/2 top-full z-50 w-72 -translate-x-1/2 pt-2">
+          <div className="rise-in rounded-2xl border border-border bg-surface p-2 shadow-2xl shadow-black/40">
+            {group.items.map((i) => (
+              <Link key={i.href} href={i.href} aria-current={active(path, i.href) ? "page" : undefined}
+                className={`flex gap-3 rounded-xl p-2.5 transition-colors ${active(path, i.href) ? "bg-surface-2" : "hover:bg-surface-2"}`}>
+                <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gold/10 text-gold">
+                  <Icon name={i.icon} className="h-4 w-4" />
+                </span>
+                <span>
+                  <span className="block text-sm font-medium text-foreground">{i.label}</span>
+                  <span className="block text-xs leading-snug text-muted">{i.blurb}</span>
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Header() {
   const path = usePathname();
   const { user, setUser } = useUser();
   const router = useRouter();
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => setMobile(false), [path]);
+  useEffect(() => {
+    document.body.style.overflow = mobile ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [mobile]);
 
   async function logout() {
     await api.logout();
@@ -30,48 +113,74 @@ export default function Header() {
     router.refresh();
   }
 
+  const account = user === undefined ? null : user ? (
+    <>
+      <Link href="/account" title={user.name || user.email} aria-label="Account"
+        className="flex h-8 w-8 items-center justify-center rounded-full border border-border text-muted transition-colors hover:text-foreground">
+        <Icon name="account" className="h-4 w-4" />
+      </Link>
+      <button onClick={logout} className="hidden rounded-full px-3 py-1.5 text-muted transition-colors hover:text-foreground sm:block">
+        Log out
+      </button>
+    </>
+  ) : (
+    <>
+      <Link href="/login" className="hidden text-muted transition-colors hover:text-foreground sm:block">Log in</Link>
+      <Link href="/signup" className="rounded-full bg-gold px-4 py-1.5 font-medium text-black transition-opacity hover:opacity-90">
+        Sign up free
+      </Link>
+    </>
+  );
+
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3">
-        <Link href="/" className="flex items-center gap-2 font-semibold">
-          <span className="inline-block h-3 w-3 rotate-45 rounded-[3px] bg-gradient-to-br from-gold to-[#b8860b] shadow-[0_0_10px_var(--gold)]" />
+    <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
+      <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
+        <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
+          <span className="inline-block h-3 w-3 rotate-45 rounded-[3px] bg-gradient-to-br from-gold to-[#b39257]" />
           GoldLab
         </Link>
-        <nav className="order-last -mx-4 flex w-[calc(100%+2rem)] gap-3 overflow-x-auto whitespace-nowrap px-4 text-sm text-muted sm:order-none sm:mx-0 sm:w-auto sm:px-0">
-          {NAV.map((n) => {
-            const on = path === n.href || path.startsWith(n.href + "/");
-            return (
-              <Link key={n.href} href={n.href} aria-current={on ? "page" : undefined}
-                className={`relative flex items-center gap-1.5 py-1 transition-colors ${on ? "text-foreground" : "hover:text-foreground"}`}>
-                <Icon name={n.icon} className={`h-3.5 w-3.5 ${on ? "text-gold" : ""}`} />
-                {n.label}
-                {on && <span className="absolute -bottom-[13px] left-0 right-0 hidden h-0.5 rounded-full bg-gold sm:block" />}
-              </Link>
-            );
-          })}
+        <nav aria-label="Main" className="hidden items-center gap-1 text-sm md:flex">
+          {GROUPS.map((g) => <Menu key={g.label} group={g} path={path} />)}
         </nav>
-        <div className="ml-auto flex items-center gap-3 text-sm">
-          {user === undefined ? null : user ? (
-            <>
-              <Link href="/account" title={user.name || user.email} aria-label="Account"
-                className="flex items-center gap-1.5 text-muted hover:text-foreground">
-                <Icon name="account" className="h-4 w-4" />
-                <span className="hidden max-w-40 truncate 2xl:inline">{user.name || user.email}</span>
-              </Link>
-              <button onClick={logout} className="rounded-md border border-border px-3 py-1.5 hover:bg-surface">
-                Log out
-              </button>
-            </>
-          ) : (
-            <>
-              <Link href="/login" className="text-muted hover:text-foreground">Log in</Link>
-              <Link href="/signup" className="rounded-md bg-gold px-3 py-1.5 font-medium text-black hover:opacity-90">
-                Sign up free
-              </Link>
-            </>
-          )}
+        <div className="ml-auto flex items-center gap-2 text-sm">
+          {account}
+          <button type="button" onClick={() => setMobile(!mobile)} aria-expanded={mobile} aria-label={mobile ? "Close menu" : "Open menu"}
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-border text-muted md:hidden">
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
+              {mobile ? <path d="M6 6l12 12M18 6 6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
+            </svg>
+          </button>
         </div>
       </div>
+      {mobile && (
+        <nav aria-label="Main" className="fan-in max-h-[calc(100dvh-57px)] overflow-y-auto border-t border-border/60 bg-background px-4 pb-8 pt-2 md:hidden">
+          {GROUPS.map((g) => (
+            <div key={g.label} className="mt-4">
+              <p className="px-2 text-xs font-medium uppercase tracking-wider text-muted">{g.label}</p>
+              <div className="mt-1.5">
+                {g.items.map((i) => (
+                  <Link key={i.href} href={i.href} aria-current={active(path, i.href) ? "page" : undefined}
+                    className={`flex items-center gap-3 rounded-xl px-2 py-2.5 ${active(path, i.href) ? "bg-surface-2" : ""}`}>
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gold/10 text-gold">
+                      <Icon name={i.icon} className="h-4 w-4" />
+                    </span>
+                    <span>
+                      <span className="block text-sm font-medium">{i.label}</span>
+                      <span className="block text-xs text-muted">{i.blurb}</span>
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          ))}
+          {user && (
+            <button onClick={logout} className="mt-6 w-full rounded-full border border-border py-2.5 text-sm text-muted">Log out</button>
+          )}
+          {user === null && (
+            <Link href="/login" className="mt-6 block w-full rounded-full border border-border py-2.5 text-center text-sm text-muted">Log in</Link>
+          )}
+        </nav>
+      )}
     </header>
   );
 }

@@ -8,7 +8,7 @@ import { Chips, Empty, Icon, PageHeader } from "@/components/ui";
 import { api, fmtPct, type Backtest, type BacktestParams, type BacktestSummary, type Strategy } from "@/lib/api";
 import { useUser } from "@/lib/useUser";
 
-const input = "w-full rounded-md border border-border bg-background px-3 py-1.5 outline-none focus:border-gold";
+const input = "w-full rounded-lg border border-border bg-background px-3 py-1.5 outline-none focus:border-gold";
 
 const DEFAULTS: Omit<BacktestParams, "strategy" | "params"> = {
   tf: "1d",
@@ -123,8 +123,8 @@ export default function BacktestPage() {
     <div className="mx-auto grid max-w-6xl gap-6 px-4 py-8 lg:grid-cols-[320px_1fr]">
       <form onSubmit={run} className="space-y-4">
         <PageHeader icon="backtest" title="Backtest a strategy" subtitle={`${strategies.length} strategies on gold's history`} />
-        <div className="rounded-xl border border-border bg-surface p-3">
-          <div className="flex items-center gap-2 rounded-md border border-border bg-background px-2.5">
+        <div className="rounded-2xl border border-border bg-surface p-3">
+          <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-2.5">
             <Icon name="search" className="h-4 w-4 text-muted" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search strategies"
               className="w-full bg-transparent py-1.5 text-sm outline-none" />
@@ -145,7 +145,7 @@ export default function BacktestPage() {
                 return (
                   <button key={x.key} type="button" role="radio" aria-checked={on} onClick={() => pick(x.key)}
                     className={`flex w-full items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left text-sm transition-colors ${on ? "border-gold bg-gold/10" : "border-transparent hover:bg-background"}`}>
-                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${x.kind === "trend" ? "bg-up/15 text-up" : x.kind === "reversion" ? "bg-[#7c9cff]/15 text-[#9fb4ff]" : "bg-gold/15 text-gold"}`}>
+                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${x.kind === "trend" ? "bg-up/15 text-up" : x.kind === "reversion" ? "bg-calm/15 text-calm" : "bg-gold/15 text-gold"}`}>
                       <Icon name={x.kind === "trend" ? "backtest" : x.kind === "reversion" ? "scale" : "layers"} className="h-4 w-4" />
                     </span>
                     <span className="min-w-0 flex-1 truncate">{x.label}</span>
@@ -228,7 +228,7 @@ export default function BacktestPage() {
         </details>
 
         {error && <p className="text-sm text-down">{error}</p>}
-        <button disabled={busy} className="w-full rounded-md bg-gold py-2 font-medium text-black shadow-[0_8px_30px_-12px_var(--gold)] transition hover:-translate-y-0.5 disabled:opacity-60">
+        <button disabled={busy} className="w-full rounded-lg bg-gold py-2 font-medium text-black transition disabled:opacity-60">
           {busy ? "Running…" : "Run backtest"}
         </button>
         <p className="text-xs text-muted">
@@ -253,7 +253,7 @@ export default function BacktestPage() {
         {history.length > 0 && (
           <div>
             <h2 className="mb-2 font-medium">Your backtests</h2>
-            <div className="overflow-x-auto rounded-xl border border-border">
+            <div className="overflow-x-auto rounded-2xl border border-border">
               <table className="w-full text-sm tabular-nums">
                 <thead className="bg-surface text-left text-xs text-muted">
                   <tr>

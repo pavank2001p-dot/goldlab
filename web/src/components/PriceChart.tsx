@@ -246,7 +246,7 @@ export default function PriceChart({ height = 520, initialTf = "1h" }: { height?
         <span className="font-medium">XAU/USD</span>
         {quote?.configured && (
           <span className="flex items-center gap-1.5 text-xs">
-            <span className={`h-2 w-2 rounded-full ${live ? "animate-pulse bg-up" : "bg-muted"}`} />
+            <span className={`h-2 w-2 rounded-full ${live ? "breathe bg-up" : "bg-muted"}`} />
             {live ? (
               <span className="tabular-nums">Live ${fmtPrice(quote!.price!)}</span>
             ) : (

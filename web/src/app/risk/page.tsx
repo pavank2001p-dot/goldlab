@@ -127,7 +127,7 @@ function Quiz({ questions, categories, initial, onDone }: {
       </div>
 
       {/* Question */}
-      <div key={q.key} className="quiz-card mt-6 rounded-xl border border-border bg-surface p-5 sm:p-6">
+      <div key={q.key} className="quiz-card mt-6 rounded-2xl border border-border bg-surface p-5 sm:p-6">
         <div className="flex items-center justify-between text-xs text-muted">
           <span className="flex items-center gap-1.5 text-gold">
             <Icon name={q.category} /> {categories[q.category]?.label}
@@ -143,7 +143,7 @@ function Quiz({ questions, categories, initial, onDone }: {
                 className={`flex items-center gap-3 rounded-lg border px-3.5 py-3 text-left text-sm transition-colors ${
                   on ? "border-gold bg-gold/10" : "border-border hover:border-muted hover:bg-background"
                 }`}>
-                <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md border text-xs font-semibold ${
+                <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border text-xs font-semibold ${
                   on ? "border-gold bg-gold text-black" : "border-border text-muted"
                 }`}>
                   {"ABCD"[i]}
@@ -166,18 +166,18 @@ function Quiz({ questions, categories, initial, onDone }: {
 
       <div className="mt-4 flex items-center justify-between gap-3">
         <button type="button" onClick={() => setStep(step - 1)} disabled={step === 0}
-          className="rounded-md border border-border px-4 py-2 text-sm disabled:opacity-40">
+          className="rounded-lg border border-border px-4 py-2 text-sm disabled:opacity-40">
           Back
         </button>
         <p className="hidden text-xs text-muted sm:block">Tip: press A to D to answer</p>
         {last || done ? (
           <button type="button" onClick={submit} disabled={!done || busy}
-            className="rounded-md bg-gold px-5 py-2 text-sm font-medium text-black disabled:opacity-50">
+            className="rounded-lg bg-gold px-5 py-2 text-sm font-medium text-black disabled:opacity-50">
             {busy ? "Saving…" : done ? "See my profile" : `${questions.length - answered} left to answer`}
           </button>
         ) : (
           <button type="button" onClick={() => setStep(step + 1)} disabled={answers[q.key] === undefined}
-            className="rounded-md border border-border px-4 py-2 text-sm disabled:opacity-40">
+            className="rounded-lg border border-border px-4 py-2 text-sm disabled:opacity-40">
             Next
           </button>
         )}
@@ -257,11 +257,11 @@ function Result({ p, profiles, onRetake }: { p: RiskProfile; profiles: Record<st
       {!p.complete && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gold/40 bg-gold/10 px-4 py-3 text-sm">
           <span>We&apos;ve added new questions to the quiz. Retake it to make your profile more accurate.</span>
-          <button onClick={onRetake} className="rounded-md bg-gold px-3 py-1.5 text-xs font-medium text-black">Answer the new questions</button>
+          <button onClick={onRetake} className="rounded-lg bg-gold px-3 py-1.5 text-xs font-medium text-black">Answer the new questions</button>
         </div>
       )}
 
-      <section className="grid items-center gap-6 rounded-xl border border-border bg-surface p-6 sm:grid-cols-[260px_1fr]">
+      <section className="grid items-center gap-6 rounded-2xl border border-border bg-surface p-6 sm:grid-cols-[260px_1fr]">
         <div className="flex flex-col items-center">
           <Gauge pct={pct} profile={p.profile} />
           <p className="-mt-1 text-xs tabular-nums text-muted">Score {p.score} of {p.max_score}</p>
@@ -271,8 +271,8 @@ function Result({ p, profiles, onRetake }: { p: RiskProfile; profiles: Record<st
           <h2 className="mt-1 text-3xl font-semibold" style={{ color: ZONE_COLOURS[idx] }}>{p.label}</h2>
           <p className="mt-2 text-sm leading-relaxed">{p.summary}</p>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Link href="/backtest" className="rounded-md bg-gold px-4 py-2 text-sm font-medium text-black">Try a backtest</Link>
-            <button onClick={onRetake} className="rounded-md border border-border px-4 py-2 text-sm">Retake the quiz</button>
+            <Link href="/backtest" className="rounded-lg bg-gold px-4 py-2 text-sm font-medium text-black">Try a backtest</Link>
+            <button onClick={onRetake} className="rounded-lg border border-border px-4 py-2 text-sm">Retake the quiz</button>
           </div>
         </div>
       </section>
@@ -281,7 +281,7 @@ function Result({ p, profiles, onRetake }: { p: RiskProfile; profiles: Record<st
         <h3 className="mb-2 text-sm font-medium">Your limits</h3>
         <div className="grid gap-3 sm:grid-cols-3">
           {limits.map((l) => (
-            <div key={l.field} className="rounded-xl border border-border bg-surface p-4">
+            <div key={l.field} className="rounded-2xl border border-border bg-surface p-4">
               <p className="text-xs text-muted">{l.title}</p>
               <p className="mt-1 text-2xl font-semibold tabular-nums">up to {l.value}</p>
               <p className="text-xs text-muted">{l.note}</p>
@@ -293,7 +293,7 @@ function Result({ p, profiles, onRetake }: { p: RiskProfile; profiles: Record<st
 
       <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
         {p.breakdown.length > 0 && (
-          <section className="rounded-xl border border-border bg-surface p-5">
+          <section className="rounded-2xl border border-border bg-surface p-5">
             <h3 className="text-sm font-medium">What shaped your result</h3>
             <p className="mt-0.5 text-xs text-muted">How cautious or bold your answers were in each part of the quiz.</p>
             <div className="mt-4 space-y-4">
@@ -313,7 +313,7 @@ function Result({ p, profiles, onRetake }: { p: RiskProfile; profiles: Record<st
           </section>
         )}
 
-        <section className="rounded-xl border border-border bg-surface p-5">
+        <section className="rounded-2xl border border-border bg-surface p-5">
           <h3 className="text-sm font-medium">In practice</h3>
           <p className="mt-0.5 text-xs text-muted">On a ${account.toLocaleString()} account:</p>
           <ul className="mt-4 space-y-3 text-sm">
