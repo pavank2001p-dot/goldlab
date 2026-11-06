@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePref } from "@/lib/prefs";
 import type { IChartApi, ISeriesApi, Logical, MouseEventParams, Time } from "lightweight-charts";
 import type { Bar } from "@/lib/api";
 
@@ -25,12 +26,7 @@ const TOOLS: { key: Tool; label: string; d: string; two: boolean }[] = [
   { key: "measure", label: "Measure: price change, % and bars", d: "M4 20 20 4M4 20v-5M4 20h5M20 4h-5M20 4v5", two: true },
 ];
 
-function load(): Drawing[] {
-  try { return JSON.parse(localStorage.getItem(KEY) ?? "[]"); } catch { return []; }
-}
-function save(ds: Drawing[]) {
-  try { localStorage.setItem(KEY, JSON.stringify(ds.filter((d) => d.kind !== "measure"))); } catch {}
-}
+const NONE: Drawing[] = [];
 
 function distToSeg(px: number, py: number, x1: number, y1: number, x2: number, y2: number) {
   const dx = x2 - x1, dy = y2 - y1, l = dx * dx + dy * dy;
@@ -39,7 +35,7 @@ function distToSeg(px: number, py: number, x1: number, y1: number, x2: number, y
 }
 
 /** Drawing tools over a lightweight-charts chart. Drawings are kept in time and price, so they stay put
- *  as you pan, zoom or change timeframe, and are saved in this browser. */
+ *  as you pan, zoom or change timeframe, and are saved with the account when signed in. */
 export default function Drawings({ chart, series, bars, accent }: {
   chart: IChartApi | null; series: ISeriesApi<"Candlestick"> | null; bars: React.RefObject<Bar[]>; accent: string;
 }) {
@@ -59,8 +55,10 @@ export default function Drawings({ chart, series, bars, accent }: {
   const state = useRef({ items, draft, sel, hidden, accent });
   state.current = { items, draft, sel, hidden, accent };
 
-  useEffect(() => setItems(load()), []);
-  const commit = useCallback((next: Drawing[]) => { setItems(next); save(next); }, []);
+  // Saved in this browser and, when signed in, in the account so drawings follow the user to other devices.
+  const [saved, setSaved] = usePref<Drawing[]>("drawings", KEY, NONE);
+  useEffect(() => setItems(saved), [saved]);
+  const commit = useCallback((next: Drawing[]) => { setItems(next); setSaved(next.filter((d) => d.kind !== "measure")); }, [setSaved]);
 
   // Time <-> x through the bar index, so points between bars and beyond the last one still place correctly.
   const xOf = useCallback((t: number): number | null => {
