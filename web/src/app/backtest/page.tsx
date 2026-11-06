@@ -182,7 +182,7 @@ export default function BacktestPage() {
             </select>
           </Field>
           <Field label="From">
-            <input type="date" className={input} value={form.start} min="2010-01-01" onChange={(e) => set({ start: e.target.value })} />
+            <input type="date" className={input} value={form.start} min="2003-05-01" onChange={(e) => set({ start: e.target.value })} />
           </Field>
           <Field label="To">
             <input type="date" className={input} value={form.end ?? ""} onChange={(e) => set({ end: e.target.value || null })} />

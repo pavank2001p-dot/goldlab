@@ -11,11 +11,12 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
 ## What's built
 
 - **Chart** (`web/src/components/PriceChart.tsx`, `api/app/prices.py`, `api/app/live.py`): 13 timeframes
-  from 1 second to 1 month, zoom, full screen and a live price. Hourly and daily bars go back to 2010;
+  from 1 second to 1 month, zoom, full screen and a live price. Hourly and daily bars go back to `HISTORY_SINCE` (2003-05-01);
   minute bars cover the last `MINUTE_DAYS` (60) and one-second bars the last `SECOND_DAYS` (2), from
   Dukascopy. Other timeframes are aggregated on request. Live quotes stream from Finnhub's websocket
   (OANDA:XAU_USD) when `FINNHUB_API_KEY` is set (turn off with `LIVE_PRICES=false`); they move the newest
-  candle and are saved as 1s/1m/1h bars until Dukascopy's data for that hour replaces them.
+  candle and are saved as 1s/1m/1h bars until Dukascopy's data for that hour replaces them. The **All**
+  button shows every month since 1833 on a log scale (see Data below).
 - **Accounts**: email and password sign-up, cookie sessions.
 - **Backtests** (`api/app/backtest.py`): 15 strategies. Trend following: moving-average crossover, price vs
   moving average, channel breakout, MACD, Supertrend, Parabolic SAR, ADX, Keltner breakout and momentum. Mean
@@ -83,7 +84,13 @@ Hourly bars are stored; daily bars are rebuilt from them (17:00 New York close).
 - `sample`: offline demo data. Real monthly average prices (World Bank via datasets/gold-prices, public
   domain) with simulated hours in between. The site labels it as demo data.
 
-Switching source wipes the old bars so the two never mix. `python -m app.ingest update` refreshes the
+Long-run history: `api/app/data/gold_history_monthly.csv` holds monthly USD prices since 1833 from the
+datahub.io gold-prices dataset (ODC-PDDL-1.0, public domain): yearly averages from Timothy Green's tables
+until 1959, then World Bank monthly averages. The API stores them as `1mo` bars at startup and uses them
+for monthly candles before the first daily bar, and the assistant uses them for questions about earlier
+years. Daily charts and backtests use only the hourly data.
+
+Switching source wipes the old bars so the two never mix (the monthly history is kept). `python -m app.ingest update` refreshes the
 latest bars; set `ENABLE_SCHEDULER=true` to have the API do this every `UPDATE_INTERVAL_MIN` minutes.
 
 ## Deploy
@@ -93,7 +100,8 @@ latest bars; set `ENABLE_SCHEDULER=true` to have the API do this every `UPDATE_I
 2. Variables: `DATABASE_URL=${{Postgres.DATABASE_URL}}`, `JWT_SECRET=<long random string>`,
    `COOKIE_SECURE=true`, `PRICE_SOURCE=dukascopy`, `ENABLE_SCHEDULER=true`, and for news and the
    assistant `FINNHUB_API_KEY` and `ANTHROPIC_API_KEY`. Optional: `ASSISTANT_DAILY_LIMIT` (default 20).
-3. First boot starts the backfill from 2010 in the background; the chart fills in as it runs.
+3. First boot starts the backfill from 2003 in the background; the chart fills in as it runs. A database
+   first filled from 2010 is extended back to `HISTORY_SINCE` once, on the next scheduled update.
 
 **Site on Vercel**
 1. Import the repo, root directory `web`.

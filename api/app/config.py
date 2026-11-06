@@ -1,4 +1,5 @@
 import os
+from datetime import date
 
 
 def _bool(name: str, default: bool) -> bool:
@@ -16,6 +17,9 @@ PRICE_SOURCE = os.getenv("PRICE_SOURCE", "dukascopy")
 ENABLE_SCHEDULER = _bool("ENABLE_SCHEDULER", False)
 UPDATE_INTERVAL_MIN = int(os.getenv("UPDATE_INTERVAL_MIN", "15"))
 SYMBOL = "XAUUSD"
+# Oldest hourly bar to fetch from Dukascopy, whose XAU/USD feed starts in 2003. Older years come
+# from the bundled monthly history (since 1833) and show on the monthly chart only.
+HISTORY_SINCE = date.fromisoformat(os.getenv("HISTORY_SINCE", "2003-05-01"))
 # Short-timeframe history kept for the chart: minute bars and one-second bars.
 MINUTE_DAYS = int(os.getenv("MINUTE_DAYS", "60"))
 SECOND_DAYS = int(os.getenv("SECOND_DAYS", "2"))

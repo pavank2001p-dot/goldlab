@@ -4,7 +4,7 @@ import PriceTicker from "@/components/PriceTicker";
 import { Icon } from "@/components/ui";
 
 const features = [
-  { title: "Live gold chart", body: "Live XAU/USD candles from 1 second to 1 month, with history back to 2010.", href: "/chart", icon: "candles" },
+  { title: "Live gold chart", body: "Live XAU/USD candles from 1 second to 1 month, with monthly history back to 1833.", href: "/chart", icon: "candles" },
   { title: "Strategy backtests", body: "Test 15 trend and mean-reversion strategies with real spreads and swaps.", href: "/backtest", icon: "backtest" },
   { title: "Trade scenarios", body: "See the range of prices and returns gold's past moves make possible for a trade you open today.", href: "/scenarios", icon: "scenarios" },
   { title: "Paper trading", body: "Practise with $10,000 of virtual money: market, limit and stop orders on live gold prices.", href: "/paper", icon: "wallet" },

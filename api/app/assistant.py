@@ -61,7 +61,8 @@ TOOLS = [
     {
         "name": "price_history",
         "description": "Gold prices between two dates: open, close, high, low, return, and up to 60 evenly spaced "
-        "daily closes. Data starts in 2010.",
+        "daily closes. Daily data starts in 2003; for earlier dates (back to 1833) it returns monthly prices "
+        "instead.",
         "input_schema": _obj({
             "start": {"type": "string", "format": "date", "description": "YYYY-MM-DD"},
             "end": {"type": "string", "format": "date", "description": "YYYY-MM-DD, exclusive; omit for today"},
@@ -198,10 +199,37 @@ def _date(v: str | None) -> datetime | None:
     return datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
 
 
+def _monthly(start: datetime | None, end: datetime | None) -> list[dict]:
+    sql = "SELECT extract(epoch FROM ts)::bigint AS t, open AS o, high AS h, low AS l, close AS c FROM candles WHERE symbol = %s AND tf = '1mo'"
+    args: list = [config.SYMBOL]
+    if start:
+        sql += " AND ts >= %s"
+        args.append(start)
+    if end:
+        sql += " AND ts < %s"
+        args.append(end)
+    with db.conn() as c:
+        return c.execute(sql + " ORDER BY ts", args).fetchall()
+
+
 def t_price_history(i: dict, user_id: int) -> dict:
-    bars = _daily_closes(_date(i["start"]), _date(i.get("end")))
+    start, end = _date(i["start"]), _date(i.get("end"))
+    bars = _daily_closes(start, end)
+    if not bars or (start and bars[0]["t"] - start.timestamp() > 45 * 86400):
+        # The range starts before the daily data: use monthly prices (annual averages before 1960).
+        months = _monthly(start, end)
+        if months:
+            step = max(1, len(months) // 60)
+            return {
+                "resolution": "monthly averages (one value per year before 1960), no daily highs or lows",
+                "first_month": _day(months[0]["t"])[:7], "last_month": _day(months[-1]["t"])[:7],
+                "first_price": round(months[0]["c"], 2), "last_price": round(months[-1]["c"], 2),
+                "return_pct": _pct(months[0]["c"], months[-1]["c"]),
+                "high": round(max(m["c"] for m in months), 2), "low": round(min(m["c"] for m in months), 2),
+                "prices": [[_day(m["t"])[:7], round(m["c"], 2)] for m in months[::step]],
+            }
     if not bars:
-        return {"error": "No prices in that range. Data starts in 2010."}
+        return {"error": "No prices in that range. Monthly prices start in 1833."}
     step = max(1, len(bars) // 60)
     hi = max(bars, key=lambda b: b["h"])
     lo = min(bars, key=lambda b: b["l"])
