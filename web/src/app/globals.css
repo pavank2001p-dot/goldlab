@@ -48,7 +48,12 @@ body {
 h1, h2, h3 { letter-spacing: -0.01em; line-height: 1.25; }
 
 /* Shared calm card. */
-.card { border: 1px solid var(--border); background: var(--surface); border-radius: 1rem; }
+.card {
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: linear-gradient(180deg, var(--surface-2), var(--surface) 60%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04), 0 24px 48px -28px rgb(0 0 0 / 0.7);
+}
 
 
 @keyframes quiz-in {
