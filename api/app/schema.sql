@@ -236,3 +236,23 @@ CREATE TABLE IF NOT EXISTS challenge_entries (
     PRIMARY KEY (user_id, week)
 );
 CREATE INDEX IF NOT EXISTS challenge_entries_week_idx ON challenge_entries (week, return_pct DESC);
+
+-- A review of each closed paper trade, written once and kept. source is 'ai' or 'checklist'.
+CREATE TABLE IF NOT EXISTS trade_reviews (
+    position_id BIGINT PRIMARY KEY REFERENCES paper_positions(id) ON DELETE CASCADE,
+    user_id     BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    review      JSONB NOT NULL,
+    source      TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS trade_reviews_user_idx ON trade_reviews (user_id, created_at);
+
+-- Lessons on the learning path that the user has finished, with how their replay went.
+CREATE TABLE IF NOT EXISTS lesson_progress (
+    user_id      BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    lesson       TEXT NOT NULL,
+    return_pct   DOUBLE PRECISION NOT NULL,
+    trades       INTEGER NOT NULL,
+    completed_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (user_id, lesson)
+);

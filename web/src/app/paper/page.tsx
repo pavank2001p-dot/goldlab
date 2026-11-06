@@ -17,6 +17,7 @@ import { useUser } from "@/lib/useUser";
 import AlertsCard from "@/components/practice/AlertsCard";
 import Insights from "@/components/practice/Insights";
 import SizeCalculator from "@/components/practice/SizeCalculator";
+import TradeReview from "@/components/practice/TradeReview";
 
 type Side = "long" | "short";
 type Kind = "market" | "limit" | "stop";
@@ -525,6 +526,7 @@ export default function PaperPage() {
     try { setSetupDone(!!localStorage.getItem(SETUP_KEY)); } catch {}
   }, []);
   const [error, setError] = useState<string | null>(null);
+  const [grades, setGrades] = useState<Record<string, "A" | "B" | "C" | "D">>({});
   const seen = useRef<Set<number> | null>(null);
   const openIds = useRef<Set<number> | null>(null);
 
@@ -561,6 +563,9 @@ export default function PaperPage() {
   }, [user, load]);
 
   const closedCount = state?.account.closed_trades ?? 0;
+  useEffect(() => {
+    if (user && tab === "history") api.reviewGrades().then(setGrades, () => {});
+  }, [user, tab]);
   useEffect(() => {
     if (user && tab === "report") api.paperReport().then(setReport, () => {});
   }, [user, tab, closedCount]);
@@ -713,6 +718,7 @@ export default function PaperPage() {
                       <span className="rounded-full bg-border px-2 py-0.5 text-[11px] text-muted">{REASON[h.close_reason ?? ""]}</span>
                       <span className="text-xs text-muted">{h.closed_at && when(h.closed_at)}</span>
                       <span className={`ml-auto font-medium tabular-nums ${tone(h.pnl)}`}>{signed(h.pnl)}</span>
+                      <TradeReview id={h.id} grade={grades[String(h.id)]} onGraded={(g) => setGrades((m) => ({ ...m, [String(h.id)]: g }))} />
                     </div>
                   ))}
                 </div>
