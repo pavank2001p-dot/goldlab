@@ -10,7 +10,7 @@ export default function ChartPage() {
     <div className="mx-auto max-w-6xl space-y-4 px-4 py-8">
       <PageHeader icon="candles" title="Gold chart" subtitle="XAU/USD from 1-second to 1-month candles, updating live." />
       <PriceTicker />
-      <PriceChart height={620} />
+      <PriceChart height={620} tools />
       <p className="text-xs text-muted">
         Chart times are in UTC. Daily candles close at 5pm New York time. Live prices are OANDA quotes via
         Finnhub. Hourly and daily history goes back to 2003, minute history covers the last 60 days and

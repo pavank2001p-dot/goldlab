@@ -634,7 +634,7 @@ export default function PaperPage() {
           <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
             <div className="min-w-0 space-y-4">
               <div className="rounded-2xl border border-border bg-surface p-4"><Quote price={state.price} /></div>
-              <PriceChart height={360} initialTf="1m" />
+              <PriceChart height={400} initialTf="1m" tools />
 
               <Chips<Tab> value={tab} onChange={setTab} options={[
                 { key: "positions", label: "Open positions", count: state.positions.length },
