@@ -28,7 +28,7 @@ export default function AccountPage() {
   return (
     <div className="mx-auto max-w-4xl px-4 py-10">
       <div className="flex items-center gap-4">
-        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-gold to-[#b39257] text-lg font-semibold text-black">
+        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-gold to-[#b8860b] text-lg font-semibold text-black">
           {(user.name || user.email)[0].toUpperCase()}
         </span>
         <div>

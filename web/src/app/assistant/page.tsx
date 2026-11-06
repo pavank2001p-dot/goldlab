@@ -20,7 +20,7 @@ const SUGGESTIONS = [
 
 function Avatar({ who }: { who: "user" | "assistant" }) {
   return who === "assistant" ? (
-    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-gold to-[#b39257] text-black">
+    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-gold to-[#b8860b] text-black">
       <Icon name="assistant" className="h-4 w-4" />
     </span>
   ) : (
@@ -206,7 +206,7 @@ export default function AssistantPage() {
               maxLength={2000}
               placeholder={status?.remaining === 0 ? "You've used today's questions. Back tomorrow (midnight UTC)." : "Ask about gold or your results…"}
               disabled={waiting || status?.remaining === 0}
-              className="min-w-0 flex-1 resize-none rounded-2xl border border-border bg-surface px-3.5 py-2.5 text-base outline-none transition focus:border-gold focus:shadow-[0_0_0_3px_rgba(217,183,110,0.12)] sm:text-sm"
+              className="min-w-0 flex-1 resize-none rounded-2xl border border-border bg-surface px-3.5 py-2.5 text-base outline-none transition focus:border-gold focus:shadow-[0_0_0_3px_rgba(232,181,62,0.15)] sm:text-sm"
             />
             <div className="flex flex-col gap-2">
               <button type="submit" disabled={waiting || !q.trim() || status?.remaining === 0}

@@ -136,7 +136,7 @@ export default function Header() {
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
       <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
         <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
-          <span className="inline-block h-3 w-3 rotate-45 rounded-[3px] bg-gradient-to-br from-gold to-[#b39257]" />
+          <span className="inline-block h-3 w-3 rotate-45 rounded-[3px] bg-gradient-to-br from-gold to-[#b8860b]" />
           GoldLab
         </Link>
         <nav aria-label="Main" className="hidden items-center gap-1 text-sm md:flex">

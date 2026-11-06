@@ -1,18 +1,18 @@
 @import "tailwindcss";
 
-/* A calm, low-glare palette: deep slate instead of black, champagne gold, and a muted
-   sage and clay for gains and losses so a red day reads as information, not an alarm. */
+/* Bold, high-contrast palette: deep charcoal, rich gold, and clear gain and loss colours.
+   Calm comes from less on each screen, not from washing the colours out. */
 :root {
-  --background: #0f141a;
-  --surface: #161c23;
-  --surface-2: #1c232c;
-  --border: #27313c;
-  --foreground: #e7eaee;
-  --muted: #95a1ae;
-  --gold: #d9b76e;
-  --up: #6fbaa6;
-  --down: #d98e86;
-  --calm: #8db4d8;
+  --background: #0b0e12;
+  --surface: #13171d;
+  --surface-2: #1a1f27;
+  --border: #252c36;
+  --foreground: #eef0f3;
+  --muted: #8f99a5;
+  --gold: #e8b53e;
+  --up: #26b89a;
+  --down: #ef5a55;
+  --calm: #7fb0e6;
 }
 
 @theme inline {
@@ -35,7 +35,7 @@ html { scroll-behavior: smooth; }
 body {
   /* A faint wash of light at the top so the page feels open rather than a black box. */
   background:
-    radial-gradient(1200px 500px at 50% -200px, rgb(141 180 216 / 0.07), transparent 70%),
+    radial-gradient(1200px 500px at 50% -200px, rgb(232 181 62 / 0.06), transparent 70%),
     var(--background);
   background-attachment: fixed;
   color: var(--foreground);
@@ -43,7 +43,7 @@ body {
   line-height: 1.6;
   font-feature-settings: "cv11", "ss01";
 }
-::selection { background: rgb(217 183 110 / 0.3); }
+::selection { background: rgb(232 181 62 / 0.3); }
 :focus-visible { outline: 2px solid var(--calm); outline-offset: 2px; border-radius: 6px; }
 h1, h2, h3 { letter-spacing: -0.01em; line-height: 1.25; }
 

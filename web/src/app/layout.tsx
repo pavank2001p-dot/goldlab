@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   description: "Chart, backtest and understand gold trading, with news insights matched to your risk appetite.",
 };
 
-export const viewport: Viewport = { themeColor: "#0f141a" };
+export const viewport: Viewport = { themeColor: "#0b0e12" };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (

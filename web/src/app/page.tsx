@@ -32,8 +32,8 @@ export default function Home() {
   return (
     <div className="mx-auto max-w-6xl px-4">
       <section className="py-14 sm:py-20">
-        <p className="text-sm text-gold">Free, and built for learning</p>
-        <h1 className="mt-3 max-w-2xl text-4xl font-semibold sm:text-5xl">
+        <p className="text-sm font-medium uppercase tracking-wider text-gold">Free, and built for learning</p>
+        <h1 className="mt-3 max-w-2xl text-4xl font-bold tracking-tight sm:text-6xl">
           Understand gold, <span className="text-gold">calmly.</span>
         </h1>
         <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted">
@@ -57,7 +57,7 @@ export default function Home() {
       </section>
 
       <section className="mt-20">
-        <h2 className="text-2xl font-semibold">Three steps, at your own pace</h2>
+        <h2 className="text-2xl font-bold">Three steps, at your own pace</h2>
         <p className="mt-2 max-w-xl text-muted">Start anywhere. Each step uses what you set in the one before.</p>
         <div className="mt-8 grid gap-5 md:grid-cols-3">
           {paths.map((p) => (
@@ -85,7 +85,7 @@ export default function Home() {
 
       <section className="mt-20 grid gap-8 rounded-3xl border border-border bg-gradient-to-br from-surface to-background p-6 sm:p-10 md:grid-cols-[1fr_2fr]">
         <div>
-          <h2 className="text-2xl font-semibold">Habits of a composed trader</h2>
+          <h2 className="text-2xl font-bold">Habits of a composed trader</h2>
           <p className="mt-2 text-sm leading-relaxed text-muted">
             The tools here are built around these, so the next decision feels considered rather than rushed.
           </p>
