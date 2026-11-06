@@ -159,3 +159,35 @@ CREATE TABLE IF NOT EXISTS paper_positions (
     pnl          DOUBLE PRECISION
 );
 CREATE INDEX IF NOT EXISTS paper_positions_user_idx ON paper_positions (user_id, closed_at);
+
+-- Strategy agent: runs one strategy automatically in the user's paper account.
+CREATE TABLE IF NOT EXISTS paper_agents (
+    user_id     BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    config      JSONB NOT NULL,                     -- strategy, settings, candles, direction, stop, size
+    status      TEXT NOT NULL DEFAULT 'running' CHECK (status IN ('running', 'stopped')),
+    started_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    stopped_at  TIMESTAMPTZ,
+    last_bar    TIMESTAMPTZ,                        -- newest closed candle it has acted on
+    signal      SMALLINT NOT NULL DEFAULT 0,
+    blocked     SMALLINT NOT NULL DEFAULT 0,        -- side stopped out; waits for the signal to change
+    position_id BIGINT,
+    note        TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS paper_agent_log (
+    id      BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    ts      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    kind    TEXT NOT NULL,
+    message TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS paper_agent_log_user_idx ON paper_agent_log (user_id, id DESC);
+
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS agent BOOLEAN NOT NULL DEFAULT false;
+
+-- The latest past test and its diagnosis, for the AI coach to read.
+CREATE TABLE IF NOT EXISTS agent_analyses (
+    user_id    BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    result     JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

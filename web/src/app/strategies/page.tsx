@@ -46,6 +46,12 @@ function backtestLink(r: PlanResult, plan: Plan, input: PlanInput): string {
   return `/backtest?plan=${encodeURIComponent(JSON.stringify(p))}`;
 }
 
+function agentLink(r: PlanResult, plan: Plan, input: PlanInput): string {
+  const c = { strategy: r.strategy, params: r.params, tf: plan.tf, direction: input.direction, stop_loss_pct: r.stop_loss_pct,
+    size_pct: r.size_pct, years: plan.tf === "1h" ? Math.min(plan.years, 2) : Math.min(plan.years, 20) };
+  return `/paper/agent?plan=${encodeURIComponent(JSON.stringify(c))}`;
+}
+
 function StatsCol({ title, period, s, fit }: { title: string; period: string; s: PlanStats; fit: FitCheck["level"] }) {
   return (
     <div className="rounded-lg bg-background p-3">
@@ -101,9 +107,14 @@ function Pick({ r, rank, plan, input }: { r: PlanResult; rank: number; plan: Pla
         <span className={`flex items-center gap-1.5 text-sm ${h.ok ? "text-up" : "text-gold"}`}>
           <Icon name={h.ok ? "check" : "bolt"} className="h-4 w-4" />{h.text}
         </span>
-        <Link href={backtestLink(r, plan, input)} className="rounded-md border border-gold px-3 py-1.5 text-sm text-gold hover:bg-gold/10">
-          Open in backtester
-        </Link>
+        <div className="flex gap-2">
+          <Link href={backtestLink(r, plan, input)} className="rounded-md border border-border px-3 py-1.5 text-sm hover:border-gold hover:text-gold">
+            Open in backtester
+          </Link>
+          <Link href={agentLink(r, plan, input)} className="rounded-md border border-gold px-3 py-1.5 text-sm text-gold hover:bg-gold/10">
+            Run as agent
+          </Link>
+        </div>
       </div>
     </article>
   );
