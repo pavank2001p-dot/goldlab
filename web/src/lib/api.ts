@@ -446,6 +446,14 @@ export type Challenge = {
   last_week: (Board & { week: string }) | null;
 };
 
+export type TradeReview = {
+  grade: "A" | "B" | "C" | "D"; headline: string; went_well: string[]; work_on: string[]; next_time: string;
+  checklist_grade: string; source: "ai" | "checklist"; created_at: string;
+  facts: { risked_pct: number | null; planned_reward_to_risk: number | null; result_in_r: number | null; trend_before_entry: string | null };
+};
+export type LessonSummary = { id: string; year: number; title: string; day: string; minutes: number; summary: string; watch: string[]; takeaway: string };
+export type Lesson = LessonSummary & { body: string[]; next: string | null };
+export type LessonProgress = Record<string, { return_pct: number; trades: number; completed_at: string }>;
 export type ChartMarker = { t: number; title: string; kind: "fed" | "inflation" | "jobs" | "growth" | "dollar" | "shock" | "other"; impact: string; why: string; history: boolean };
 
 export const api = {
@@ -468,6 +476,13 @@ export const api = {
     call<ReplayScore & { board: Board }>("/practice/challenge", { method: "POST", body: JSON.stringify(b) }),
   challengeVisibility: (pub: boolean, nickname: string | null) =>
     call<Board>("/practice/challenge", { method: "PATCH", body: JSON.stringify({ public: pub, nickname }) }),
+  review: (id: number) => call<TradeReview>(`/practice/reviews/${id}`, { method: "POST" }),
+  reviewGrades: () => call<Record<string, TradeReview["grade"]>>("/practice/reviews"),
+  lessons: () => call<LessonSummary[]>("/learn"),
+  lesson: (id: string) => call<Lesson>(`/learn/${encodeURIComponent(id)}`),
+  lessonProgress: () => call<LessonProgress>("/learn/progress"),
+  completeLesson: (id: string, b: { return_pct: number; trades: number }) =>
+    call<LessonProgress>(`/learn/${encodeURIComponent(id)}/complete`, { method: "POST", body: JSON.stringify(b) }),
   achievements: () => call<Achievements>("/achievements"),
   customCatalog: () => call<CustomCatalog>("/custom-strategies/catalog"),
   customList: () => call<SavedStrategy[]>("/custom-strategies"),

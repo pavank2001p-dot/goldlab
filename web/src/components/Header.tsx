@@ -32,6 +32,7 @@ export const GROUPS: { label: string; items: Item[] }[] = [
     label: "Practise",
     items: [
       { href: "/paper", label: "Paper trading", icon: "wallet", blurb: "Trade with virtual money, no risk" },
+      { href: "/learn", label: "Lessons", icon: "book", blurb: "Short stories from gold's history, then trade that week" },
       { href: "/paper/replay", label: "Replay a day", icon: "clock", blurb: "Trade a past day candle by candle" },
       { href: "/paper/challenge", label: "Weekly challenge", icon: "trophy", blurb: "Same day for everyone, with an opt-in leaderboard" },
       { href: "/paper/agent", label: "Strategy agent", icon: "bolt", blurb: "Let a strategy trade on paper and learn why" },
