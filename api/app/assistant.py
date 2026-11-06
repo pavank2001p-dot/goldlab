@@ -39,6 +39,7 @@ Rules you always follow
 - When results come from backtests, remind the user that past results don't guarantee future ones, in a few words, once.
 - If price_summary says the data source is "sample", tell the user the prices are demo data, not real market prices.
 - When suggesting a trade size, base it on the user's risk profile limits and the profile_fit tool, and present it as what would have stayed within their own limits.
+- When asked what went wrong with a strategy or how to handle a situation, use diagnose_strategy or my_agent. Explain the findings with their dates and the kind of market at the time, and present fixes only as changes that were tested on past prices with the results the tool gave, including whether they held up on the last 30%. Say that a fix that helped in the past may not help in future.
 - Keep answers short: a few sentences or a short list. Use the user's currency (USD) and say "ounces" for size.
 - If asked about something unrelated to gold, markets or this site, say briefly that you can only help with those topics."""
 
@@ -126,6 +127,29 @@ TOOLS = [
         "description": "Recent news headlines that mention gold or its drivers, each tagged bullish, bearish or "
         "neutral for gold with a one-line reason.",
         "input_schema": _obj({"limit": {"type": "integer", "description": "Up to 30; default 10"}}),
+    },
+    {
+        "name": "my_agent",
+        "description": "The user's paper-trading strategy agent: its settings, whether it is running, its recent actions, "
+        "its live paper results with an explanation of what went wrong, and the latest past test with its diagnosis "
+        "(findings with dates, the worst period with events and headlines, and fixes tested on the same prices).",
+        "input_schema": _obj({}),
+    },
+    {
+        "name": "diagnose_strategy",
+        "description": "Backtest a strategy over the last N years and explain what went wrong: losses by kind of market "
+        "(uptrend, downtrend, sideways), direction, stops against volatility, costs, losing streaks, the worst drawdown "
+        "with the Fed and inflation dates and gold headlines from then, plus fixes re-tested on the same prices and on "
+        "the last 30% alone. Trades are sized as a % of the account.",
+        "input_schema": _obj({
+            "strategy": {"type": "string", "enum": [k for k in backtest.STRATEGIES if k != "buy_and_hold"]},
+            "params": {"type": "object", "additionalProperties": {"type": "number"}},
+            "tf": {"type": "string", "enum": ["1h", "1d"]},
+            "direction": {"type": "string", "enum": ["both", "long_only", "short_only"]},
+            "stop_loss_pct": {"type": "number", "description": "Default 3"},
+            "size_pct": {"type": "number", "description": "Position value as % of the account; default 33"},
+            "years": {"type": "number", "description": "How far back to test; default 5"},
+        }, ["strategy"]),
     },
     {
         "name": "economic_calendar",
@@ -320,7 +344,30 @@ def t_economic_calendar(i: dict, user_id: int) -> list:
              "forecast": r["forecast"], "previous": r["previous"], "why_it_matters": r["why"]} for r in rows]
 
 
+def t_my_agent(_: dict, user_id: int) -> dict:
+    from . import agent
+
+    s = agent.state(user_id)
+    live = s["live"]
+    if live:
+        live = {k: live[k] for k in ("stats", "diagnosis", "backtest_same_days")} | {"recent_trades": live["trades"][-10:]}
+    return {"agent": s["agent"], "recent_actions": s["log"][:15], "live": live,
+            "latest_past_test": s["last_past_test"]}
+
+
+def t_diagnose_strategy(i: dict, user_id: int) -> dict:
+    from . import agent
+
+    body = agent.PastIn(**{k: v for k, v in i.items() if v is not None})
+    out = agent.past(body, user_id)
+    return {k: out[k] for k in ("config", "years", "period", "diagnosis", "fixes")} | {
+        "stats": {k: out["stats"].get(k) for k in ("total_return_pct", "cagr_pct", "max_drawdown_pct", "trades",
+                                                   "win_rate_pct", "profit_factor", "buy_and_hold_pct")}}
+
+
 HANDLERS = {
+    "my_agent": t_my_agent,
+    "diagnose_strategy": t_diagnose_strategy,
     "price_summary": t_price_summary,
     "price_history": t_price_history,
     "list_strategies": t_list_strategies,
@@ -344,6 +391,8 @@ def call_tool(name: str, args: dict, user_id: int) -> tuple[str, bool]:
         return json.dumps(handler(args, user_id), default=str), False
     except (ValidationError, ValueError, KeyError, TypeError) as e:
         return f"Invalid input: {e}", True
+    except HTTPException as e:
+        return str(e.detail), True
 
 
 # ---------------------------------------------------------------------------

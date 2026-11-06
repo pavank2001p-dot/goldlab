@@ -54,6 +54,17 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
   Settings are picked on the first 70% of the period and re-run unchanged on the last 30%; both are shown,
   next to owning gold unleveraged. Results are cached in memory for six hours. Backtests can also size
   trades as a % of the account (`size_pct`).
+- **Strategy agent** (`api/app/agent.py`, `/paper/agent`): tests a strategy on past prices and explains what went
+  wrong: losses by kind of market (uptrend, downtrend or sideways, from ADX and the 50-bar average), trades
+  against the trend, direction, stops inside normal volatility (ATR), volatile periods, costs, losing
+  streaks, and the worst drawdown with the Fed and inflation dates and gold headlines from then. Fixes aimed
+  at those findings (wider stop at the same risk, one direction, slower or faster settings, smaller size, a
+  strategy of the other kind) are re-run on the same prices and on the last 30% alone. The agent can then
+  trade the strategy in the user's paper account: on each new closed candle it opens, closes or flips one
+  position with its stop, and after a stop-out waits for the signal to change, like the backtester. It runs
+  every minute with the scheduler and whenever the page is open. Its live trades get the same diagnosis and
+  are compared with a backtest of the same days. The AI coach is the assistant with two more tools
+  (`my_agent`, `diagnose_strategy`), so it explains these results and answers "what if" questions from data.
 - **AI assistant** (`api/app/assistant.py`): Claude with tools over the site's own data (prices, backtests,
   the trade log, risk profile, news, calendar), so numbers come from the database rather than the model.
   Answers run in the background and the page polls for them. Each user gets `ASSISTANT_DAILY_LIMIT`

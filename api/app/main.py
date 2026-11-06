@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from . import assistant, auth, backtest, calendar, config, db, fit, ingest, live, news, paper, planner, prices, risk, scenarios, trades
+from . import agent, assistant, auth, backtest, calendar, config, db, fit, ingest, live, news, paper, planner, prices, risk, scenarios, trades
 
 log = logging.getLogger("api")
 
@@ -30,12 +30,24 @@ async def _news_updater():
         await asyncio.sleep(config.NEWS_INTERVAL_MIN * 60)
 
 
+async def _agent_runner():
+    while True:
+        try:
+            n = await asyncio.to_thread(agent.step_all)
+            if n:
+                log.info("strategy agents traded %d times", n)
+        except Exception:
+            log.exception("agent run failed")
+        await asyncio.sleep(60)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.migrate()
     ingest.load_monthly_history()
     calendar.seed_fomc()
-    tasks = [asyncio.create_task(_price_updater()), asyncio.create_task(_news_updater())] if config.ENABLE_SCHEDULER else []
+    tasks = ([asyncio.create_task(_price_updater()), asyncio.create_task(_news_updater()),
+              asyncio.create_task(_agent_runner())] if config.ENABLE_SCHEDULER else [])
     if config.ENABLE_SCHEDULER and config.LIVE_PRICES and config.FINNHUB_API_KEY and config.PRICE_SOURCE != "sample":
         tasks.append(asyncio.create_task(live.run()))
     yield
@@ -57,6 +69,7 @@ app.include_router(fit.router)
 app.include_router(planner.router)
 app.include_router(scenarios.router)
 app.include_router(paper.router)
+app.include_router(agent.router)
 app.include_router(assistant.router)
 
 

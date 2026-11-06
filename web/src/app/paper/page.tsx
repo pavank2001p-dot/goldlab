@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import FitPanel from "@/components/FitPanel";
 import PriceChart from "@/components/PriceChart";
@@ -25,6 +26,7 @@ const REASON: Record<string, string> = {
   stop_loss: "Stop loss hit",
   take_profit: "Take profit hit",
   stop_out: "Margin stop-out",
+  agent: "Closed by the agent",
 };
 const KIND_HELP: Record<Kind, string> = {
   market: "Fills now at the current price.",
@@ -514,7 +516,10 @@ export default function PaperPage() {
       <PageHeader icon="wallet" title="Paper trading"
         subtitle="Practise trading gold with virtual money on real XAU/USD prices. Orders fill at the real bid and ask, with spread and overnight swap, but no real money or broker is involved."
         right={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/paper/agent" className="flex items-center gap-1.5 rounded-md border border-gold/60 px-3 py-1.5 text-sm text-gold transition hover:bg-gold/10">
+              <Icon name="assistant" className="h-4 w-4" />Strategy agent
+            </Link>
             {state && (
               <button onClick={() => setResetOpen(true)} className="rounded-full border border-gold/40 bg-gold/10 px-2.5 py-1 text-xs tabular-nums text-gold transition hover:bg-gold/20">
                 Leverage 1:{state.account.leverage}

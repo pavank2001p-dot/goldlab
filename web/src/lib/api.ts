@@ -228,10 +228,10 @@ export type PaperPosition = {
   opened_at: string;
   stop_loss: number | null;
   take_profit: number | null;
-  order_kind: "market" | "limit" | "stop";
+  order_kind: "market" | "limit" | "stop" | "agent";
   closed_at: string | null;
   exit_price: number | null;
-  close_reason: "manual" | "stop_loss" | "take_profit" | "stop_out" | null;
+  close_reason: "manual" | "stop_loss" | "take_profit" | "stop_out" | "agent" | null;
   swap: number | null;
   pnl: number | null;
   mark?: number | null;
@@ -344,6 +344,52 @@ export type PlanOptions = {
   history_since: string;
 };
 
+export type AgentConfig = {
+  strategy: string;
+  params: Record<string, number>;
+  tf: "1h" | "1d";
+  direction: "both" | "long_only" | "short_only";
+  stop_loss_pct: number;
+  size_pct: number;
+};
+export type Finding = { key: string; severity: "high" | "medium" | "info"; title: string; detail: string };
+export type Diagnosis = {
+  findings: Finding[];
+  by_market: Record<"up" | "down" | "range", { trades: number; pnl: number | null; win_rate_pct: number | null }>;
+  worst_period: {
+    from: string; to: string; depth_pct: number; gold_move_pct: number | null; market: string | null; market_label: string | null;
+    trades: number; losing_trades: number; stop_outs: number; events: Record<string, number>;
+    event_list: { date: string; title: string }[];
+    headlines: { date: string; headline: string; impact: string; reason: string | null }[];
+  } | null;
+  median_atr_pct: number | null;
+  gold_move_pct: number | null;
+  fit: { verdict: FitCheck["level"]; verdict_label: string; checks: FitCheck[] } | null;
+};
+export type BriefStats = {
+  total_return_pct: number | null; cagr_pct: number | null; max_drawdown_pct: number | null; trades: number;
+  win_rate_pct: number | null; profit_factor: number | null; wiped_out: boolean;
+};
+export type AgentFix = { title: string; why: string; config: AgentConfig; stats: BriefStats; better: boolean; late: BriefStats | null; late_better: boolean | null };
+export type PastTest = {
+  config: AgentConfig; years: number; profile: string | null; period: { start: number; end: number };
+  stats: Stats; equity: Report["equity"]; trades: ReportTrade[]; diagnosis: Diagnosis; fixes: AgentFix[];
+};
+export type AgentLog = { ts: string; kind: string; message: string };
+export type AgentState = {
+  agent: {
+    status: "running" | "stopped"; started_at: string; stopped_at: string | null; last_bar: string | null;
+    signal: number; blocked: number; config: AgentConfig; label: string; next_check: string | null;
+  } | null;
+  log: AgentLog[];
+  live: {
+    stats: Stats; equity: Report["equity"]; trades: ReportTrade[]; open: PaperPosition[];
+    diagnosis: Diagnosis | null; backtest_same_days: { trades: number; pnl: number } | null;
+  } | null;
+  last_past_test: { result: Omit<PastTest, "equity" | "trades">; created_at: string } | null;
+  price: { bid: number; ask: number; open: boolean } | null;
+};
+
 export const api = {
   me: () => call<User>("/auth/me"),
   signup: (email: string, password: string, name: string) =>
@@ -392,6 +438,11 @@ export const api = {
   paperFunds: (amount: number) => call<PaperState>("/paper/funds", { method: "POST", body: JSON.stringify({ amount }) }),
   paperReport: () => call<Report>("/paper/report"),
   paperFit: () => call<Fit>("/paper/fit"),
+  agent: () => call<AgentState>("/agent"),
+  agentPast: (c: AgentConfig & { years: number }) => call<PastTest>("/agent/past", { method: "POST", body: JSON.stringify(c) }),
+  agentStart: (c: AgentConfig) => call<AgentState>("/agent/start", { method: "POST", body: JSON.stringify(c) }),
+  agentStop: (close_position: boolean) => call<AgentState>("/agent/stop", { method: "POST", body: JSON.stringify({ close_position }) }),
+  agentCoach: (situation: string) => call<{ id: number }>("/agent/coach", { method: "POST", body: JSON.stringify({ situation }) }),
   assistantStatus: () => call<AssistantStatus>("/assistant/status"),
   ask: (question: string, history: Turn[]) =>
     call<{ id: number }>("/assistant/questions", { method: "POST", body: JSON.stringify({ question, history }) }),
