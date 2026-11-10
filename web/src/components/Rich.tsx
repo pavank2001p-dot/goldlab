@@ -1,13 +1,24 @@
+import Link from "next/link";
 import { Fragment } from "react";
 
 const BULLET = /^\s*(?:[-*•]|\d+\.)\s+/;
+// [text](/path): links to pages on this site only. Anything else stays plain text.
+const LINK = /^\[([^\]]+)\]\((\/(?!\/)[^\s)]*)\)$/;
+const LINKS = /(\[[^\]]+\]\(\/(?!\/)[^\s)]*\))/;
 
-/** Renders the assistant's plain text: paragraphs, "- " bullet lists and **bold**. No HTML is injected. */
+/** Renders the assistant's plain text: paragraphs, "- " bullet lists, **bold** and links within the site. No HTML is injected. */
 export default function Rich({ text }: { text: string }) {
-  const inline = (s: string) =>
+  const bold = (s: string, key: string) =>
     s.split(/(\*\*[^*]+\*\*)/).map((part, i) =>
-      part.startsWith("**") && part.endsWith("**") ? <strong key={i}>{part.slice(2, -2)}</strong> : <Fragment key={i}>{part}</Fragment>,
+      part.startsWith("**") && part.endsWith("**") ? <strong key={`${key}-${i}`}>{part.slice(2, -2)}</strong> : <Fragment key={`${key}-${i}`}>{part}</Fragment>,
     );
+  const inline = (s: string) =>
+    s.split(LINKS).flatMap((part, i) => {
+      const m = part.match(LINK);
+      return m
+        ? [<Link key={i} href={m[2]} className="font-medium text-gold underline underline-offset-2 hover:brightness-110">{m[1]}</Link>]
+        : bold(part, String(i));
+    });
   return (
     <>
       {text.split(/\n{2,}/).map((block, i) => {

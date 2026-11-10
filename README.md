@@ -82,6 +82,9 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
   the trade log, risk profile, news, calendar), so numbers come from the database rather than the model.
   Answers run in the background and the page polls for them. Each user gets `ASSISTANT_DAILY_LIMIT`
   questions per UTC day (default 20; failed answers don't count). Model set by `ASSISTANT_MODEL`.
+  Asked to build a strategy, it writes its own builder rules, tests them with `test_rules` (results for the whole
+  period, the earlier 70% and the last 30% alone, next to buy and hold), adjusts a few times, then saves the version
+  it describes with `save_strategy` and links to it in the builder (`/strategies/builder?id=<id>`).
 - **Disclaimer** page at `/disclaimer`, linked from the footer and the assistant.
 
 ## Run locally

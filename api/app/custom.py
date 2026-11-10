@@ -369,10 +369,15 @@ DRAFT_SCHEMA = {
 }
 
 
-def _draft_system() -> str:
-    inds = "\n".join(
+def catalogue_text() -> str:
+    """The indicators and their settings, one per line, for prompts that write rules."""
+    return "\n".join(
         f"- {k}: {v['label']}" + (f"; n = {v['n'][0].lower()} (default {v['n'][1]})" if "n" in v else "")
         + (f"; m = {v['m'][0].lower()} (default {v['m'][1]})" if "m" in v else "") for k, v in INDICATORS.items())
+
+
+def _draft_system() -> str:
+    inds = catalogue_text()
     return f"""You turn a trader's description of a gold (XAU/USD) trading idea into rules for a strategy builder.
 
 A strategy has four lists of conditions: long_entry, long_exit, short_entry, short_exit. All conditions in a list
@@ -492,25 +497,31 @@ def list_(user: UserOut = Depends(current_user)):
     return saved(user.id)
 
 
-@router.post("")
-def create(body: SavedIn, user: UserOut = Depends(current_user)):
+def save(user_id: int, rules: Rules, sid: int | None = None) -> dict:
+    """Add a strategy to the user's library, or replace one of theirs when sid is given."""
     with db.conn() as c:
-        n = c.execute("SELECT count(*) AS n FROM custom_strategies WHERE user_id = %s", (user.id,)).fetchone()["n"]
+        if sid is not None:
+            r = c.execute("UPDATE custom_strategies SET rules = %s, updated_at = now() WHERE id = %s AND user_id = %s RETURNING *",
+                          (Jsonb(rules.model_dump()), sid, user_id)).fetchone()
+            if not r:
+                raise HTTPException(404, "Custom strategy not found")
+            return _row(r)
+        n = c.execute("SELECT count(*) AS n FROM custom_strategies WHERE user_id = %s", (user_id,)).fetchone()["n"]
         if n >= MAX_SAVED:
             raise HTTPException(409, f"You can save up to {MAX_SAVED} strategies. Delete one to add another.")
         r = c.execute("INSERT INTO custom_strategies (user_id, rules) VALUES (%s, %s) RETURNING *",
-                      (user.id, Jsonb(body.rules.model_dump()))).fetchone()
+                      (user_id, Jsonb(rules.model_dump()))).fetchone()
     return _row(r)
+
+
+@router.post("")
+def create(body: SavedIn, user: UserOut = Depends(current_user)):
+    return save(user.id, body.rules)
 
 
 @router.put("/{sid}")
 def update(sid: int, body: SavedIn, user: UserOut = Depends(current_user)):
-    with db.conn() as c:
-        r = c.execute("UPDATE custom_strategies SET rules = %s, updated_at = now() WHERE id = %s AND user_id = %s RETURNING *",
-                      (Jsonb(body.rules.model_dump()), sid, user.id)).fetchone()
-    if not r:
-        raise HTTPException(404, "Custom strategy not found")
-    return _row(r)
+    return save(user.id, body.rules, sid)
 
 
 @router.delete("/{sid}")

@@ -138,19 +138,32 @@ export default function BuilderPage() {
   const [loading, setLoading] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const seq = useRef(0);
+  const opened = useRef(false); // a saved strategy opened from a link, which the starting template mustn't replace
 
   useEffect(() => {
     api.customCatalog().then((c) => {
       setCat(c);
       const t = c.templates[2] ?? c.templates[0];
-      if (t) {
+      if (t && !opened.current) {
         setRules({ ...t.rules, name: t.name });
         setTemplate(t.key);
       }
     });
   }, []);
   useEffect(() => {
-    if (user) api.customList().then(setMine, () => {});
+    if (!user) return;
+    api.customList().then((list) => {
+      setMine(list);
+      // The assistant links here with ?id=<saved strategy> after it builds one.
+      const id = Number(new URLSearchParams(window.location.search).get("id"));
+      const s = id ? list.find((x) => x.id === id) : undefined;
+      if (s) {
+        opened.current = true;
+        setRules(sanitizeRules(s.rules));
+        setTemplate(null);
+        setEditing(s.id);
+      }
+    }, () => {});
   }, [user]);
 
   // Re-test shortly after every change, so the chart follows the rules as they are written.

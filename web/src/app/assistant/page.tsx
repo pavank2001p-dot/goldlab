@@ -15,7 +15,7 @@ const SUGGESTIONS = [
   { icon: "candles", text: "How has gold moved this year?" },
   { icon: "risk", text: "Does my latest backtest fit my risk profile?" },
   { icon: "backtest", text: "Backtest a 20/50 moving-average crossover since 2015 with a 2% stop loss." },
-  { icon: "calendar", text: "What US events this week could move gold, and why?" },
+  { icon: "bolt", text: "Build me a strategy that buys dips in an uptrend, test it and save it." },
 ];
 
 function Avatar({ who }: { who: "user" | "assistant" }) {
@@ -44,6 +44,9 @@ const TOOL_LABELS: Record<string, string> = {
   economic_calendar: "event calendar",
   my_agent: "your strategy agent",
   diagnose_strategy: "tested a strategy",
+  test_rules: "tested its own rules",
+  save_strategy: "saved to your strategies",
+  my_custom_strategies: "your saved strategies",
 };
 
 type Msg = Turn & { tools?: string[]; failed?: boolean };
@@ -113,7 +116,7 @@ export default function AssistantPage() {
   return (
     <div className="mx-auto flex max-w-3xl flex-col px-4 py-8">
       <PageHeader icon="assistant" title="AI assistant"
-        subtitle="Ask about gold prices, strategies, your backtests, your trade log or the news. It looks up every number on this site rather than guessing. It explains; it never tells you to buy or sell."
+        subtitle="Ask about gold prices, strategies, your backtests, your trade log or the news, or ask it to build and test a strategy for you. It looks up every number on this site rather than guessing. It explains; it never tells you to buy or sell."
         right={status?.configured ? (
           <div className="w-full sm:w-40">
             <p className="text-right text-xs tabular-nums text-muted">{status.remaining} of {status.limit} left today</p>
