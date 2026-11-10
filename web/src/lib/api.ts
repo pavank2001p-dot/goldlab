@@ -534,6 +534,8 @@ export const api = {
   paperOrder: (o: PaperOrderInput) =>
     call<{ position?: PaperPosition; order?: PaperOrder }>("/paper/orders", { method: "POST", body: JSON.stringify(o) }),
   paperCancel: (id: number) => call<void>(`/paper/orders/${id}`, { method: "DELETE" }),
+  paperModify: (id: number, body: { price?: number; stop_loss?: number | null; take_profit?: number | null }) =>
+    call<{ order: PaperOrder }>(`/paper/orders/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   paperClose: (id: number) => call<{ position: PaperPosition }>(`/paper/positions/${id}/close`, { method: "POST" }),
   paperProtect: (id: number, stop_loss: number | null, take_profit: number | null) =>
     call<{ position: PaperPosition }>(`/paper/positions/${id}`, { method: "PATCH", body: JSON.stringify({ stop_loss, take_profit }) }),

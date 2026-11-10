@@ -70,7 +70,14 @@ const EVENT_NAME: Record<ChartMarker["kind"], string> = {
   fed: "Fed", inflation: "Inflation", jobs: "Jobs", growth: "Growth", dollar: "Dollar", shock: "Shock", other: "Release",
 };
 
-export default function PriceChart({ height = 520, initialTf = "1h", tools = false }: { height?: number; initialTf?: ChartTf; tools?: boolean }) {
+/** `below` is a strip under the candles (inside the chart's frame, so it stays in full screen) for overlay controls. */
+export type ChartOverlay = (c: { chart: IChartApi; series: ISeriesApi<"Candlestick">; below: HTMLDivElement | null }) => React.ReactNode;
+
+export default function PriceChart({ height = 520, initialTf = "1h", tools = false, overlay }: {
+  height?: number; initialTf?: ChartTf; tools?: boolean;
+  /** Extra layers drawn over the candles, such as paper orders and positions. */
+  overlay?: ChartOverlay;
+}) {
   const wrap = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -96,6 +103,7 @@ export default function PriceChart({ height = 520, initialTf = "1h", tools = fal
   const eventsKey = useRef("");
   const markers = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const [indOpen, setIndOpen] = useState(false);
+  const [below, setBelow] = useState<HTMLDivElement | null>(null);
   const [legend, setLegend] = useState<Bar | null>(null);
   const [accent, setAccent] = useState("#e8b53e");
   useEffect(() => {
@@ -511,7 +519,7 @@ export default function PriceChart({ height = 520, initialTf = "1h", tools = fal
       <div className={`relative ${full ? "min-h-0 flex-1" : ""}`} style={full ? undefined : { height }}>
         <div ref={box} data-loading={loading} className="chart-swap h-full w-full" />
         {legend && (
-          <div className={`pointer-events-none absolute top-2 z-[1] flex flex-wrap gap-x-2.5 text-[11px] tabular-nums ${tools ? "left-14" : "left-3"}`}>
+          <div data-chart-legend className={`pointer-events-none absolute top-2 z-[1] flex flex-wrap gap-x-2.5 text-[11px] tabular-nums ${tools ? "left-14" : "left-3"}`}>
             {(["o", "h", "l", "c"] as const).map((k) => (
               <span key={k}><span className="text-muted">{k.toUpperCase()}</span> <span className={legend.c >= legend.o ? "text-up" : "text-down"}>{fmtPrice(legend[k])}</span></span>
             ))}
@@ -534,7 +542,9 @@ export default function PriceChart({ height = 520, initialTf = "1h", tools = fal
           </div>
         )}
         {tools && ready && <Drawings chart={ready.chart} series={ready.series} bars={barsRef} accent={accent} />}
+        {ready && overlay?.({ ...ready, below })}
       </div>
+      {overlay && <div ref={setBelow} />}
     </div>
   );
 }

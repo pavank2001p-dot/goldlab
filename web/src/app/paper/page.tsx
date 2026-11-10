@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import FitPanel from "@/components/FitPanel";
 import PriceChart from "@/components/PriceChart";
+import TradeLines, { type TradeActions } from "@/components/chart/TradeLines";
 import ReportView from "@/components/ReportView";
 import SignInPrompt from "@/components/SignInPrompt";
 import { Chips, CountUp, Empty, Icon, PageHeader, SidePill } from "@/components/ui";
@@ -588,6 +589,24 @@ export default function PaperPage() {
     }
   }
 
+  // Trading from the chart: the same actions as the ticket and the position list.
+  const chartActions: TradeActions = {
+    protect: (id, sl, tp) => act(() => api.paperProtect(id, sl, tp), "Stop and target moved"),
+    modify: (id, body) => act(() => api.paperModify(id, body), "Order moved"),
+    cancel: (id) => act(() => api.paperCancel(id), "Order cancelled"),
+    close: (id) => act(() => api.paperClose(id), "Position closed"),
+    place: async (o) => {
+      let filled: PaperPosition | undefined, waiting: PaperOrder | undefined;
+      const ok = await act(async () => { const r = await api.paperOrder(o); filled = r.position; waiting = r.order; });
+      if (filled) toast(`Filled: ${o.side === "long" ? "bought" : "sold"} ${o.units} oz`, {
+        tone: "fill", body: `At ${px(filled.entry_price)}${o.stop_loss != null ? `, stop at ${px(o.stop_loss)}` : ", no stop set"}`,
+      });
+      else if (waiting) say(`${o.side === "long" ? "Buy" : "Sell"} ${o.kind} order placed: ${o.units} oz at ${px(waiting.price)}`, "up");
+      if (ok) setTab((t) => (t === "report" || t === "history" ? (filled ? "positions" : "orders") : t));
+      return ok;
+    },
+  };
+
   const a = state?.account;
   const level = a?.margin_level_pct;
   return (
@@ -667,7 +686,14 @@ export default function PaperPage() {
           <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
             <div className="min-w-0 space-y-4">
               <div className="rounded-2xl border border-border bg-surface p-4"><Quote price={state.price} /></div>
-              <PriceChart height={400} initialTf="1m" tools />
+              <PriceChart height={400} initialTf="1m" tools overlay={({ chart, series, below }) => (
+                <TradeLines chart={chart} series={series} below={below} positions={state.positions} orders={state.orders} price={state.price}
+                  equity={a.equity} riskLimit={profile?.max_risk_per_trade_pct ?? 1} busy={busy} actions={chartActions} />
+              )} />
+              <p className="-mt-2 text-xs text-muted">
+                Trade from the chart: use its Buy and Sell buttons, or right-click a price (press and hold on a phone) for a limit or stop
+                order there. Drag the dashed lines to move an order, its stop loss or its take profit; ✕ closes or cancels.
+              </p>
 
               <Chips<Tab> value={tab} onChange={setTab} options={[
                 { key: "positions", label: "Open positions", count: state.positions.length },
@@ -682,7 +708,7 @@ export default function PaperPage() {
               {tab === "positions" && (
                 <div className="space-y-3">
                   {state.positions.length === 0 && (
-                    <Empty icon="wallet" title="No open positions">Use the order ticket to buy or sell. Try a small size with a stop loss first.</Empty>
+                    <Empty icon="wallet" title="No open positions">Use the order ticket or the chart to buy or sell. Try a small size with a stop loss first.</Empty>
                   )}
                   {state.positions.map((p) => (
                     <PositionRow key={p.id} p={p} busy={busy}

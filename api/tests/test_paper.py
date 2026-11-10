@@ -195,3 +195,31 @@ def test_any_balance_and_funds(client):
     s = client.post("/paper/funds", json={"amount": -100}).json()
     assert s["account"]["balance"] == 900
     assert client.post("/paper/funds", json={"amount": 0}).status_code == 422
+
+
+def test_move_pending_order(client):
+    signup(client)
+    bar(-2, 2000, 2001, 1999, 2000)
+    o = client.post("/paper/orders", json={"side": "long", "kind": "limit", "units": 5, "price": 1995,
+                                           "stop_loss": 1985, "take_profit": 2010}).json()["order"]
+    # Dragging the entry line down keeps the stop and target.
+    r = client.patch(f"/paper/orders/{o['id']}", json={"price": 1992})
+    assert r.status_code == 200
+    m = r.json()["order"]
+    assert m["price"] == 1992 and m["stop_loss"] == 1985 and m["take_profit"] == 2010
+    # A buy limit can't be moved above the ask, and the stop must stay below the entry.
+    assert client.patch(f"/paper/orders/{o['id']}", json={"price": 2005}).status_code == 422
+    assert client.patch(f"/paper/orders/{o['id']}", json={"stop_loss": 1993}).status_code == 422
+    # Moving the target, then removing it.
+    assert client.patch(f"/paper/orders/{o['id']}", json={"take_profit": 2020}).json()["order"]["take_profit"] == 2020
+    m = client.patch(f"/paper/orders/{o['id']}", json={"take_profit": None}).json()["order"]
+    assert m["take_profit"] is None and m["stop_loss"] == 1985
+
+    bar(1, 1999, 1999, 1993.5, 1996)  # ask low 1993.8 doesn't reach 1992
+    s = client.get("/paper").json()
+    assert len(s["orders"]) == 1 and s["positions"] == []
+    bar(2, 1995, 1995, 1990, 1991)  # ask low 1990.3 does
+    s = client.get("/paper").json()
+    assert s["orders"] == [] and s["positions"][0]["entry_price"] == 1992
+
+    assert client.patch(f"/paper/orders/{o['id']}", json={"price": 1990}).status_code == 404
