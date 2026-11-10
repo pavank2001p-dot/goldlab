@@ -180,3 +180,50 @@ def test_other_users_cannot_read_answers(client, monkeypatch):
     client.post("/auth/logout")
     signup(client, "b@example.com")
     assert client.get(f"/assistant/questions/{qid}").status_code == 404
+
+
+def _api_error(cls, status: int, message: str):
+    import httpx2
+
+    req = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
+    return cls(message, response=httpx2.Response(status, request=req), body=None)
+
+
+def test_failure_explains_the_cause():
+    import anthropic
+
+    cases = [
+        (_api_error(anthropic.AuthenticationError, 401, "invalid x-api-key"), "API key"),
+        (_api_error(anthropic.BadRequestError, 400, "Your credit balance is too low to access the API"), "out of credit"),
+        (_api_error(anthropic.NotFoundError, 404, "model: nope"), "ASSISTANT_MODEL"),
+        (_api_error(anthropic.RateLimitError, 429, "rate limited"), "Try again"),
+        (_api_error(anthropic.InternalServerError, 500, "oops"), "Try again"),
+        (RuntimeError("down"), "server log"),
+    ]
+    for err, phrase in cases:
+        text = assistant.failure_text(err)
+        assert phrase in text and "hasn't counted" in text
+
+
+def test_a_broken_tool_does_not_sink_the_answer(client, monkeypatch):
+    def broken(i, u):
+        raise ZeroDivisionError("bad data")
+
+    monkeypatch.setitem(assistant.HANDLERS, "run_backtest", broken)
+    content, is_error = assistant.call_tool("run_backtest", {"strategy": "ma_cross"}, 1)
+    assert is_error and "failed unexpectedly" in content
+
+
+def test_failed_answer_says_why(client, monkeypatch):
+    import anthropic
+
+    signup(client)
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "test-key")
+
+    def no_credit(*a):
+        raise _api_error(anthropic.BadRequestError, 400, "Your credit balance is too low")
+
+    monkeypatch.setattr(assistant, "answer", no_credit)
+    qid = client.post("/assistant/questions", json={"question": "q"}).json()["id"]
+    got = client.get(f"/assistant/questions/{qid}").json()
+    assert got["status"] == "error" and "out of credit" in got["answer"]
