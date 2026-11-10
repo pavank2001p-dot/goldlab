@@ -228,3 +228,34 @@ def test_draft_turns_words_into_rules(client, monkeypatch):
     r = client.post("/custom-strategies/draft", json={"text": "buy dips when RSI is low"})
     assert r.status_code == 200, r.text
     assert r.json()["rules"]["long_entry"][0]["left"]["ind"] == "rsi" and "RSI (14) is below 30" in r.json()["description"]
+
+
+def test_assistant_writes_tests_and_saves_its_own_strategy(client):
+    from app import assistant
+
+    signup(client, "builder@example.com")
+    uid = client.get("/auth/me").json()["id"]
+    daily(walk(1200, seed=7))
+    rules = {"name": "AI dip buyer", "long_entry": [cond({"ind": "rsi"}, "<", {"ind": "value", "value": 40}),
+                                                   cond({"ind": "close"}, ">", {"ind": "sma", "n": 100})],
+             "long_exit": [cond({"ind": "rsi"}, ">", {"ind": "value", "value": 60})]}
+    out = assistant.t_test_rules({"rules": rules, "years": 3, "stop_loss_pct": 3}, uid)
+    assert "RSI (14) is below 40" in out["rules_in_words"]
+    assert out["whole_period"]["trades"] > 0
+    assert out["earlier_70pct"]["end"] < out["last_30pct"]["start"]
+    assert custom.saved(uid) == []  # testing never saves
+
+    # Bad rules come back to the model as an error it can fix.
+    content, err = assistant.call_tool("test_rules", {"rules": {"name": "x", "long_exit": rules["long_exit"]}}, uid)
+    assert err and "entering" in content
+
+    saved = assistant.t_save_strategy({"rules": rules}, uid)
+    assert saved["links"]["builder"] == f"/strategies/builder?id={saved['id']}"
+    assert [s["name"] for s in client.get("/custom-strategies").json()] == ["AI dip buyer"]
+    again = assistant.t_save_strategy({"rules": {**rules, "name": "AI dip buyer v2"}, "replace_id": saved["id"]}, uid)
+    assert again["id"] == saved["id"] and again["replaced"]
+    assert [s["name"] for s in custom.saved(uid)] == ["AI dip buyer v2"]
+    # It can't overwrite someone else's strategy.
+    assert assistant.call_tool("save_strategy", {"rules": rules, "replace_id": saved["id"]}, uid + 1)[1]
+    names = {t["name"] for t in assistant.TOOLS}
+    assert {"test_rules", "save_strategy"} <= names and set(assistant.HANDLERS) == names

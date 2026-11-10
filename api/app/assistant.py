@@ -23,8 +23,8 @@ from .trades import log_report
 log = logging.getLogger("assistant")
 router = APIRouter(prefix="/assistant", tags=["assistant"])
 
-MAX_TURNS = 8  # model calls per question
-MAX_SECONDS = 120
+MAX_TURNS = 12  # model calls per question; building a strategy takes a few test-and-adjust rounds
+MAX_SECONDS = 150
 MAX_HISTORY = 10
 
 SYSTEM = """You are the GoldLab assistant, built into an educational website about gold (XAU/USD) trading.
@@ -41,6 +41,7 @@ Rules you always follow
 - When suggesting a trade size, base it on the user's risk profile limits and the profile_fit tool, and present it as what would have stayed within their own limits.
 - When asked what went wrong with a strategy or how to handle a situation, use diagnose_strategy or my_agent. Explain the findings with their dates and the kind of market at the time, and present fixes only as changes that were tested on past prices with the results the tool gave, including whether they held up on the last 30%. Say that a fix that helped in the past may not help in future.
 - Keep answers short: a few sentences or a short list. Use the user's currency (USD) and say "ounces" for size.
+- When asked to build, design or invent a strategy, write it yourself as rules with test_rules, which tests it on past prices without saving it. You may adjust and re-test a few times (at most about four versions), judging each version on the earlier 70% of the period and then checking it held up on the last 30%; don't tune to the last 30%. Then save the version you'll describe with save_strategy and give the link it returns as a markdown link, e.g. [Open it in the builder](/strategies/builder?id=12). Describe the rules in plain words, show the test results (including the last 30% and buy and hold), and say if it did worse than simply holding gold. Build with what the rules can express; if the idea needs something else (volume, news, other markets, time of day), say what you left out. Update an existing saved strategy only when the user asks for that one to be changed.
 - If asked about something unrelated to gold, markets or this site, say briefly that you can only help with those topics."""
 
 # ---------------------------------------------------------------------------
@@ -51,6 +52,29 @@ Rules you always follow
 def _obj(props: dict, required: list[str] | None = None) -> dict:
     return {"type": "object", "properties": props, "required": required or [], "additionalProperties": False}
 
+
+_OPERAND = {
+    "type": "object",
+    "properties": {
+        "ind": {"type": "string", "enum": list(custom.INDICATORS)},
+        "n": {"type": "number", "description": "First setting (length or bars); omit for the default"},
+        "m": {"type": "number", "description": "Second setting, where the indicator has one"},
+        "value": {"type": "number", "description": "Only for ind = value: the fixed number"},
+    },
+    "required": ["ind"],
+    "additionalProperties": False,
+}
+_CONDS = {"type": "array", "maxItems": custom.MAX_CONDITIONS, "items": _obj(
+    {"left": _OPERAND, "op": {"type": "string", "enum": list(custom.OPS)}, "right": _OPERAND}, ["left", "op", "right"])}
+RULES_SCHEMA = _obj({"name": {"type": "string", "description": "Short name, under 40 characters"},
+                     "long_entry": _CONDS, "long_exit": _CONDS, "short_entry": _CONDS, "short_exit": _CONDS}, ["name"])
+RULES_HELP = f"""How rules work: four lists of conditions (long_entry, long_exit, short_entry, short_exit); every condition in a
+list must hold on a candle's close for it to fire, and the trade fills at the next open. An entry on the other side also
+closes a position, so exits are optional, and at least one entry list is needed. A condition is left op right, op one of
+{', '.join(custom.OPS)} (crosses_above: left was at or below right on the previous candle and is above it now). The left
+operand can't be a plain number. "highest" and "lowest" look at the previous n candles, not the current one.
+Indicators (ind):
+{custom.catalogue_text()}"""
 
 TOOLS = [
     {
@@ -159,6 +183,32 @@ TOOLS = [
             "size_pct": {"type": "number", "description": "Position value as % of the account; default 33"},
             "years": {"type": "number", "description": "How far back to test; default 5"},
         }, ["strategy"]),
+    },
+    {
+        "name": "test_rules",
+        "description": "Test a strategy you write yourself as rules, on past gold prices, without saving it. Returns the "
+        "rules in plain words and results for the whole period, the earlier 70% and the last 30% alone (unseen when "
+        "judging the earlier part), with buy and hold over the same days. Each trade uses the whole account (no "
+        "leverage) unless size_pct is set.\n\n" + RULES_HELP,
+        "input_schema": _obj({
+            "rules": RULES_SCHEMA,
+            "tf": {"type": "string", "enum": ["1h", "1d"], "description": "Bar size; default 1d"},
+            "years": {"type": "number", "description": "How far back to test, 0.5 to 25; default 10 on 1d, 2 on 1h"},
+            "direction": {"type": "string", "enum": ["both", "long_only", "short_only"]},
+            "stop_loss_pct": {"type": "number", "description": "Stop loss as % of entry price; default none"},
+            "take_profit_pct": {"type": "number"},
+            "size_pct": {"type": "number", "description": "Position value as % of the account; default 100"},
+        }, ["rules"]),
+    },
+    {
+        "name": "save_strategy",
+        "description": "Save rules to the user's strategy library, where they can open them in the strategy builder, "
+        "backtest them, and run them as the paper-trading agent. Returns the saved id and links. Give replace_id only "
+        "when the user asked to change that saved strategy.",
+        "input_schema": _obj({
+            "rules": RULES_SCHEMA,
+            "replace_id": {"type": "integer", "description": "Id of the user's saved strategy to overwrite"},
+        }, ["rules"]),
     },
     {
         "name": "economic_calendar",
@@ -387,7 +437,52 @@ def t_diagnose_strategy(i: dict, user_id: int) -> dict:
                                                    "win_rate_pct", "profit_factor", "buy_and_hold_pct")}}
 
 
+TEST_YEARS = {"1d": 10, "1h": 2}
+IN_SAMPLE = 0.7
+
+
+def _brief(stats: dict) -> dict:
+    return {k: stats.get(k) for k in ("total_return_pct", "cagr_pct", "max_drawdown_pct", "sharpe", "trades",
+                                      "win_rate_pct", "profit_factor", "buy_and_hold_pct", "time_in_market_pct", "wiped_out")}
+
+
+def t_test_rules(i: dict, user_id: int) -> dict:
+    rules = custom.Rules(**i["rules"])
+    tf = i.get("tf") or "1d"
+    years = min(max(float(i.get("years") or TEST_YEARS[tf]), 0.5), 25)
+    start = date.today() - timedelta(days=round(years * 365.25))
+    cfg = backtest.BacktestIn(strategy="custom", rules=rules, tf=tf, start=start, capital=10_000,
+                              size_pct=i.get("size_pct") or 100, direction=i.get("direction") or "both",
+                              stop_loss_pct=i.get("stop_loss_pct"), take_profit_pct=i.get("take_profit_pct"))
+    bars = backtest.load_bars(tf, start, None)
+    if len(bars) < 100:
+        return {"error": "Not enough price history for that period."}
+    cut = int(len(bars) * IN_SAMPLE)
+    whole = backtest.run(cfg, bars)
+    parts = {}
+    for label, part in (("earlier_70pct", bars[:cut]), ("last_30pct", bars[cut:])):
+        r = backtest.run(cfg, part)
+        parts[label] = {"start": _day(part[0]["t"]), "end": _day(part[-1]["t"]), **_brief(r["stats"])}
+    return {"rules_in_words": custom.describe(rules), "rules": rules.model_dump(),
+            "settings": {"tf": tf, "years": years, "direction": cfg.direction, "size_pct": cfg.size_pct,
+                         "stop_loss_pct": cfg.stop_loss_pct, "take_profit_pct": cfg.take_profit_pct},
+            "whole_period": {"start": _day(bars[0]["t"]), "end": _day(bars[-1]["t"]), **_brief(whole["stats"])},
+            **parts}
+
+
+def t_save_strategy(i: dict, user_id: int) -> dict:
+    rules = custom.Rules(**i["rules"])
+    row = custom.save(user_id, rules, i.get("replace_id"))
+    sid = row["id"]
+    return {"id": sid, "name": row["name"], "rules_in_words": row["description"],
+            "replaced": i.get("replace_id") is not None,
+            "links": {"builder": f"/strategies/builder?id={sid}", "backtest": f"/backtest?custom={sid}",
+                      "agent": f"/paper/agent?custom={sid}"}}
+
+
 HANDLERS = {
+    "test_rules": t_test_rules,
+    "save_strategy": t_save_strategy,
     "my_agent": t_my_agent,
     "diagnose_strategy": t_diagnose_strategy,
     "price_summary": t_price_summary,
