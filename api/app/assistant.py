@@ -416,6 +416,10 @@ def call_tool(name: str, args: dict, user_id: int) -> tuple[str, bool]:
         return f"Invalid input: {e}", True
     except HTTPException as e:
         return str(e.detail), True
+    except Exception:
+        # One broken lookup shouldn't sink the whole answer: the model is told and can work around it.
+        log.exception("assistant tool %s failed", name)
+        return f"The {name} tool failed unexpectedly. Tell the user this lookup isn't working right now.", True
 
 
 # ---------------------------------------------------------------------------
@@ -459,18 +463,46 @@ def answer(client: anthropic.Anthropic, user_id: int, question: str, history: li
     return "That question needed more steps than I can take at once. Try splitting it into smaller questions.", used
 
 
+NOT_COUNTED = "It hasn't counted toward your daily limit."
+
+
+def failure_text(e: Exception) -> str:
+    """What to tell the user when a question fails: the likely cause, so it can be fixed, without internals."""
+    msg = str(getattr(e, "message", "") or e).lower()
+    if isinstance(e, anthropic.AuthenticationError):
+        why = "The AI service rejected the site's API key, so the site owner needs to update ANTHROPIC_API_KEY."
+    elif isinstance(e, anthropic.PermissionDeniedError):
+        why = "The site's API key isn't allowed to use this AI model. The site owner needs to check its permissions."
+    elif "credit balance" in msg or "billing" in msg:
+        why = "The site's AI account is out of credit, so the site owner needs to top it up."
+    elif isinstance(e, anthropic.NotFoundError):
+        why = f"The AI model set for the assistant ({config.ASSISTANT_MODEL}) wasn't found. The site owner needs to check ASSISTANT_MODEL."
+    elif isinstance(e, anthropic.RateLimitError):
+        why = "The AI service is getting too many requests right now. Try again in a minute."
+    elif isinstance(e, (anthropic.APIConnectionError, anthropic.InternalServerError)) or (
+            isinstance(e, anthropic.APIStatusError) and e.status_code >= 500):
+        why = "The AI service didn't respond properly. Try again in a minute."
+    elif isinstance(e, anthropic.BadRequestError):
+        why = "The AI service rejected the request. The details are in the server log."
+    else:
+        why = "Something went wrong answering that. The details are in the server log."
+    return f"{why} {NOT_COUNTED}"
+
+
 def process(qid: int) -> None:
     with db.conn() as c:
         row = c.execute("SELECT user_id, question, history FROM assistant_questions WHERE id = %s", (qid,)).fetchone()
-    status, text, used = "error", "Something went wrong answering that. It hasn't counted toward your daily limit.", []
+    status, text, used = "error", f"Something went wrong answering that. {NOT_COUNTED}", []
     try:
         client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY, max_retries=3)
         text, used = answer(client, row["user_id"], row["question"], row["history"])
         status = "done"
     except anthropic.APIError as e:
-        log.warning("assistant request failed: %s", e)
-    except Exception:
-        log.exception("assistant failed")
+        log.error("assistant request failed (question %s): %r", qid, e)
+        text = failure_text(e)
+    except Exception as e:
+        log.exception("assistant failed (question %s)", qid)
+        text = failure_text(e)
     with db.conn() as c:
         c.execute(
             "UPDATE assistant_questions SET status = %s, answer = %s, tools_used = %s, finished_at = now() WHERE id = %s",
