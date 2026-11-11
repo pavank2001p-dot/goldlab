@@ -56,7 +56,7 @@ async def lifespan(app: FastAPI):
     db.close()
 
 
-app = FastAPI(title="GoldLab API", lifespan=lifespan)
+app = FastAPI(title="Trading Lab API", lifespan=lifespan)
 app.include_router(auth.router)
 app.include_router(prices.router)
 app.include_router(live.router)

@@ -14,6 +14,13 @@ export const GOLD: Market = {
   swap_short: 0.05, swap_long_pct: 0, swap_short_pct: 0, price: null, as_of: null, has_seconds: true, has_history: true,
 };
 
+/** The app is Trading Lab; each kind of market has its own lab. Metals and energy are both commodities. */
+export const APP_NAME = "Trading Lab";
+export const LABS: Record<string, string> = {
+  metals: "Commodity Lab", energy: "Commodity Lab", forex: "Forex Lab", indices: "Index Lab", stocks: "Stock Lab", crypto: "Crypto Lab",
+};
+export const labName = (m: Pick<Market, "asset_class">) => LABS[m.asset_class] ?? APP_NAME;
+
 let cache: Promise<MarketList> | null = null;
 export function loadMarkets(): Promise<MarketList> {
   if (!cache) cache = api.markets().catch((e) => { cache = null; throw e; });

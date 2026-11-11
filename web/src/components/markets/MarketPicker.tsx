@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Market } from "@/lib/api";
-import { fmtMarketPrice, ticker } from "@/lib/markets";
+import { fmtMarketPrice, labName, ticker } from "@/lib/markets";
 import { Icon } from "@/components/ui";
 
-/** A compact button showing the current market; it opens a searchable list grouped by asset class. */
+/** A compact button showing the current market; it opens a searchable list grouped by lab. */
 export default function MarketPicker({ market, markets, onChange, className = "" }: {
   market: Market; markets: Market[]; onChange: (symbol: string) => void; className?: string;
 }) {
@@ -27,12 +27,13 @@ export default function MarketPicker({ market, markets, onChange, className = ""
   const groups = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const hit = (m: Market) => !needle || m.name.toLowerCase().includes(needle) || m.symbol.toLowerCase().includes(needle)
-      || ticker(m).toLowerCase().includes(needle) || m.class_label.toLowerCase().includes(needle);
+      || ticker(m).toLowerCase().includes(needle) || m.class_label.toLowerCase().includes(needle) || labName(m).toLowerCase().includes(needle);
     const out: { label: string; items: Market[] }[] = [];
     for (const m of markets.filter(hit)) {
-      const g = out.find((x) => x.label === m.class_label);
+      // Grouped by lab: Commodity Lab holds metals and energy, then Forex, Index, Stock and Crypto Lab.
+      const g = out.find((x) => x.label === labName(m));
       if (g) g.items.push(m);
-      else out.push({ label: m.class_label, items: [m] });
+      else out.push({ label: labName(m), items: [m] });
     }
     return out;
   }, [markets, q]);

@@ -27,7 +27,7 @@ MAX_TURNS = 12  # model calls per question; building a strategy takes a few test
 MAX_SECONDS = 150
 MAX_HISTORY = 10
 
-SYSTEM = """You are the GoldLab assistant, built into an educational website about gold (XAU/USD) trading.
+SYSTEM = """You are the Trading Lab assistant, built into an educational trading website. You focus on gold (XAU/USD).
 
 What you do
 - Explain gold prices, strategies, backtests, risk and news in plain English for people who may be new to trading.

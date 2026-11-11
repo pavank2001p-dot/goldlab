@@ -7,6 +7,10 @@ import ThemeMenu from "./ThemeMenu";
 import { Icon } from "./ui";
 import { api } from "@/lib/api";
 import { useUser } from "@/lib/useUser";
+import { APP_NAME, labName, useMarket } from "@/lib/markets";
+
+// Pages that follow the market picker, so the header names that market's lab there.
+const MARKET_PAGES = ["/chart", "/paper", "/backtest"];
 
 type Item = { href: string; label: string; icon: string; blurb: string };
 
@@ -15,7 +19,7 @@ export const GROUPS: { label: string; items: Item[] }[] = [
   {
     label: "Market",
     items: [
-      { href: "/chart", label: "Chart", icon: "candles", blurb: "Gold's price, live and back to 1833" },
+      { href: "/chart", label: "Chart", icon: "candles", blurb: "Any market live, and gold back to 1833" },
       { href: "/news", label: "News and calendar", icon: "news", blurb: "What's moving gold, and the Fed dates ahead" },
     ],
   },
@@ -105,6 +109,8 @@ export default function Header() {
   const { user, setUser } = useUser();
   const router = useRouter();
   const [mobile, setMobile] = useState(false);
+  const [market] = useMarket();
+  const lab = MARKET_PAGES.some((p) => path === p || (path.startsWith(`${p}/`) && p !== "/paper")) ? labName(market) : null;
   useEffect(() => setMobile(false), [path]);
   useEffect(() => {
     document.body.style.overflow = mobile ? "hidden" : "";
@@ -142,7 +148,8 @@ export default function Header() {
       <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
         <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
           <span className="inline-block h-3 w-3 rotate-45 rounded-[3px] bg-gradient-to-br from-gold to-gold-deep" />
-          GoldLab
+          {APP_NAME}
+          {lab && <span key={lab} className="rise-in hidden rounded-full border border-gold/40 px-2 py-0.5 text-[11px] font-medium text-gold sm:inline">{lab}</span>}
         </Link>
         <nav aria-label="Main" data-tour="menus" className="hidden items-center gap-1 text-sm md:flex">
           {GROUPS.map((g) => <Menu key={g.label} group={g} path={path} />)}
