@@ -60,7 +60,12 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
   chart; drag a pending order's line to move it (its stop and target move with it), drag stop loss and take
   profit lines to move them, add or remove them, and close or cancel from the chart. New orders start from the
   chart's Buy and Sell buttons or by right-clicking a price (press and hold on touch screens), then are adjusted
-  by dragging before they're placed. `PATCH /paper/orders/{id}` moves a pending order. Closed paper trades get the same report and profile fit as the
+  by dragging before they're placed. `PATCH /paper/orders/{id}` moves a pending order.
+  **Order tools** like a broker's: a trailing stop that follows the best price by a fixed distance, a break-even button
+  (`POST /paper/positions/{id}/breakeven`, also a **BE** button on the chart), partial close (`POST
+  /paper/positions/{id}/close` with `units`; the closed part becomes its own trade), one-cancels-other pairs of pending
+  orders (`oco_with`), one-click trading (skips the review step; saved to the account), and sizing by risk % right in
+  the order ticket from the stop distance. Closed paper trades get the same report and profile fit as the
   trade log. No real money or broker is involved.
 - **Risk quiz** (`api/app/risk.py`): 17 questions in five parts place a user as conservative, moderate or aggressive,
   with risk-per-trade, drawdown and leverage limits.
