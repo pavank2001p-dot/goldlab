@@ -269,3 +269,10 @@ CREATE TABLE IF NOT EXISTS user_prefs (
 -- Markets beyond gold: every paper order and position belongs to one market (see app/instruments.py).
 ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS symbol TEXT NOT NULL DEFAULT 'XAUUSD';
 ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS symbol TEXT NOT NULL DEFAULT 'XAUUSD';
+
+-- Broker-style order handling: a trailing stop follows the price by a fixed distance; one-cancels-other
+-- pairs two pending orders so that when one fills the other is cancelled.
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS trail DOUBLE PRECISION;
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS trailed_at TIMESTAMPTZ;  -- bar that last moved the trailing stop
+ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS trail DOUBLE PRECISION;
+ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS oco_id BIGINT;

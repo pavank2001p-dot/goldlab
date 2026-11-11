@@ -14,7 +14,7 @@ from .auth import UserOut, current_user
 
 router = APIRouter(prefix="/prefs", tags=["prefs"])
 
-Key = Literal["drawings", "indicators", "chart_events"]
+Key = Literal["drawings", "indicators", "chart_events", "trading"]  # trading: one-click and ticket choices
 MAX_BYTES = 256 * 1024
 
 
