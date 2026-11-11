@@ -17,7 +17,15 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
   (OANDA:XAU_USD) when `FINNHUB_API_KEY` is set (turn off with `LIVE_PRICES=false`); they move the newest
   candle and are saved as 1s/1m/1h bars until Dukascopy's data for that hour replaces them. The **All**
   button shows every month since 1833 on a log scale (see Data below).
-- **Accounts**: email and password sign-up, cookie sessions.
+- **Accounts** (`api/app/auth.py`, `api/app/mailer.py`): email and password sign-up, cookie sessions, email
+  confirmation, password reset by email link and Google sign-in. Links are single-use and stored only as a
+  SHA-256 hash; confirm links last `VERIFY_TOKEN_HOURS` (48), reset links `RESET_TOKEN_MINUTES` (60), and each
+  kind is sent at most once a minute per account. A reset ends every other session. "Forgot password" answers
+  the same whether or not the account exists. Google sign-in (OpenID Connect code flow with PKCE) links to an
+  existing account with the same Google-confirmed email; if that account's email was never confirmed, its
+  password is removed so whoever registered it first can't get back in. Unconfirmed accounts aren't locked out
+  of anything; the account page asks them to confirm. Email goes through `EMAIL_PROVIDER`: `resend`
+  (recommended), `smtp` (any SMTP service) or `console`, which prints emails to the API log for local work.
 - **Backtests** (`api/app/backtest.py`): 23 strategies. Trend following: moving-average crossover, triple moving
   average, price vs moving average, channel breakout, MACD, Supertrend, Parabolic SAR, ADX, Keltner breakout, momentum,
   Ichimoku cloud, Heikin-Ashi, Aroon, Bollinger squeeze breakout and inside-bar breakout. Mean reversion: RSI, RSI(2)
@@ -139,6 +147,11 @@ latest bars; set `ENABLE_SCHEDULER=true` to have the API do this every `UPDATE_I
 2. Variables: `DATABASE_URL=${{Postgres.DATABASE_URL}}`, `JWT_SECRET=<long random string>`,
    `COOKIE_SECURE=true`, `PRICE_SOURCE=dukascopy`, `ENABLE_SCHEDULER=true`, and for news and the
    assistant `FINNHUB_API_KEY` and `ANTHROPIC_API_KEY`. Optional: `ASSISTANT_DAILY_LIMIT` (default 20).
+   For account emails: `APP_URL=https://<your-site>`, `RESEND_API_KEY` and `EMAIL_FROM` (an address on a
+   domain verified in Resend, e.g. `GoldLab <no-reply@yourdomain.com>`). For Google sign-in:
+   `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` from a Google Cloud OAuth client (type "Web application")
+   whose authorised redirect URI is `https://<your-site>/api/auth/google/callback`. The Google button only
+   appears once both are set.
 3. First boot starts the backfill from 2003 in the background; the chart fills in as it runs. A database
    first filled from 2010 is extended back to `HISTORY_SINCE` once, on the next scheduled update.
 
