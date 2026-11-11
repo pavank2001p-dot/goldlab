@@ -265,3 +265,7 @@ CREATE TABLE IF NOT EXISTS user_prefs (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (user_id, key)
 );
+
+-- Markets beyond gold: every paper order and position belongs to one market (see app/instruments.py).
+ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS symbol TEXT NOT NULL DEFAULT 'XAUUSD';
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS symbol TEXT NOT NULL DEFAULT 'XAUUSD';

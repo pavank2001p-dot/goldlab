@@ -9,8 +9,10 @@ import ReportView from "@/components/ReportView";
 import SignInPrompt from "@/components/SignInPrompt";
 import { Chips, CountUp, Empty, Icon, PageHeader, SidePill } from "@/components/ui";
 import {
-  api, fmtUsd, type PaperOrder, type PaperOrderInput, type PaperPosition, type PaperState, type Report, type RiskProfile,
+  api, fmtUsd, type Market, type PaperOrder, type PaperOrderInput, type PaperPosition, type PaperState, type Report, type RiskProfile,
 } from "@/lib/api";
+import MarketPicker from "@/components/markets/MarketPicker";
+import { GOLD, unitsLabel, useMarket } from "@/lib/markets";
 import AccountSetup, { SETUP_KEY } from "@/components/paper/AccountSetup";
 import LeveragePicker from "@/components/paper/LeveragePicker";
 import { toast } from "@/components/Toaster";
@@ -25,7 +27,10 @@ type Kind = "market" | "limit" | "stop";
 type Tab = "positions" | "orders" | "history" | "report" | "habits";
 
 const POLL_MS = 5000;
-const SIZES = [1, 5, 10, 50, 100];
+// Quick sizes as multiples of the market's usual trade (1, 5, 10, 50 and 100 oz for gold).
+const SIZE_STEPS = [0.2, 1, 2, 10, 20];
+/** Short unit for sizes: "oz" for metals, otherwise "shares", "barrels", "units"... */
+const unitShort = (m: Pick<Market, "unit">, n?: number) => (m.unit === "ounce" ? "oz" : unitsLabel(m, n));
 const BALANCES = [1_000, 10_000, 100_000, 1_000_000, 10_000_000];
 const short = (v: number) =>
   v >= 1e12 ? `$${+(v / 1e12).toFixed(2)}T` : v >= 1e9 ? `$${+(v / 1e9).toFixed(2)}B` : v >= 1e6 ? `$${+(v / 1e6).toFixed(2)}M` : v >= 1e3 ? `$${+(v / 1e3).toFixed(1)}k` : `$${v}`;
@@ -43,7 +48,7 @@ const KIND_HELP: Record<Kind, string> = {
 };
 
 const input = "w-full rounded-lg border border-border bg-background px-3 py-2 text-base tabular-nums outline-none transition focus:border-gold sm:text-sm";
-const px = (v: number | null | undefined) => (v == null ? "–" : v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+const px = (v: number | null | undefined, d = 2) => (v == null ? "–" : v.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }));
 const signed = (v: number | null | undefined) => (v == null ? "–" : `${v > 0 ? "+" : ""}${fmtUsd(v)}`);
 const tone = (v: number | null | undefined) => (v == null || v === 0 ? "text-muted" : v > 0 ? "text-up" : "text-down");
 const num = (v: string) => (v.trim() === "" ? null : Number(v));
@@ -57,7 +62,7 @@ function ago(s: number) {
 }
 
 /** Bid and ask, flashing green or red when they move. */
-function Quote({ price }: { price: PaperState["price"] }) {
+function Quote({ price, market }: { price: PaperState["price"]; market: Market }) {
   const last = useRef<number | null>(null);
   const [flash, setFlash] = useState<"up" | "down" | null>(null);
   useEffect(() => {
@@ -76,11 +81,11 @@ function Quote({ price }: { price: PaperState["price"] }) {
     <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
       <div>
         <p className="text-[11px] uppercase tracking-wide text-muted">Sell at (bid)</p>
-        <p className={`text-xl font-semibold tabular-nums transition-colors ${cls}`}>{px(price.bid)}</p>
+        <p className={`text-xl font-semibold tabular-nums transition-colors ${cls}`}>{px(price.bid, market.decimals)}</p>
       </div>
       <div>
         <p className="text-[11px] uppercase tracking-wide text-muted">Buy at (ask)</p>
-        <p className={`text-xl font-semibold tabular-nums transition-colors ${cls}`}>{px(price.ask)}</p>
+        <p className={`text-xl font-semibold tabular-nums transition-colors ${cls}`}>{px(price.ask, market.decimals)}</p>
       </div>
       <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ${price.open ? "bg-up/15 text-up" : "bg-border text-muted"}`}>
         <span className={`h-1.5 w-1.5 rounded-full ${price.open ? "breathe bg-up" : "bg-muted"}`} />
@@ -101,7 +106,7 @@ function Stat({ label, children, hint, icon }: { label: string; children: React.
 }
 
 /** Where the price sits between the stop loss and the take profit. */
-function Track({ p }: { p: PaperPosition }) {
+function Track({ p, d = 2 }: { p: PaperPosition; d?: number }) {
   if (p.mark == null || (p.stop_loss == null && p.take_profit == null)) return <span className="text-xs text-muted">No stop or target</span>;
   const long = p.side === "long";
   // Left end is the stop (or the entry), right end the target (or the entry), in the trade's direction.
@@ -117,16 +122,17 @@ function Track({ p }: { p: PaperPosition }) {
               style={{ left: `${mark}%` }} />
       </div>
       <div className="mt-1 flex justify-between text-[10px] tabular-nums text-muted">
-        <span>{p.stop_loss != null ? `SL ${px(p.stop_loss)}` : ""}</span>
-        <span>{p.take_profit != null ? `TP ${px(p.take_profit)}` : ""}</span>
+        <span>{p.stop_loss != null ? `SL ${px(p.stop_loss, d)}` : ""}</span>
+        <span>{p.take_profit != null ? `TP ${px(p.take_profit, d)}` : ""}</span>
       </div>
       {!long && <span className="sr-only">Short position</span>}
     </div>
   );
 }
 
-function PositionRow({ p, onClose, onSave, busy }: {
+function PositionRow({ p, m, onClose, onSave, busy }: {
   p: PaperPosition;
+  m: Market;
   onClose: () => void;
   onSave: (sl: number | null, tp: number | null) => Promise<boolean>;
   busy: boolean;
@@ -138,12 +144,12 @@ function PositionRow({ p, onClose, onSave, busy }: {
     <div className="rise-in rounded-2xl border border-border bg-surface p-3.5">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <SidePill side={p.side} />
-        <span className="text-sm tabular-nums">{p.units} oz</span>
-        <span className="text-xs text-muted tabular-nums">from {px(p.entry_price)} → now {px(p.mark)}</span>
+        <span className="text-sm tabular-nums">{p.units} {unitShort(m, p.units)}{m.symbol !== GOLD.symbol || p.symbol !== GOLD.symbol ? <span className="text-muted"> {m.name}</span> : null}</span>
+        <span className="text-xs text-muted tabular-nums">from {px(p.entry_price, m.decimals)} → now {px(p.mark, m.decimals)}</span>
         <span className={`ml-auto text-lg font-semibold tabular-nums ${tone(p.pnl)}`}>{signed(p.pnl)}</span>
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-3">
-        <Track p={p} />
+        <Track p={p} d={m.decimals} />
         <span className="text-xs text-muted">Opened {when(p.opened_at)}{p.order_kind !== "market" && ` · ${p.order_kind} order`}</span>
         <div className="ml-auto flex gap-2">
           <button onClick={() => setEdit(!edit)} className="rounded-lg border border-border px-3 py-1.5 text-xs transition hover:border-muted">
@@ -168,17 +174,21 @@ function PositionRow({ p, onClose, onSave, busy }: {
   );
 }
 
-function OrderRow({ o, price, onCancel, busy }: { o: PaperOrder; price: PaperState["price"]; onCancel: () => void; busy: boolean }) {
-  const ref = price ? (o.side === "long" ? price.ask : price.bid) : null;
+function OrderRow({ o, m, price, onCancel, busy }: {
+  o: PaperOrder; m: Market; price: PaperState["price"]; onCancel: () => void; busy: boolean;
+}) {
+  // The gap to now only makes sense when the price shown is this order's market.
+  const same = (price?.symbol ?? GOLD.symbol) === (o.symbol ?? GOLD.symbol);
+  const ref = price && same ? (o.side === "long" ? price.ask : price.bid) : null;
   const gap = ref != null ? o.price - ref : null;
   return (
     <div className="rise-in flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-dashed border-border bg-surface/60 p-3.5">
       <SidePill side={o.side} />
       <span className="rounded-full bg-border px-2 py-0.5 text-[11px] capitalize">{o.kind}</span>
-      <span className="text-sm tabular-nums">{o.units} oz at {px(o.price)}</span>
-      {gap != null && <span className="text-xs text-muted tabular-nums">{Math.abs(gap).toFixed(2)} {gap > 0 ? "above" : "below"} now</span>}
+      <span className="text-sm tabular-nums">{o.units} {unitShort(m, o.units)}{(o.symbol ?? GOLD.symbol) !== GOLD.symbol ? ` ${m.name}` : ""} at {px(o.price, m.decimals)}</span>
+      {gap != null && <span className="text-xs text-muted tabular-nums">{Math.abs(gap).toFixed(m.decimals)} {gap > 0 ? "above" : "below"} now</span>}
       <span className="text-xs text-muted tabular-nums">
-        {o.stop_loss != null && `SL ${px(o.stop_loss)} `}{o.take_profit != null && `TP ${px(o.take_profit)}`}
+        {o.stop_loss != null && `SL ${px(o.stop_loss, m.decimals)} `}{o.take_profit != null && `TP ${px(o.take_profit, m.decimals)}`}
       </span>
       <button onClick={onCancel} disabled={busy} className="ml-auto rounded-lg border border-border px-3 py-1.5 text-xs transition hover:border-down hover:text-down disabled:opacity-50">
         Cancel
@@ -187,9 +197,10 @@ function OrderRow({ o, price, onCancel, busy }: { o: PaperOrder; price: PaperSta
   );
 }
 
-function Ticket({ state, profile, onPlaced, busy, setBusy, preset }: {
+function Ticket({ state, market, profile, onPlaced, busy, setBusy, preset }: {
   preset?: { oz: number; n: number } | null;
   state: PaperState;
+  market: Market;
   profile: RiskProfile | null;
   onPlaced: (msg: string | null) => Promise<void>;
   busy: boolean;
@@ -197,7 +208,11 @@ function Ticket({ state, profile, onPlaced, busy, setBusy, preset }: {
 }) {
   const [side, setSide] = useState<Side>("long");
   const [kind, setKind] = useState<Kind>("market");
-  const [units, setUnits] = useState("10");
+  const [units, setUnits] = useState(String(market.default_units * 2));
+  const d = market.decimals;
+  const ux = (n?: number) => unitShort(market, n);
+  const sizes = SIZE_STEPS.map((k) => +(market.default_units * k).toPrecision(6));
+  useEffect(() => { setUnits(String(market.default_units * 2)); }, [market.symbol, market.default_units]);
   const [price, setPrice] = useState("");
   const [useSl, setUseSl] = useState(true);
   const [useTp, setUseTp] = useState(false);
@@ -227,13 +242,15 @@ function Ticket({ state, profile, onPlaced, busy, setBusy, preset }: {
   useEffect(() => {
     if (base == null) return;
     const dir = long ? 1 : -1;
-    const p = kind === "market" ? base : kind === "limit" ? base - dir * 5 : base + dir * 5;
-    if (kind !== "market") setPrice(p.toFixed(2));
-    setSl((p - dir * 10).toFixed(2));
-    setTp((p + dir * 20).toFixed(2));
+    // Distances scale with the price: about $5, $10 and $20 away for gold, the same share for other markets.
+    const step = base * 0.002;
+    const p = kind === "market" ? base : kind === "limit" ? base - dir * step : base + dir * step;
+    if (kind !== "market") setPrice(p.toFixed(d));
+    setSl((p - dir * step * 2).toFixed(d));
+    setTp((p + dir * step * 4).toFixed(d));
     setError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [side, kind, base == null]);
+  }, [side, kind, base == null, market.symbol]);
 
   function sizeByRisk() {
     if (entry == null || slN == null || entry === slN) return;
@@ -250,17 +267,17 @@ function Ticket({ state, profile, onPlaced, busy, setBusy, preset }: {
     }
     setBusy(true);
     try {
-      const body: PaperOrderInput = { side, kind, units: u, stop_loss: slN, take_profit: tpN, price: kind === "market" ? null : num(price) };
+      const body: PaperOrderInput = { symbol: market.symbol, side, kind, units: u, stop_loss: slN, take_profit: tpN, price: kind === "market" ? null : num(price) };
       const r = await api.paperOrder(body);
       const verb = long ? "Bought" : "Sold";
       setReview(false);
       if (r.position) {
-        toast(`Filled: ${verb.toLowerCase()} ${u} oz`, {
+        toast(`Filled: ${verb.toLowerCase()} ${u} ${ux(u)}${market.symbol !== GOLD.symbol ? ` ${market.name}` : ""}`, {
           tone: "fill",
-          body: `At ${px(r.position.entry_price)}${slN != null ? `, stop at ${px(slN)}` : ", no stop set"}`,
+          body: `At ${px(r.position.entry_price, d)}${slN != null ? `, stop at ${px(slN, d)}` : ", no stop set"}`,
         });
         await onPlaced(null);
-      } else await onPlaced(`${long ? "Buy" : "Sell"} ${kind} order placed: ${u} oz at ${px(r.order?.price)}`);
+      } else await onPlaced(`${long ? "Buy" : "Sell"} ${kind} order placed: ${u} ${ux(u)} at ${px(r.order?.price, d)}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't place the order");
     } finally {
@@ -280,7 +297,7 @@ function Ticket({ state, profile, onPlaced, busy, setBusy, preset }: {
             <span className={`flex items-center gap-1 text-sm font-semibold ${s === "long" ? "text-up" : "text-down"}`}>
               <Icon name={s === "long" ? "up" : "down"} className="h-3.5 w-3.5" strokeWidth={2.4} />{s === "long" ? "Buy" : "Sell"}
             </span>
-            <span className="text-xs tabular-nums text-muted">{q ? px(s === "long" ? q.ask : q.bid) : "–"}</span>
+            <span className="text-xs tabular-nums text-muted">{q ? px(s === "long" ? q.ask : q.bid, d) : "–"}</span>
           </button>
         ))}
       </div>
@@ -301,18 +318,18 @@ function Ticket({ state, profile, onPlaced, busy, setBusy, preset }: {
 
       <div>
         <label className="block text-sm">
-          <span className="flex justify-between text-muted">Size in ounces <span className="text-xs tabular-nums">{u ? `${(u / 100).toFixed(2)} lot` : ""}</span></span>
+          <span className="flex justify-between text-muted">Size in {market.unit === "MMBtu" ? "MMBtu" : `${market.unit}s`} <span className="text-xs tabular-nums">{u && market.lot > 1 ? `${(u / market.lot).toFixed(2)} lot` : ""}</span></span>
           <input value={units} onChange={(e) => setUnits(e.target.value)} inputMode="decimal" className={`${input} mt-1`} />
         </label>
         <div className="mt-2 flex flex-wrap gap-1.5">
-          {SIZES.map((s) => (
+          {sizes.map((s) => (
             <button key={s} type="button" onClick={() => setUnits(String(s))}
               className={`rounded-full border px-2.5 py-0.5 text-xs tabular-nums transition ${u === s ? "border-gold text-foreground" : "border-border text-muted hover:border-muted"}`}>
-              {s} oz
+              {s.toLocaleString("en-US")} {ux(s)}
             </button>
           ))}
           {entry != null && state.account.free_margin > 0 && (
-            <button type="button" title={`The most your free margin allows at 1:${state.account.leverage}`}
+            <button type="button" title={`The most your free margin allows at 1:${state.settings.market_leverage ?? state.account.leverage}`}
               onClick={() => setUnits(String(Math.max(Math.floor((state.account.free_margin / (entry * state.settings.margin_rate_pct / 100)) * 100) / 100, 0.01)))}
               className="rounded-full border border-border px-2.5 py-0.5 text-xs text-muted transition hover:border-gold hover:text-foreground">
               Max
@@ -368,18 +385,23 @@ function Ticket({ state, profile, onPlaced, busy, setBusy, preset }: {
       </div>
 
       {error && <p className="text-sm text-down">{error}</p>}
-      {closedForMarket && <p className="text-xs text-muted">The market looks closed, so market orders are paused. Limit and stop orders still work.</p>}
+      {closedForMarket && (
+        <p className="text-xs text-muted">
+          {q?.in_hours === false ? `${market.name} trades ${market.hours}. ` : "The market looks closed. "}
+          Market orders are paused until it opens; limit and stop orders still work.
+        </p>
+      )}
       {review ? (
         <div className="rise-in space-y-3 rounded-2xl border border-calm/30 bg-calm/5 p-4 text-sm">
           <p className="font-medium">Before you place it</p>
           <p className="leading-relaxed text-muted">
-            You&apos;re {long ? "buying" : "selling"} <span className="text-foreground">{u} oz</span> of gold
-            {kind === "market" ? <> at about <span className="text-foreground">{px(entry)}</span></> : <> if the price reaches <span className="text-foreground">{px(num(price))}</span></>}.
+            You&apos;re {long ? "buying" : "selling"} <span className="text-foreground">{u} {ux(u)}</span> of {market.symbol === GOLD.symbol ? "gold" : market.name}
+            {kind === "market" ? <> at about <span className="text-foreground">{px(entry, d)}</span></> : <> if the price reaches <span className="text-foreground">{px(num(price), d)}</span></>}.
           </p>
           <ul className="space-y-1.5">
             <Check ok={slN != null}>
               {slN != null && risk != null
-                ? <>If gold {long ? "falls" : "rises"} to {px(slN)}, the most you lose is {fmtUsd(risk)} ({riskPct!.toFixed(1)}% of your account).</>
+                ? <>If {market.symbol === GOLD.symbol ? "gold" : market.name} {long ? "falls" : "rises"} to {px(slN, d)}, the most you lose is {fmtUsd(risk)} ({riskPct!.toFixed(1)}% of your account).</>
                 : <>There&apos;s no stop loss, so the loss isn&apos;t limited.</>}
             </Check>
             {riskPct != null && (
@@ -407,7 +429,7 @@ function Ticket({ state, profile, onPlaced, busy, setBusy, preset }: {
       ) : (
         <button disabled={busy || !u || !!closedForMarket}
           className="w-full rounded-full border border-border bg-surface-2 py-2.5 text-sm font-medium transition-colors hover:border-gold/60 disabled:opacity-50">
-          Review {long ? "buy" : "sell"} of {u || ""} oz {kind === "market" ? "at market" : `${kind} at ${px(num(price))}`}
+          Review {long ? "buy" : "sell"} of {u || ""} {ux(u)} {kind === "market" ? "at market" : `${kind} at ${px(num(price), d)}`}
         </button>
       )}
     </form>
@@ -515,6 +537,9 @@ function Settings({ state, busy, act, onClose }: {
 
 export default function PaperPage() {
   const { user } = useUser();
+  const [market, setSymbol, markets] = useMarket();
+  const symbol = market.symbol;
+  const marketOf = useCallback((s?: string | null) => markets.find((m) => m.symbol === (s ?? GOLD.symbol)) ?? (s === market.symbol ? market : GOLD), [markets, market]);
   const [state, setState] = useState<PaperState | null>(null);
   const [report, setReport] = useState<Report | null>(null);
   const [profile, setProfile] = useState<RiskProfile | null>(null);
@@ -534,7 +559,7 @@ export default function PaperPage() {
   const say = useCallback((msg: string, t: "up" | "down" | "info" = "info") => toast(msg, { tone: t }), []);
 
   const load = useCallback(async () => {
-    const s = await api.paper();
+    const s = await api.paper(symbol);
     // Tell the user about positions the server closed (stop, target or stop-out) since the last look.
     if (seen.current) {
       for (const h of s.history)
@@ -546,12 +571,12 @@ export default function PaperPage() {
     if (openIds.current) {
       for (const p of s.positions)
         if (!openIds.current.has(p.id) && (p.order_kind === "limit" || p.order_kind === "stop"))
-          toast(`Your ${p.order_kind} order filled`, { tone: "fill", body: `${p.side === "long" ? "Long" : "Short"} ${p.units} oz at ${px(p.entry_price)}` });
+          toast(`Your ${p.order_kind} order filled`, { tone: "fill", body: `${p.side === "long" ? "Long" : "Short"} ${p.units} ${unitShort(marketOf(p.symbol), p.units)} of ${marketOf(p.symbol).name} at ${px(p.entry_price, marketOf(p.symbol).decimals)}` });
     }
     openIds.current = new Set(s.positions.map((p) => p.id));
-    setState(s);
+    setState(s.symbol && s.symbol !== symbol ? null : s);
     return s;
-  }, [say]);
+  }, [say, symbol, marketOf]);
 
   useEffect(() => {
     if (!user) return;
@@ -571,7 +596,7 @@ export default function PaperPage() {
     if (user && tab === "report") api.paperReport().then(setReport, () => {});
   }, [user, tab, closedCount]);
 
-  if (user === null) return <SignInPrompt what="practise trading gold with virtual money" next="/paper" />;
+  if (user === null) return <SignInPrompt what="practise trading with virtual money" next="/paper" />;
   if (user === undefined) return null;
 
   async function act(fn: () => Promise<unknown>, done?: string) {
@@ -597,11 +622,12 @@ export default function PaperPage() {
     close: (id) => act(() => api.paperClose(id), "Position closed"),
     place: async (o) => {
       let filled: PaperPosition | undefined, waiting: PaperOrder | undefined;
-      const ok = await act(async () => { const r = await api.paperOrder(o); filled = r.position; waiting = r.order; });
-      if (filled) toast(`Filled: ${o.side === "long" ? "bought" : "sold"} ${o.units} oz`, {
-        tone: "fill", body: `At ${px(filled.entry_price)}${o.stop_loss != null ? `, stop at ${px(o.stop_loss)}` : ", no stop set"}`,
+      const d = market.decimals, u = `${unitShort(market, o.units)} of ${market.name}`;
+      const ok = await act(async () => { const r = await api.paperOrder({ ...o, symbol }); filled = r.position; waiting = r.order; });
+      if (filled) toast(`Filled: ${o.side === "long" ? "bought" : "sold"} ${o.units} ${u}`, {
+        tone: "fill", body: `At ${px(filled.entry_price, d)}${o.stop_loss != null ? `, stop at ${px(o.stop_loss, d)}` : ", no stop set"}`,
       });
-      else if (waiting) say(`${o.side === "long" ? "Buy" : "Sell"} ${o.kind} order placed: ${o.units} oz at ${px(waiting.price)}`, "up");
+      else if (waiting) say(`${o.side === "long" ? "Buy" : "Sell"} ${o.kind} order placed: ${o.units} ${u} at ${px(waiting.price, d)}`, "up");
       if (ok) setTab((t) => (t === "report" || t === "history" ? (filled ? "positions" : "orders") : t));
       return ok;
     },
@@ -609,12 +635,17 @@ export default function PaperPage() {
 
   const a = state?.account;
   const level = a?.margin_level_pct;
+  // The chart shows the market being traded, so it only draws that market's positions and orders.
+  const here = <T extends { symbol?: string | null }>(xs: T[]) => xs.filter((x) => (x.symbol ?? GOLD.symbol) === symbol);
+  const st = state?.settings;
+  const swapText = (v: number | null | undefined, pct: number) => v != null ? `${v > 0 ? "+" : ""}${v.toFixed(2)} per ${market.unit}` : `${pct > 0 ? "+" : ""}${pct}% a year of the position's value`;
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
       <PageHeader icon="wallet" title="Paper trading"
-        subtitle="Practise trading gold with virtual money on real XAU/USD prices. Orders fill at the real bid and ask, with spread and overnight swap, but no real money or broker is involved."
+        subtitle="Practise trading gold, currencies, indices, stocks and crypto with virtual money on real prices. Orders fill at the real bid and ask, with spread and overnight swap, but no real money or broker is involved."
         right={
           <div className="flex flex-wrap items-center gap-2">
+            <MarketPicker market={market} markets={markets} onChange={setSymbol} />
             <Link href="/paper/agent" className="flex items-center gap-1.5 rounded-lg border border-gold/60 px-3 py-1.5 text-sm text-gold transition hover:bg-gold/10">
               <Icon name="assistant" className="h-4 w-4" />Strategy agent
             </Link>
@@ -685,9 +716,9 @@ export default function PaperPage() {
 
           <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
             <div className="min-w-0 space-y-4">
-              <div className="rounded-2xl border border-border bg-surface p-4"><Quote price={state.price} /></div>
-              <PriceChart height={400} initialTf="1m" tools overlay={({ chart, series, below }) => (
-                <TradeLines chart={chart} series={series} below={below} positions={state.positions} orders={state.orders} price={state.price}
+              <div className="rounded-2xl border border-border bg-surface p-4"><Quote price={state.price} market={market} /></div>
+              <PriceChart height={400} initialTf="1m" tools market={market} overlay={({ chart, series, below }) => (
+                <TradeLines chart={chart} series={series} below={below} positions={here(state.positions)} orders={here(state.orders)} price={state.price} market={market}
                   equity={a.equity} riskLimit={profile?.max_risk_per_trade_pct ?? 1} busy={busy} actions={chartActions} />
               )} />
               <p className="-mt-2 text-xs text-muted">
@@ -711,7 +742,7 @@ export default function PaperPage() {
                     <Empty icon="wallet" title="No open positions">Use the order ticket or the chart to buy or sell. Try a small size with a stop loss first.</Empty>
                   )}
                   {state.positions.map((p) => (
-                    <PositionRow key={p.id} p={p} busy={busy}
+                    <PositionRow key={p.id} p={p} m={marketOf(p.symbol)} busy={busy}
                       onClose={() => act(() => api.paperClose(p.id), "Position closed")}
                       onSave={(sl, tp) => act(() => api.paperProtect(p.id, sl, tp), "Stop and target saved")} />
                   ))}
@@ -722,11 +753,11 @@ export default function PaperPage() {
                 <div className="space-y-3">
                   {state.orders.length === 0 && <Empty icon="clock" title="No pending orders">Limit and stop orders wait here until the price reaches them.</Empty>}
                   {state.orders.map((o) => (
-                    <OrderRow key={o.id} o={o} price={state.price} busy={busy} onCancel={() => act(() => api.paperCancel(o.id), "Order cancelled")} />
+                    <OrderRow key={o.id} o={o} m={marketOf(o.symbol)} price={state.price} busy={busy} onCancel={() => act(() => api.paperCancel(o.id), "Order cancelled")} />
                   ))}
                   {state.cancelled_orders.filter((o) => o.note && o.note !== "Cancelled by you").slice(0, 3).map((o) => (
                     <p key={o.id} className="text-xs text-muted">
-                      {o.side === "long" ? "Buy" : "Sell"} {o.kind} at {px(o.price)} was cancelled: {o.note.toLowerCase()}.
+                      {o.side === "long" ? "Buy" : "Sell"} {marketOf(o.symbol).name} {o.kind} at {px(o.price, marketOf(o.symbol).decimals)} was cancelled: {o.note.toLowerCase()}.
                     </p>
                   ))}
                 </div>
@@ -739,8 +770,8 @@ export default function PaperPage() {
                     <div key={h.id} className="rise-in flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-border bg-surface px-3.5 py-2.5 text-sm"
                          style={{ animationDelay: `${Math.min(i, 10) * 25}ms` }}>
                       <SidePill side={h.side} />
-                      <span className="tabular-nums">{h.units} oz</span>
-                      <span className="text-xs text-muted tabular-nums">{px(h.entry_price)} → {px(h.exit_price)}</span>
+                      <span className="tabular-nums">{h.units} {unitShort(marketOf(h.symbol), h.units)}{(h.symbol ?? GOLD.symbol) !== GOLD.symbol && ` ${marketOf(h.symbol).name}`}</span>
+                      <span className="text-xs text-muted tabular-nums">{px(h.entry_price, marketOf(h.symbol).decimals)} → {px(h.exit_price, marketOf(h.symbol).decimals)}</span>
                       <span className="rounded-full bg-border px-2 py-0.5 text-[11px] text-muted">{REASON[h.close_reason ?? ""]}</span>
                       <span className="text-xs text-muted">{h.closed_at && when(h.closed_at)}</span>
                       <span className={`ml-auto font-medium tabular-nums ${tone(h.pnl)}`}>{signed(h.pnl)}</span>
@@ -760,16 +791,18 @@ export default function PaperPage() {
 
             <aside className="order-first space-y-3 lg:sticky lg:top-20 lg:order-none lg:self-start">
               <h2 className="flex items-center gap-2 font-medium"><Icon name="bolt" className="h-4 w-4 text-gold" />New order</h2>
-              <Ticket state={state} profile={profile} busy={busy} setBusy={setBusy} preset={preset}
+              <Ticket state={state} market={market} profile={profile} busy={busy} setBusy={setBusy} preset={preset}
                 onPlaced={async (msg) => { await load(); setTab((t) => (t === "report" || t === "history" ? "positions" : t)); if (msg) say(msg, "up"); }} />
               <p className="text-xs leading-relaxed text-muted">
-                Spread {state.settings.spread.toFixed(2)} per ounce. Overnight swap {state.settings.swap_long.toFixed(2)} long and{" "}
-                +{state.settings.swap_short.toFixed(2)} short per ounce. Stops and targets are checked against every minute of real prices,
+                {market.name}: spread {st!.spread.toFixed(market.decimals)} per {market.unit}. Overnight swap {swapText(st!.swap_long, market.swap_long_pct)} long
+                and {swapText(st!.swap_short, market.swap_short_pct)} short.
+                {st!.market_max_leverage && st!.market_max_leverage < a.leverage ? ` Leverage on ${market.name} is capped at 1:${st!.market_max_leverage}.` : ""}{" "}
+                Trading hours: {market.hours}. Stops and targets are checked against every minute of real prices,
                 even while this page is closed. Practice only, not advice.
               </p>
               <SizeCalculator equity={a.equity} leverage={a.leverage} price={state.price?.ask ?? null}
                 riskPct={profile?.max_risk_per_trade_pct ?? 1} onUse={(oz) => setPreset((p) => ({ oz, n: (p?.n ?? 0) + 1 }))} />
-              <AlertsCard price={state.price?.bid ?? null} />
+              {symbol === GOLD.symbol && <AlertsCard price={state.price?.bid ?? null} />}
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <Link href="/paper/replay" className="card flex items-center gap-2 p-3 hover:border-gold/40"><Icon name="clock" className="h-4 w-4 text-gold" />Replay a day</Link>
                 <Link href="/paper/challenge" className="card flex items-center gap-2 p-3 hover:border-gold/40"><Icon name="trophy" className="h-4 w-4 text-gold" />Weekly challenge</Link>

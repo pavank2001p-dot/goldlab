@@ -129,6 +129,23 @@ until 1959, then World Bank monthly averages. The API stores them as `1mo` bars 
 for monthly candles before the first daily bar, and the assistant uses them for questions about earlier
 years. Daily charts and backtests use only the hourly data.
 
+### Other markets
+
+Besides gold, the charts, backtests and paper trading work on silver, WTI and Brent oil, natural gas,
+EUR/USD, GBP/USD, AUD/USD, the S&P 500, Nasdaq 100 and Dow Jones, Apple, Microsoft, Nvidia, Amazon,
+Tesla, Bitcoin and Ether (all quoted in US dollars). The list and each market's rules live in
+`api/app/instruments.py`: trading hours (forex hours, US stock hours, or around the clock for crypto),
+contract size, a leverage cap (the account's leverage applies up to it), spread and overnight swap.
+
+- History comes from the same free Dukascopy feed, no key needed, from `MARKET_HISTORY_SINCE`
+  (default 2015-01-01). Gold keeps its full history from 2003.
+- Live quotes come from Finnhub's free websocket with the same `FINNHUB_API_KEY`: OANDA prices for
+  metals, energy, forex and indices, US stock trades, and Binance for crypto.
+- `MARKETS` limits which markets are fetched (`all` by default, or a comma-separated list of symbols such as
+  `XAUUSD,EURUSD,AAPLUSUSD`). `SECOND_SYMBOLS` lists the markets that keep 1-second bars (gold by default).
+- Not included: Indian (NSE/BSE) stocks and futures, which have no free feed here and would need a paid
+  data provider; and markets not priced in dollars (USD/JPY, the DAX), which would need currency conversion.
+
 Switching source wipes the old bars so the two never mix (the monthly history is kept). `python -m app.ingest update` refreshes the
 latest bars; set `ENABLE_SCHEDULER=true` to have the API do this every `UPDATE_INTERVAL_MIN` minutes.
 

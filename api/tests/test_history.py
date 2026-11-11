@@ -58,7 +58,7 @@ def test_switching_source_keeps_history(client):
 def test_extend_history_runs_once(client, monkeypatch):
     calls = []
     monkeypatch.setattr(config, "HISTORY_SINCE", date(2003, 5, 1))
-    monkeypatch.setattr(ingest, "load", lambda source, start, end: calls.append((start, end)) or 7)
+    monkeypatch.setattr(ingest, "load", lambda source, start, end, i=None: calls.append((start, end)) or 7)
     ingest.upsert([ingest.Bar(datetime(2010, 1, 4, tzinfo=timezone.utc), 1, 1, 1, 1)])
     assert ingest.extend_history("sample") == 0 and not calls  # never for demo data
     assert ingest.extend_history("dukascopy") == 7

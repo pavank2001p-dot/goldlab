@@ -343,7 +343,7 @@ def t_my_custom_strategies(_: dict, user_id: int) -> list:
 
 def t_run_backtest(i: dict, user_id: int) -> dict:
     cfg = backtest.BacktestIn(**_with_custom(i, user_id))
-    rep = backtest.run(cfg, backtest.load_bars(cfg.tf, cfg.start, cfg.end))
+    rep = backtest.run(cfg, backtest.load_bars(cfg.tf, cfg.start, cfg.end, cfg.symbol))
     return {"settings": cfg.model_dump(mode="json"), "stats": rep["stats"],
             "period": {"start": _day(rep["period"]["start"]), "end": _day(rep["period"]["end"])}}
 

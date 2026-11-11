@@ -15,6 +15,20 @@ export type Summary = {
   updated_at?: string | null;
 };
 
+export type Market = {
+  symbol: string; name: string; asset_class: string; class_label: string; decimals: number; unit: string; lot: number;
+  default_units: number; spread: number; max_leverage: number; hours: string; open_now: boolean; live: boolean;
+  swap_long: number | null; swap_short: number | null; swap_long_pct: number; swap_short_pct: number;
+  price: number | null; as_of: number | null; has_seconds: boolean; has_history: boolean;
+};
+export type MarketList = { default: string; classes: Record<string, string>; markets: Market[] };
+
+const sym = (symbol?: string) => (symbol && symbol !== "XAUUSD" ? `symbol=${encodeURIComponent(symbol)}` : "");
+const withSym = (path: string, symbol?: string) => {
+  const q = sym(symbol);
+  return q ? `${path}${path.includes("?") ? "&" : "?"}${q}` : path;
+};
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -122,6 +136,7 @@ export type Report = {
 
 export type BacktestParams = {
   strategy: string;
+  symbol?: string;
   params: Record<string, number>;
   rules?: Rules | null;
   tf: Timeframe;
@@ -129,10 +144,10 @@ export type BacktestParams = {
   end?: string | null;
   direction: "both" | "long_only" | "short_only";
   capital: number;
-  units: number;
-  spread: number;
-  swap_long: number;
-  swap_short: number;
+  units?: number | null;
+  spread?: number | null;
+  swap_long?: number | null;
+  swap_short?: number | null;
   stop_loss_pct?: number | null;
   take_profit_pct?: number | null;
   size_pct?: number | null;
@@ -244,9 +259,14 @@ export type Scenario = {
   profile?: { profile: string; label: string; max_risk_per_trade_pct: number; max_leverage: number };
 };
 
-export type PaperPrice = { bid: number; ask: number; t: number; age_seconds: number; open: boolean; source: "live" | "bars" };
+export type PaperPrice = {
+  symbol?: string; bid: number; ask: number; t: number; age_seconds: number; open: boolean; in_hours?: boolean; source: "live" | "bars";
+};
 export type PaperPosition = {
   id: number;
+  symbol?: string;
+  name?: string;
+  decimals?: number;
   side: "long" | "short";
   units: number;
   entry_price: number;
@@ -264,6 +284,7 @@ export type PaperPosition = {
 };
 export type PaperOrder = {
   id: number;
+  symbol?: string;
   side: "long" | "short";
   kind: "limit" | "stop";
   units: number;
@@ -298,12 +319,16 @@ export type PaperState = {
   orders: PaperOrder[];
   cancelled_orders: PaperOrder[];
   history: PaperPosition[];
+  symbol?: string;
+  market?: Omit<Market, "price" | "as_of" | "has_seconds" | "has_history">;
   settings: {
-    spread: number; swap_long: number; swap_short: number; margin_rate_pct: number; stop_out_pct: number; margin_call_pct?: number;
+    spread: number; swap_long: number | null; swap_short: number | null; margin_rate_pct: number; stop_out_pct: number; margin_call_pct?: number;
     leverage: number; leverages: number[]; max_leverage: number; max_balance: number;
+    market_leverage?: number; market_max_leverage?: number;
   };
 };
 export type PaperOrderInput = {
+  symbol?: string;
   side: "long" | "short";
   kind: "market" | "limit" | "stop";
   units: number;
@@ -502,11 +527,13 @@ export const api = {
   login: (email: string, password: string) =>
     call<User>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   logout: () => call<void>("/auth/logout", { method: "POST" }),
-  summary: () => call<Summary>("/prices/summary"),
-  live: () => call<LiveQuote>("/prices/live"),
+  markets: () => call<MarketList>("/prices/markets"),
+  summary: (symbol?: string) => call<Summary>(withSym("/prices/summary", symbol)),
+  live: (symbol?: string) => call<LiveQuote>(withSym("/prices/live", symbol)),
   scenario: (p: Partial<ScenarioInput>) => call<Scenario>("/scenarios", { method: "POST", body: JSON.stringify(p) }),
-  candles: (tf: ChartTf, opts: { start?: number; end?: number; limit?: number } = {}) => {
+  candles: (tf: ChartTf, opts: { start?: number; end?: number; limit?: number; symbol?: string } = {}) => {
     const q = new URLSearchParams({ tf, limit: String(opts.limit ?? 1000) });
+    if (opts.symbol) q.set("symbol", opts.symbol);
     if (opts.start !== undefined) q.set("start", String(opts.start));
     if (opts.end !== undefined) q.set("end", String(opts.end));
     return call<{ bars: Bar[] }>(`/prices/candles?${q}`).then((r) => r.bars);
@@ -530,7 +557,7 @@ export const api = {
   plan: (p: PlanInput) => call<Plan>("/plans/match", { method: "POST", body: JSON.stringify(p) }),
   backtestFit: (id: number) => call<Fit>(`/fit/backtests/${id}`),
   tradeFit: (capital: number) => call<Fit>(`/fit/trades?capital=${capital}`),
-  paper: () => call<PaperState>("/paper"),
+  paper: (symbol?: string) => call<PaperState>(withSym("/paper", symbol)),
   paperOrder: (o: PaperOrderInput) =>
     call<{ position?: PaperPosition; order?: PaperOrder }>("/paper/orders", { method: "POST", body: JSON.stringify(o) }),
   paperCancel: (id: number) => call<void>(`/paper/orders/${id}`, { method: "DELETE" }),
@@ -539,10 +566,12 @@ export const api = {
   paperClose: (id: number) => call<{ position: PaperPosition }>(`/paper/positions/${id}/close`, { method: "POST" }),
   paperProtect: (id: number, stop_loss: number | null, take_profit: number | null) =>
     call<{ position: PaperPosition }>(`/paper/positions/${id}`, { method: "PATCH", body: JSON.stringify({ stop_loss, take_profit }) }),
-  paperReset: (balance: number, leverage: number) =>
-    call<PaperState>("/paper/reset", { method: "POST", body: JSON.stringify({ balance, leverage }) }),
-  paperLeverage: (leverage: number) => call<PaperState>("/paper/settings", { method: "PATCH", body: JSON.stringify({ leverage }) }),
-  paperFunds: (amount: number) => call<PaperState>("/paper/funds", { method: "POST", body: JSON.stringify({ amount }) }),
+  paperReset: (balance: number, leverage: number, symbol?: string) =>
+    call<PaperState>(withSym("/paper/reset", symbol), { method: "POST", body: JSON.stringify({ balance, leverage }) }),
+  paperLeverage: (leverage: number, symbol?: string) =>
+    call<PaperState>(withSym("/paper/settings", symbol), { method: "PATCH", body: JSON.stringify({ leverage }) }),
+  paperFunds: (amount: number, symbol?: string) =>
+    call<PaperState>(withSym("/paper/funds", symbol), { method: "POST", body: JSON.stringify({ amount }) }),
   paperReport: () => call<Report>("/paper/report"),
   paperFit: () => call<Fit>("/paper/fit"),
   agent: () => call<AgentState>("/agent"),

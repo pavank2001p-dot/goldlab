@@ -52,9 +52,9 @@ def test_live_endpoint(client, monkeypatch):
 def test_historical_progress_ignores_live_bars(client, monkeypatch):
     """Live bars for recent minutes must not stop the historical feed fetching earlier hours."""
     calls = []
-    monkeypatch.setattr(ingest, "dukascopy_hourly", lambda s, e: iter([]))
-    monkeypatch.setattr(ingest, "dukascopy_minutes", lambda s, e: calls.append(("1m", s)) or iter([]))
-    monkeypatch.setattr(ingest, "dukascopy_seconds", lambda s, e: calls.append(("1s", s)) or iter([]))
+    monkeypatch.setattr(ingest, "dukascopy_hourly", lambda s, e, i=None: iter([]))
+    monkeypatch.setattr(ingest, "dukascopy_minutes", lambda s, e, i=None: calls.append(("1m", s)) or iter([]))
+    monkeypatch.setattr(ingest, "dukascopy_seconds", lambda s, e, i=None: calls.append(("1s", s)) or iter([]))
     f = live.Live()
     f.tick(2650.0, datetime.now(UTC).timestamp())
     f.flush()
