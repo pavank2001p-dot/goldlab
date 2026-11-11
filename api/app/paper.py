@@ -293,6 +293,12 @@ class ProtectIn(BaseModel):
     take_profit: float | None = Field(None, gt=0, lt=100_000)
 
 
+class OrderEditIn(BaseModel):
+    price: float | None = Field(None, gt=0, lt=100_000)
+    stop_loss: float | None = Field(None, gt=0, lt=100_000)
+    take_profit: float | None = Field(None, gt=0, lt=100_000)
+
+
 class ResetIn(BaseModel):
     balance: float = Field(START_BALANCE, ge=1, le=MAX_BALANCE)
     leverage: int = Field(DEFAULT_LEVERAGE, ge=1, le=MAX_LEVERAGE)
@@ -323,6 +329,17 @@ def _check_protection(side: str, ref: float, sl: float | None, tp: float | None)
             raise HTTPException(422, f"For a sell, the stop loss must be above {ref:,.2f}")
         if tp is not None and tp >= ref:
             raise HTTPException(422, f"For a sell, the take profit must be below {ref:,.2f}")
+
+
+def _check_trigger(side: str, kind: str, at: float, price: dict) -> None:
+    """A buy limit waits for a lower price, a buy stop for a higher one; sells are the reverse."""
+    ref = price["ask"] if side == "long" else price["bid"]
+    wants_above = (side == "long") == (kind == "stop")
+    if (at > ref) != wants_above or at == ref:
+        where = "above" if wants_above else "below"
+        name = "buy" if side == "long" else "sell"
+        raise HTTPException(422, f"A {name} {kind} order's price must be {where} the current "
+                                 f"{'ask' if side == 'long' else 'bid'} of {ref:,.2f}")
 
 
 def _need_price(price: dict | None) -> dict:
@@ -360,15 +377,7 @@ def place(o: OrderIn, user: UserOut = Depends(current_user)):
             c.execute("UPDATE paper_accounts SET balance = %s WHERE user_id = %s", (round(book.balance, 2), user.id))
             return {"position": p}
 
-        ref = ask if o.side == "long" else bid
-        above = o.price > ref
-        # A buy limit waits for a lower price, a buy stop for a higher one; sells are the reverse.
-        wants_above = (o.side == "long") == (o.kind == "stop")
-        if above != wants_above or o.price == ref:
-            where = "above" if wants_above else "below"
-            side = "buy" if o.side == "long" else "sell"
-            raise HTTPException(422, f"A {side} {o.kind} order's price must be {where} the current "
-                                     f"{'ask' if o.side == 'long' else 'bid'} of {ref:,.2f}")
+        _check_trigger(o.side, o.kind, o.price, price)
         _check_protection(o.side, o.price, o.stop_loss, o.take_profit)
         row = c.execute(
             f"""INSERT INTO paper_orders (user_id, side, kind, units, price, stop_loss, take_profit)
@@ -385,6 +394,28 @@ def cancel(oid: int, user: UserOut = Depends(current_user)):
                         "WHERE id = %s AND user_id = %s AND status = 'pending' RETURNING id", (oid, user.id)).fetchone()
     if not row:
         raise HTTPException(404, "Order not found or already filled")
+
+
+@router.patch("/orders/{oid}")
+def modify(oid: int, body: OrderEditIn, user: UserOut = Depends(current_user)):
+    """Move a pending order's price, stop loss or take profit (dragging its lines on the chart).
+    Fields left out keep their value; a stop loss or take profit sent as null is removed."""
+    with db.conn() as c:
+        acct, book, price = sync(c, user.id)
+        o = next((q for q in book.orders if q["id"] == oid), None)
+        if not o:
+            raise HTTPException(404, "Order not found or already filled")
+        at = body.price if body.price is not None else o["price"]
+        sl = body.stop_loss if "stop_loss" in body.model_fields_set else o["stop_loss"]
+        tp = body.take_profit if "take_profit" in body.model_fields_set else o["take_profit"]
+        if price and at != o["price"]:
+            _check_trigger(o["side"], o["kind"], at, price)
+        _check_protection(o["side"], at, sl, tp)
+        # A moved order counts from now, so a bar from before the move can't fill it at the new price.
+        moved = "created_at = now(), " if at != o["price"] else ""
+        row = c.execute(f"UPDATE paper_orders SET {moved}price = %s, stop_loss = %s, take_profit = %s "
+                        f"WHERE id = %s AND status = 'pending' RETURNING {ORDER_COLS}", (at, sl, tp, oid)).fetchone()
+    return {"order": row}
 
 
 def _open_position(book: _Book, pid: int) -> dict:

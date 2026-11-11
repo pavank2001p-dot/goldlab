@@ -53,7 +53,12 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
   Market, limit and stop orders with optional stop loss and take profit fill at the real bid and ask, with the
   same spread and overnight swap as the backtester.
   Pending orders and stops are checked against every saved minute bar since the account was last opened, so
-  nothing is missed while the page is closed. Closed paper trades get the same report and profile fit as the
+  nothing is missed while the page is closed.
+  **Chart trading** (`web/src/components/chart/TradeLines.tsx`): positions and pending orders are drawn on the
+  chart; drag a pending order's line to move it (its stop and target move with it), drag stop loss and take
+  profit lines to move them, add or remove them, and close or cancel from the chart. New orders start from the
+  chart's Buy and Sell buttons or by right-clicking a price (press and hold on touch screens), then are adjusted
+  by dragging before they're placed. `PATCH /paper/orders/{id}` moves a pending order. Closed paper trades get the same report and profile fit as the
   trade log. No real money or broker is involved.
 - **Risk quiz** (`api/app/risk.py`): 17 questions in five parts place a user as conservative, moderate or aggressive,
   with risk-per-trade, drawdown and leverage limits.
