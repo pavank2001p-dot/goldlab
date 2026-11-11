@@ -1,4 +1,4 @@
-"""The markets GoldLab can chart, backtest and paper trade.
+"""The markets Trading Lab can chart, backtest and paper trade.
 
 Every instrument is quoted in US dollars, so profit and loss in the price's units is already in
 the account's currency and the backtester and paper account need no currency conversion.

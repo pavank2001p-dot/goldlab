@@ -49,7 +49,7 @@ async function render(d: ShareInput): Promise<HTMLCanvasElement> {
   g.fillStyle = "#eef0f3";
   g.font = `600 26px ${font}`;
   g.textBaseline = "middle";
-  g.fillText("GoldLab", 102, 85);
+  g.fillText("Trading Lab", 102, 85);
   g.textAlign = "right";
   g.fillStyle = accent;
   g.font = `600 18px ${font}`;

@@ -11,7 +11,7 @@ const EVENT = "goldlab-tour-start";
 type Step = { target?: string; title: string; body: string };
 
 const GUEST: Step[] = [
-  { title: "Welcome to GoldLab", body: "A calm place to learn gold trading with real prices and no real money. This takes about 30 seconds." },
+  { title: "Welcome to Trading Lab", body: "A calm place to learn trading gold, commodities, forex, indices, stocks and crypto with real prices and no real money. This takes about 30 seconds." },
   { target: "menus", title: "Four menus, four steps", body: "Market shows what gold is doing. Test ideas checks strategies on the past. Practise lets you trade with virtual money. You holds your limits and the assistant." },
   { target: "chart", title: "Live price, deep history", body: "The chart follows the live price and goes back to 1833. Pick any timeframe, from seconds to months." },
   { target: "theme", title: "Make it yours", body: "Switch between dark and light, or pick an accent colour: gold, rose gold, platinum or sapphire." },

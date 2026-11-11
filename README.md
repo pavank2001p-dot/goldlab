@@ -1,6 +1,8 @@
-# GoldLab
+# Trading Lab
 
-Educational XAU/USD (gold) analysis: charts, strategy backtests, news insights and risk-profile fit.
+Educational trading practice across markets, each with its own lab: Commodity Lab (gold, silver, oil, gas),
+Forex Lab, Index Lab, Stock Lab and Crypto Lab. Charts, strategy backtests, paper trading, news insights and
+risk-profile fit.
 Nothing here is investment advice.
 
 ```
