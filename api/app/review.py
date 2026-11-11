@@ -36,7 +36,7 @@ REVIEW_SCHEMA = {
 }
 
 SYSTEM = """You are a calm, encouraging trading coach on GoldLab, a site where people practise trading gold
-(XAU/USD) with virtual money. You review ONE closed practice trade from the facts you are given.
+(XAU/USD) and other markets with virtual money. You review ONE closed practice trade from the facts you are given.
 
 Grade the DECISION PROCESS, never the profit or loss: a well-planned trade that lost can earn an A, a
 reckless trade that won can earn a D. The checklist grade in the facts is a starting point; move it by
@@ -77,7 +77,7 @@ def facts(c, user_id: int, p: dict) -> dict:
     limit = profile["max_risk_per_trade_pct"] if profile else 1.0
 
     bars = c.execute("SELECT close, high, low FROM candles WHERE symbol = %s AND tf = '1h' AND ts < %s "
-                     "ORDER BY ts DESC LIMIT 60", (config.SYMBOL, p["opened_at"])).fetchall()[::-1]
+                     "ORDER BY ts DESC LIMIT 60", (p.get("symbol") or config.SYMBOL, p["opened_at"])).fetchall()[::-1]
     closes = [b["close"] for b in bars]
     trend = None
     if len(closes) >= 50:

@@ -7,7 +7,9 @@ import ShareButton, { resultShare } from "@/components/ShareCard";
 import SignInPrompt from "@/components/SignInPrompt";
 import { Chips, Empty, Icon, PageHeader } from "@/components/ui";
 import Link from "next/link";
-import { api, asStrategy, fmtPct, fmtUsd, type Backtest, type BacktestParams, type BacktestSummary, type SavedStrategy, type Strategy } from "@/lib/api";
+import MarketPicker from "@/components/markets/MarketPicker";
+import { api, asStrategy, fmtPct, fmtUsd, type Backtest, type BacktestParams, type BacktestSummary, type Market, type SavedStrategy, type Strategy } from "@/lib/api";
+import { GOLD, ticker, useMarket } from "@/lib/markets";
 import { useUser } from "@/lib/useUser";
 
 const input = "w-full rounded-lg border border-border bg-background px-3 py-1.5 outline-none focus:border-gold";
@@ -26,6 +28,13 @@ const DEFAULTS: Omit<BacktestParams, "strategy" | "params"> = {
   take_profit_pct: null,
   size_pct: null,
 };
+
+/** A market's usual trade size and broker costs. A swap charged as a yearly % of the position is left empty
+ *  so the server applies it. */
+const costsFor = (m: Market) => ({
+  symbol: m.symbol, units: m.default_units, spread: m.spread, swap_long: m.swap_long, swap_short: m.swap_short,
+});
+const unitName = (m: Market) => (m.unit === "ounce" ? "oz" : m.unit === "MMBtu" ? "MMBtu" : `${m.unit}s`);
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -46,7 +55,13 @@ function Num({ value, onChange, step = "any", min, max, placeholder }: {
   );
 }
 
-const label = (strategies: Strategy[], p: BacktestParams) => {
+const label = (strategies: Strategy[], p: BacktestParams, markets: Market[] = []) => {
+  const m = p.symbol && p.symbol !== GOLD.symbol ? markets.find((x) => x.symbol === p.symbol) : null;
+  const base = baseLabel(strategies, p);
+  return m ? `${m.name} · ${base}` : p.symbol && p.symbol !== GOLD.symbol ? `${p.symbol} · ${base}` : base;
+};
+
+const baseLabel = (strategies: Strategy[], p: BacktestParams) => {
   if (p.strategy === "custom") return `${p.rules?.name ?? "Custom strategy"} · ${p.tf === "1h" ? "hourly" : "daily"}`;
   const s = strategies.find((x) => x.key === p.strategy);
   const vals = Object.values(p.params);
@@ -55,6 +70,7 @@ const label = (strategies: Strategy[], p: BacktestParams) => {
 
 export default function BacktestPage() {
   const { user } = useUser();
+  const [market, setSymbol, markets] = useMarket();
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [form, setForm] = useState<BacktestParams | null>(null);
   const [result, setResult] = useState<Backtest | null>(null);
@@ -93,7 +109,12 @@ export default function BacktestPage() {
     }, () => {});
   }, [user]);
 
-  if (user === null) return <SignInPrompt what="backtest strategies on gold" next="/backtest" />;
+  // Picking another market resets the size and costs to that market's usual ones.
+  useEffect(() => {
+    setForm((f) => (f && (f.symbol ?? GOLD.symbol) !== market.symbol ? { ...f, ...costsFor(market) } : f));
+  }, [market]);
+
+  if (user === null) return <SignInPrompt what="backtest trading strategies" next="/backtest" />;
   if (!form || user === undefined) return null;
 
   const all = [...strategies, ...mine.map(asStrategy)];
@@ -119,7 +140,7 @@ export default function BacktestPage() {
     setBusy(true);
     setError(null);
     try {
-      const r = await api.runBacktest({ ...form!, end: form!.end || null });
+      const r = await api.runBacktest({ ...form!, symbol: form!.symbol ?? market.symbol, end: form!.end || null });
       setResult(r);
       // On narrow screens the results sit below the form.
       if (window.innerWidth < 1024) setTimeout(() => document.getElementById("results")?.scrollIntoView({ behavior: "smooth" }), 50);
@@ -134,7 +155,8 @@ export default function BacktestPage() {
   async function open(id: number) {
     const r = await api.backtest(id);
     setResult(r);
-    setForm({ ...r.params, end: r.params.end ?? null });
+    setForm({ ...r.params, end: r.params.end ?? null, symbol: r.params.symbol ?? GOLD.symbol });
+    setSymbol(r.params.symbol ?? GOLD.symbol);
     const m = r.params.strategy === "custom" ? mine.find((x) => x.name === r.params.rules?.name) : null;
     setCustomKey(m ? `custom:${m.id}` : null);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -149,7 +171,8 @@ export default function BacktestPage() {
   return (
     <div className="mx-auto grid max-w-6xl gap-6 px-4 py-8 lg:grid-cols-[320px_1fr]">
       <form onSubmit={run} className="space-y-4">
-        <PageHeader icon="backtest" title="Backtest a strategy" subtitle={`${strategies.length} strategies on gold's history`} />
+        <PageHeader icon="backtest" title="Backtest a strategy" subtitle={`${strategies.length} strategies on ${market.symbol === GOLD.symbol ? "gold's" : `${market.name}'s`} history`} />
+        <MarketPicker market={market} markets={markets} onChange={setSymbol} />
         <div className="rounded-2xl border border-border bg-surface p-3">
           <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-2.5">
             <Icon name="search" className="h-4 w-4 text-muted" />
@@ -236,7 +259,9 @@ export default function BacktestPage() {
                 <Num value={form.size_pct} min={0.1} onChange={(v) => set({ size_pct: v })} />
               </Field>
             ) : (
-              <Field label="Ounces per trade" hint="1 lot = 100 oz"><Num value={form.units} min={0.01} onChange={(v) => set({ units: v ?? 1 })} /></Field>
+              <Field label={`${unitName(market)[0].toUpperCase()}${unitName(market).slice(1)} per trade`} hint={market.lot > 1 ? `1 lot = ${market.lot.toLocaleString()} ${unitName(market)}` : undefined}>
+                <Num value={form.units} min={0.0001} onChange={(v) => set({ units: v ?? market.default_units })} />
+              </Field>
             )}
             <Field label="Stop loss (%)"><Num value={form.stop_loss_pct} min={0.1} placeholder="none" onChange={(v) => set({ stop_loss_pct: v })} /></Field>
             <Field label="Take profit (%)"><Num value={form.take_profit_pct} min={0.1} placeholder="none" onChange={(v) => set({ take_profit_pct: v })} /></Field>
@@ -250,12 +275,15 @@ export default function BacktestPage() {
         <details className="rounded-lg border border-border p-3">
           <summary className="cursor-pointer text-sm font-medium">Broker costs</summary>
           <div className="mt-3 grid grid-cols-2 gap-3">
-            <Field label="Spread ($/oz)"><Num value={form.spread} min={0} onChange={(v) => set({ spread: v ?? 0 })} /></Field>
+            <Field label={`Spread ($ per ${market.unit})`}><Num value={form.spread} min={0} onChange={(v) => set({ spread: v ?? 0 })} /></Field>
             <div />
-            <Field label="Swap long ($/oz/night)"><Num value={form.swap_long} onChange={(v) => set({ swap_long: v ?? 0 })} /></Field>
-            <Field label="Swap short ($/oz/night)"><Num value={form.swap_short} onChange={(v) => set({ swap_short: v ?? 0 })} /></Field>
+            <Field label={`Swap long ($/${market.unit}/night)`}><Num value={form.swap_long} placeholder={`${market.swap_long_pct}% a year`} onChange={(v) => set({ swap_long: v })} /></Field>
+            <Field label={`Swap short ($/${market.unit}/night)`}><Num value={form.swap_short} placeholder={`${market.swap_short_pct}% a year`} onChange={(v) => set({ swap_short: v })} /></Field>
           </div>
-          <p className="mt-2 text-xs text-muted">Defaults are rough estimates. Check your broker&apos;s spread and swap rates for gold.</p>
+          <p className="mt-2 text-xs text-muted">
+            Defaults are rough estimates for {market.name}. An empty swap charges the yearly rate shown on the position&apos;s value.
+            Check your broker&apos;s spread and swap rates.
+          </p>
         </details>
 
         {error && <p className="text-sm text-down">{error}</p>}
@@ -271,10 +299,10 @@ export default function BacktestPage() {
         {result ? (
           <div>
             <div className="mb-3 flex flex-wrap items-center gap-2">
-              <h2 className="flex min-w-0 flex-1 items-center gap-2 font-medium"><Icon name="backtest" className="h-4 w-4 text-gold" />{label(strategies, result.params)}</h2>
+              <h2 className="flex min-w-0 flex-1 items-center gap-2 font-medium"><Icon name="backtest" className="h-4 w-4 text-gold" />{label(strategies, result.params, markets)}</h2>
               {result.stats.trades > 0 && (
-                <ShareButton data={resultShare("Backtest", label(strategies, result.params),
-                  `XAU/USD · ${result.params.tf} candles · ${result.params.start.slice(0, 4)} to ${(result.params.end ?? new Date().toISOString()).slice(0, 4)} · ${fmtUsd(result.params.capital)} start`,
+                <ShareButton data={resultShare("Backtest", label(strategies, result.params, markets),
+                  `${ticker(markets.find((x) => x.symbol === (result.params.symbol ?? GOLD.symbol)) ?? GOLD)} · ${result.params.tf} candles · ${result.params.start.slice(0, 4)} to ${(result.params.end ?? new Date().toISOString()).slice(0, 4)} · ${fmtUsd(result.params.capital)} start`,
                   result.stats, result.equity)} />
               )}
             </div>
@@ -306,7 +334,7 @@ export default function BacktestPage() {
                   {history.map((h) => (
                     <tr key={h.id} className={`border-t border-border transition-colors hover:bg-surface ${result?.id === h.id ? "bg-surface" : ""}`}>
                       <td className="px-3 py-1.5">
-                        <button onClick={() => open(h.id)} className="text-left hover:text-gold">{label(strategies, h.params)}</button>
+                        <button onClick={() => open(h.id)} className="text-left hover:text-gold">{label(strategies, h.params, markets)}</button>
                       </td>
                       <td className={`px-3 py-1.5 text-right ${(h.stats.total_return_pct ?? 0) >= 0 ? "text-up" : "text-down"}`}>
                         {fmtPct(h.stats.total_return_pct)}

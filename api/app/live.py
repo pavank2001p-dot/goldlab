@@ -1,4 +1,5 @@
-"""Live gold prices from Finnhub's websocket (OANDA:XAU_USD quotes).
+"""Live prices from Finnhub's websocket: OANDA quotes for gold, forex, energy and index CFDs,
+US stock trades, and Binance crypto trades (each market's `live` symbol in app.instruments).
 
 The free historical feed publishes each hour only after it ends, so this fills the gap:
 every quote updates the latest price, which the chart polls, and is rolled into 1-second,
@@ -14,20 +15,24 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter
 
+from fastapi import HTTPException
+
 from . import config
+from . import instruments as ins
 from .ingest import Bar, upsert
 
 log = logging.getLogger("live")
 router = APIRouter(prefix="/prices", tags=["prices"])
 
 FINNHUB_WS = "wss://ws.finnhub.io"
-SYMBOL = "OANDA:XAU_USD"
+SYMBOL = ins.GOLD.live  # gold's Finnhub symbol
 FLUSH_SECONDS = 5
 STEPS = {"1s": 1, "1m": 60, "1h": 3600}
 
 
 class Live:
-    def __init__(self) -> None:
+    def __init__(self, symbol: str = config.SYMBOL) -> None:
+        self.symbol = symbol
         self.price: float | None = None
         self.t: float | None = None  # unix seconds of the latest quote
         self.connected = False
@@ -52,7 +57,7 @@ class Live:
         for tf, bars in self.bars.items():
             if not bars:
                 continue
-            n += upsert(list(bars.values()), tf)
+            n += upsert(list(bars.values()), tf, self.symbol)
             latest = max(bars)
             self.bars[tf] = {latest: bars[latest]}
         return n
@@ -63,7 +68,17 @@ class Live:
                 "configured": bool(config.FINNHUB_API_KEY and config.LIVE_PRICES)}
 
 
-feed = Live()
+feed = Live()  # gold
+_others: dict[str, Live] = {i.symbol: Live(i.symbol) for i in ins.ENABLED if i.live and i.symbol != ins.GOLD.symbol}
+
+
+def feed_of(symbol: str) -> Live | None:
+    """The live feed for one of our symbols (None when the market has no live source)."""
+    return feed if symbol == ins.GOLD.symbol else _others.get(symbol)
+
+
+def all_feeds() -> list[Live]:
+    return [feed, *_others.values()]
 
 
 def handle(message: str) -> None:
@@ -71,8 +86,12 @@ def handle(message: str) -> None:
     if msg.get("type") != "trade":
         return
     for d in msg.get("data") or []:
-        if d.get("s") == SYMBOL and d.get("p"):
-            feed.tick(float(d["p"]), d["t"] / 1000, float(d.get("v") or 0))
+        inst = ins.by_live_symbol(d.get("s") or "")
+        f = feed_of(inst.symbol) if inst else None
+        t = d.get("t", 0) / 1000
+        # Stocks also print pre- and after-market trades; keep to the hours the chart and paper account use.
+        if f and d.get("p") and inst.is_open(datetime.fromtimestamp(t, timezone.utc)):
+            f.tick(float(d["p"]), t, float(d.get("v") or 0))
 
 
 async def run() -> None:
@@ -83,7 +102,8 @@ async def run() -> None:
         while True:
             await asyncio.sleep(FLUSH_SECONDS)
             try:
-                await asyncio.to_thread(feed.flush)
+                for f in all_feeds():
+                    await asyncio.to_thread(f.flush)
             except Exception:
                 log.exception("saving live bars failed")
 
@@ -93,8 +113,12 @@ async def run() -> None:
         while True:
             try:
                 async with connect(f"{FINNHUB_WS}?token={config.FINNHUB_API_KEY}", ping_interval=30) as ws:
-                    await ws.send(json.dumps({"type": "subscribe", "symbol": SYMBOL}))
-                    feed.connected, delay = True, 1
+                    for i in ins.ENABLED:
+                        if i.live:
+                            await ws.send(json.dumps({"type": "subscribe", "symbol": i.live}))
+                    for f in all_feeds():
+                        f.connected = True
+                    delay = 1
                     log.info("live prices connected")
                     async for message in ws:
                         handle(message)
@@ -102,7 +126,8 @@ async def run() -> None:
                 raise
             except Exception as e:
                 log.warning("live prices disconnected: %s", e)
-            feed.connected = False
+            for f in all_feeds():
+                f.connected = False
             await asyncio.sleep(delay)
             delay = min(delay * 2, 300)
     finally:
@@ -110,5 +135,12 @@ async def run() -> None:
 
 
 @router.get("/live")
-def live():
-    return feed.snapshot()
+def live(symbol: str = config.SYMBOL):
+    try:
+        inst = ins.get(symbol)
+    except KeyError:
+        raise HTTPException(404, f"Unknown market {symbol}")
+    f = feed_of(inst.symbol)
+    if f is None:
+        return {"price": None, "t": None, "age_seconds": None, "connected": False, "configured": False}
+    return f.snapshot()

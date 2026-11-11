@@ -1,4 +1,4 @@
-"""Strategy backtests on stored XAU/USD bars.
+"""Strategy backtests on stored bars of any market in app.instruments (gold by default).
 
 Signals are computed on each bar's close and filled at the next bar's open, so a
 strategy never trades on information it could not have had. Stored prices are bids:
@@ -15,6 +15,7 @@ from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field, model_validator
 
 from . import config, db
+from . import instruments as ins
 from .auth import UserOut, current_user
 from .custom import Rules
 from .custom import signals as custom_signals
@@ -755,6 +756,7 @@ def signals(strategy: str, p: dict, bars: list[dict], rules: Rules | None = None
 
 class BacktestIn(BaseModel):
     strategy: Literal[tuple(STRATEGIES) + ("custom",)]  # type: ignore[valid-type]
+    symbol: str = Field(config.SYMBOL, description="Market to test on (see /prices/markets)")
     params: dict[str, float] = {}
     rules: Rules | None = Field(None, description="The conditions of a custom strategy (strategy = custom)")
     tf: Literal["1h", "1d"] = "1d"
@@ -762,18 +764,39 @@ class BacktestIn(BaseModel):
     end: date | None = None
     direction: Literal["both", "long_only", "short_only"] = "both"
     capital: float = Field(10_000, gt=0, le=100_000_000)
-    units: float = Field(5, gt=0, le=100_000, description="Ounces per trade (1 standard lot = 100 oz)")
+    units: float | None = Field(None, gt=0, le=1_000_000_000, description=(
+        "Units per trade (ounces for gold, shares, barrels, currency units...); default is the market's usual size"))
     size_pct: float | None = Field(None, gt=0, le=10_000, description=(
         "If set, each trade's size is this % of the account at entry (100 = 1x, 500 = 5x leverage), "
         "and units is ignored"))
-    spread: float = Field(0.30, ge=0, le=20, description="USD per ounce, paid once per round trip")
-    swap_long: float = Field(-0.25, ge=-5, le=5, description="USD per ounce per night held long (negative = cost)")
-    swap_short: float = Field(0.05, ge=-5, le=5, description="USD per ounce per night held short")
+    spread: float | None = Field(None, ge=0, le=100_000, description=(
+        "In price units, paid once per round trip; default is the market's typical spread"))
+    swap_long: float | None = Field(None, ge=-10_000, le=10_000, description=(
+        "USD per unit per night held long (negative = cost); default is the market's financing rate"))
+    swap_short: float | None = Field(None, ge=-10_000, le=10_000, description="USD per unit per night held short")
     stop_loss_pct: float | None = Field(None, gt=0, le=50)
     take_profit_pct: float | None = Field(None, gt=0, le=200)
 
+    @property
+    def market(self) -> ins.Instrument:
+        return ins.get(self.symbol)
+
+    def swap_for(self, side: int, price: float) -> float:
+        """Financing per unit per night: the fixed value if one was given, else the market's rate at this price."""
+        fixed = self.swap_long if side == 1 else self.swap_short
+        return fixed if fixed is not None else self.market.swap_per_unit("long" if side == 1 else "short", price)
+
     @model_validator(mode="after")
     def _check(self):
+        try:
+            m = ins.get(self.symbol)
+        except KeyError:
+            raise ValueError(f"Unknown market {self.symbol}")
+        self.symbol = m.symbol
+        if self.units is None:
+            self.units = m.default_units
+        if self.spread is None:
+            self.spread = m.spread
         if self.strategy == "custom":
             if self.rules is None:
                 raise ValueError("A custom strategy needs its rules")
@@ -855,7 +878,7 @@ def run(cfg: BacktestIn, bars: list[dict]) -> dict:
         if pos:
             nights = (trading_date(b["t"]) - trading_date(prev["t"])).days
             if nights > 0:
-                swap_acc += nights * u * (cfg.swap_long if pos == 1 else cfg.swap_short)
+                swap_acc += nights * u * cfg.swap_for(pos, entry)
 
         want = target[i - 1] if target[i - 1] in allow else 0
         if blocked and want != blocked:
@@ -917,10 +940,10 @@ def run(cfg: BacktestIn, bars: list[dict]) -> dict:
     return rep
 
 
-def load_bars(tf: str, start: date, end: date | None) -> list[dict]:
+def load_bars(tf: str, start: date, end: date | None, symbol: str = config.SYMBOL) -> list[dict]:
     s = datetime(start.year, start.month, start.day, tzinfo=timezone.utc)
     sql = "SELECT extract(epoch FROM ts)::bigint AS t, open AS o, high AS h, low AS l, close AS c FROM candles WHERE symbol = %s AND tf = %s AND ts >= %s"
-    args: list = [config.SYMBOL, tf, s]
+    args: list = [symbol, tf, s]
     if end:
         sql += " AND ts < %s"
         args.append(datetime(end.year, end.month, end.day, tzinfo=timezone.utc))
@@ -941,7 +964,7 @@ def strategies():
 @router.post("", status_code=201)
 def create(cfg: BacktestIn, user: UserOut = Depends(current_user)):
     try:
-        rep = run(cfg, load_bars(cfg.tf, cfg.start, cfg.end))
+        rep = run(cfg, load_bars(cfg.tf, cfg.start, cfg.end, cfg.symbol))
     except ValueError as e:
         raise HTTPException(422, str(e))
     params = cfg.model_dump(mode="json")

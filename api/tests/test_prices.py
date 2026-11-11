@@ -65,9 +65,9 @@ def test_daily_matches_hourly(client):
 def test_switching_source_replaces_data(client, monkeypatch):
     ingest.backfill("sample", date(2026, 9, 1))
     real = ingest.Bar(datetime(2026, 9, 2, 14, tzinfo=UTC), 2500, 2501, 2499, 2500.5, 10)
-    monkeypatch.setattr(ingest, "dukascopy_hourly", lambda start, end: iter([[real]]))
-    monkeypatch.setattr(ingest, "dukascopy_minutes", lambda start, end: iter([]))
-    monkeypatch.setattr(ingest, "dukascopy_seconds", lambda start, end: iter([]))
+    monkeypatch.setattr(ingest, "dukascopy_hourly", lambda start, end, i=None: iter([[real]]))
+    monkeypatch.setattr(ingest, "dukascopy_minutes", lambda start, end, i=None: iter([]))
+    monkeypatch.setattr(ingest, "dukascopy_seconds", lambda start, end, i=None: iter([]))
     ingest.backfill("dukascopy", date(2026, 9, 1))
     bars = client.get("/prices/candles", params={"tf": "1h", "limit": 5000}).json()["bars"]
     assert len(bars) == 1 and bars[0]["c"] == 2500.5

@@ -22,8 +22,9 @@ import {
 import { useThemeKey } from "@/lib/theme";
 import Drawings from "./chart/Drawings";
 import { IND_LIST, ema, macd, pts, rsi, sma, stdev, type IndKey } from "./chart/indicators";
-import { api, fmtPrice, type Bar, type ChartMarker, type ChartTf, type LiveQuote } from "@/lib/api";
+import { api, type Bar, type ChartMarker, type ChartTf, type LiveQuote, type Market } from "@/lib/api";
 import { usePref } from "@/lib/prefs";
+import { GOLD, fmtMarketPrice, ticker } from "@/lib/markets";
 
 const GROUPS: { label: string; tfs: [ChartTf, string][] }[] = [
   { label: "Seconds", tfs: [["1s", "1s"], ["5s", "5s"], ["15s", "15s"], ["30s", "30s"]] },
@@ -73,11 +74,17 @@ const EVENT_NAME: Record<ChartMarker["kind"], string> = {
 /** `below` is a strip under the candles (inside the chart's frame, so it stays in full screen) for overlay controls. */
 export type ChartOverlay = (c: { chart: IChartApi; series: ISeriesApi<"Candlestick">; below: HTMLDivElement | null }) => React.ReactNode;
 
-export default function PriceChart({ height = 520, initialTf = "1h", tools = false, overlay }: {
+export default function PriceChart({ height = 520, initialTf = "1h", tools = false, overlay, market = GOLD, picker }: {
   height?: number; initialTf?: ChartTf; tools?: boolean;
   /** Extra layers drawn over the candles, such as paper orders and positions. */
   overlay?: ChartOverlay;
+  /** The market to show (gold by default). */
+  market?: Market;
+  /** Shown in place of the market's name in the toolbar, such as a market picker. */
+  picker?: React.ReactNode;
 }) {
+  const symbol = market.symbol;
+  const fmtPrice = (p: number) => fmtMarketPrice(p, market);
   const wrap = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -131,7 +138,7 @@ export default function PriceChart({ height = 520, initialTf = "1h", tools = fal
       borderVisible: false,
       wickUpColor: v("--up"),
       wickDownColor: v("--down"),
-      priceFormat: { type: "price", precision: 2, minMove: 0.01 },
+      priceFormat: { type: "price", precision: market.decimals, minMove: 10 ** -market.decimals },
     });
     chartRef.current = chart;
     setReady({ chart, series: seriesRef.current });
@@ -141,7 +148,20 @@ export default function PriceChart({ height = 520, initialTf = "1h", tools = fal
       chartRef.current = null;
       seriesRef.current = null;
     };
+    // Built once; the precision effect below follows the market after that.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Price decimals follow the market (5 for EUR/USD, 2 for gold).
+  useEffect(() => {
+    seriesRef.current?.applyOptions({ priceFormat: { type: "price", precision: market.decimals, minMove: 10 ** -market.decimals } });
+  }, [market.decimals]);
+
+  // Markets without second bars or long history fall back to a timeframe they have.
+  useEffect(() => {
+    if (!market.has_seconds && isSeconds(tf)) setTf("1m");
+    if (!market.has_history && all) setAll(false);
+  }, [market.has_seconds, market.has_history, tf, all]);
 
   // Recolour when the theme or accent changes.
   useEffect(() => {
@@ -169,9 +189,10 @@ export default function PriceChart({ height = 520, initialTf = "1h", tools = fal
     setError(null);
     setEmpty(false);
     setLoading(true);
+    setQuote(null);
     chart.applyOptions({ timeScale: { secondsVisible: isSeconds(tf) } });
 
-    api.candles(tf, { limit: tf === "1mo" ? ALL_MONTHS : PAGE }).then(
+    api.candles(tf, { limit: tf === "1mo" ? ALL_MONTHS : PAGE, symbol }).then(
       (data) => {
         if (cancelled) return;
         bars = data;
@@ -194,7 +215,7 @@ export default function PriceChart({ height = 520, initialTf = "1h", tools = fal
       if (!range || range.from > 50 || loadingOlder || reachedStart || !bars.length) return;
       loadingOlder = true;
       try {
-        const older = await api.candles(tf, { end: bars[0].t, limit: PAGE });
+        const older = await api.candles(tf, { end: bars[0].t, limit: PAGE, symbol });
         if (cancelled) return;
         if (!older.length) reachedStart = true;
         else {
@@ -213,7 +234,7 @@ export default function PriceChart({ height = 520, initialTf = "1h", tools = fal
     const refresh = setInterval(async () => {
       if (!bars.length) return;
       try {
-        const fresh = await api.candles(tf, { start: bars[bars.length - 1].t, limit: 500 });
+        const fresh = await api.candles(tf, { start: bars[bars.length - 1].t, limit: 500, symbol });
         if (cancelled) return;
         for (const b of fresh) {
           if (b.t < bars[bars.length - 1].t) continue;
@@ -227,7 +248,7 @@ export default function PriceChart({ height = 520, initialTf = "1h", tools = fal
 
     const poll = setInterval(async () => {
       try {
-        const q = await api.live();
+        const q = await api.live(symbol);
         if (cancelled) return;
         setQuote(q);
         if (q.price == null || q.t == null || !bars.length || (q.age_seconds ?? 99) > 120) return;
@@ -252,7 +273,7 @@ export default function PriceChart({ height = 520, initialTf = "1h", tools = fal
       clearInterval(poll);
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRange);
     };
-  }, [tf, all]);
+  }, [tf, all, symbol]);
 
   // Legend: the candle under the crosshair (or the latest), like other charting platforms.
   useEffect(() => {
@@ -273,13 +294,13 @@ export default function PriceChart({ height = 520, initialTf = "1h", tools = fal
     if (!tools || !showEvents) { setEvents([]); eventsKey.current = ""; return; }
     const bs = barsRef.current;
     if (!bs.length) return;
-    const key = `${tf}:${all}:${bs[0].t}`;
+    const key = `${symbol}:${tf}:${all}:${bs[0].t}`;
     if (eventsKey.current === key) return;
     eventsKey.current = key;
     // Weekly and monthly candles are too coarse for every release, so show only the turning points there.
     const coarse = tf === "1w" || tf === "1mo";
     api.markers(bs[0].t, Math.floor(Date.now() / 1000) + 86400, !coarse).then(setEvents, () => setEvents([]));
-  }, [tools, showEvents, tf, all, ver]);
+  }, [tools, showEvents, tf, all, ver, symbol]);
 
   useEffect(() => {
     if (!ready) return;
@@ -423,7 +444,7 @@ export default function PriceChart({ height = 520, initialTf = "1h", tools = fal
       className={`flex flex-col overflow-hidden border border-border bg-surface ${full ? "fixed inset-0 z-50" : "rounded-lg"}`}
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-3 py-2 text-sm">
-        <span className="font-medium">XAU/USD</span>
+        {picker ?? <span className="font-medium">{ticker(market)}</span>}
         {quote?.configured && (
           <span className="flex items-center gap-1.5 text-xs">
             <span className={`h-2 w-2 rounded-full ${live ? "breathe bg-up" : "bg-muted"}`} />
@@ -483,7 +504,7 @@ export default function PriceChart({ height = 520, initialTf = "1h", tools = fal
           </button>
         </div>
         <div className="-mx-3 flex w-[calc(100%+1.5rem)] gap-3 overflow-x-auto px-3 pb-0.5">
-          {GROUPS.map((g) => (
+          {GROUPS.filter((g) => market.has_seconds || g.label !== "Seconds").map((g) => (
             <div key={g.label} className="flex shrink-0 items-center gap-0.5" role="group" aria-label={g.label}>
               {g.tfs.map(([t, label]) => (
                 <button
@@ -496,10 +517,12 @@ export default function PriceChart({ height = 520, initialTf = "1h", tools = fal
               ))}
             </div>
           ))}
-          <button onClick={showAll} title="Every month since 1833"
-            className={`shrink-0 rounded px-2 py-1 ${all ? "bg-gold text-black" : "text-muted hover:text-foreground"}`}>
-            All
-          </button>
+          {market.has_history && (
+            <button onClick={showAll} title="Every month since 1833"
+              className={`shrink-0 rounded px-2 py-1 ${all ? "bg-gold text-black" : "text-muted hover:text-foreground"}`}>
+              All
+            </button>
+          )}
         </div>
       </div>
       {all && !error && (
@@ -541,7 +564,7 @@ export default function PriceChart({ height = 520, initialTf = "1h", tools = fal
             {hoverEvents.length > 3 && <p className="text-muted">and {hoverEvents.length - 3} more</p>}
           </div>
         )}
-        {tools && ready && <Drawings chart={ready.chart} series={ready.series} bars={barsRef} accent={accent} />}
+        {tools && ready && <Drawings chart={ready.chart} series={ready.series} bars={barsRef} accent={accent} symbol={symbol} />}
         {ready && overlay?.({ ...ready, below })}
       </div>
       {overlay && <div ref={setBelow} />}

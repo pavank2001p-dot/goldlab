@@ -12,7 +12,7 @@ log = logging.getLogger("api")
 async def _price_updater():
     while True:
         try:
-            n = await asyncio.to_thread(ingest.update, config.PRICE_SOURCE)
+            n = await asyncio.to_thread(ingest.update_all, config.PRICE_SOURCE)
             log.info("price update stored %d bars", n)
         except Exception:
             log.exception("price update failed")
