@@ -1,5 +1,6 @@
 "use client";
 
+import { MirrorLine } from "@/components/MoneyMirror";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import FitPanel from "@/components/FitPanel";
@@ -505,6 +506,7 @@ function Ticket({ state, market, profile, onPlaced, busy, setBusy }: {
           </div>
         )}
       </div>
+      <MirrorLine riskPct={riskPct} />
 
       {error && <p className="text-sm text-down">{error}</p>}
       {closedForMarket && (

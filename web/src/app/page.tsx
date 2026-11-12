@@ -1,4 +1,5 @@
 import Link from "next/link";
+import DailyCandle from "@/components/DailyCandle";
 import HomeTop, { SignedOut } from "@/components/HomeTop";
 import PriceChart from "@/components/PriceChart";
 import PriceTicker from "@/components/PriceTicker";
@@ -67,6 +68,8 @@ export default function Home() {
           </dl>
         </div>
       </section>} />
+
+      <DailyCandle />
 
       <section data-tour="chart" className="card mt-6 space-y-4 p-4 sm:p-6">
         <SignedOut><PriceTicker /></SignedOut>

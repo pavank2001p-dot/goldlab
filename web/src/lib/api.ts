@@ -1,4 +1,4 @@
-export type User = { id: number; email: string; name: string };
+export type User = { id: number; email: string; name: string; email_verified: boolean; has_password: boolean; google: boolean };
 export type Bar = { t: number; o: number; h: number; l: number; c: number; v: number };
 export type Timeframe = "1h" | "1d";
 export type ChartTf = "1s" | "5s" | "15s" | "30s" | "1m" | "5m" | "15m" | "30m" | "1h" | "4h" | "1d" | "1w" | "1mo";
@@ -590,9 +590,22 @@ export type ChartMarker = { t: number; title: string; kind: "fed" | "inflation" 
 /** US dollar exchange rates, for showing gold in a local currency. */
 export type FxRates = { base: "USD"; rates: Record<string, number>; as_of: string | null; source: "ecb" | "fallback"; pegged: string[] };
 
+export type DailyChoice = "buy" | "sell" | "wait";
+export type LevelBar = { o: number; h: number; l: number; c: number };
+export type DailyResult = {
+  choice: DailyChoice; right: boolean; pnl_1000: number; against_pct: number;
+  end_price: number; move_pct: number; high_pct: number; low_pct: number; best: DailyChoice;
+  price: number; at: number; future: LevelBar[]; symbol: string;
+  crowd: { buy: number; sell: number; wait: number; total: number };
+  you: { streak: number; played: number; right: number } | null;
+};
+export type DailyCandle = { day: string; number: number; tf: string; horizon: number; bars: LevelBar[]; played: DailyResult | null };
+
 export const api = {
+  daily: () => call<DailyCandle>("/daily"),
+  playDaily: (choice: DailyChoice) => call<DailyResult>("/daily", { method: "POST", body: JSON.stringify({ choice }) }),
   prefs: () => call<Record<string, unknown>>("/prefs"),
-  setPref: (key: "drawings" | "indicators" | "chart_events" | "trading", value: unknown) =>
+  setPref: (key: "drawings" | "indicators" | "chart_events" | "trading" | "mirror", value: unknown) =>
     call<{ ok: boolean }>(`/prefs/${key}`, { method: "PUT", body: JSON.stringify({ value }) }),
   markers: (start: number, end: number, scheduled = true) =>
     call<ChartMarker[]>(`/calendar/markers?start=${start}&end=${end}&scheduled=${scheduled}`),
@@ -645,6 +658,14 @@ export const api = {
   login: (email: string, password: string) =>
     call<User>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   logout: () => call<void>("/auth/logout", { method: "POST" }),
+  authConfig: () => call<{ google: boolean }>("/auth/config"),
+  forgotPassword: (email: string) =>
+    call<{ sent: boolean }>("/auth/password/forgot", { method: "POST", body: JSON.stringify({ email }) }),
+  resetPassword: (token: string, password: string) =>
+    call<User>("/auth/password/reset", { method: "POST", body: JSON.stringify({ token, password }) }),
+  verifyEmail: (token: string) =>
+    call<{ verified: boolean; email: string }>("/auth/verify", { method: "POST", body: JSON.stringify({ token }) }),
+  resendVerification: () => call<{ sent: boolean; already_verified?: boolean }>("/auth/verify/resend", { method: "POST" }),
   markets: () => call<MarketList>("/prices/markets"),
   summary: (symbol?: string) => call<Summary>(withSym("/prices/summary", symbol)),
   live: (symbol?: string) => call<LiveQuote>(withSym("/prices/live", symbol)),
