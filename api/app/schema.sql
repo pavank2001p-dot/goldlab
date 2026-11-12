@@ -372,3 +372,18 @@ CREATE TABLE IF NOT EXISTS daily_candle_plays (
     PRIMARY KEY (user_id, day)
 );
 CREATE INDEX IF NOT EXISTS daily_candle_plays_day_idx ON daily_candle_plays (day);
+-- Product analytics, first party and without third-party scripts. One row per user per day they used
+-- the site (for the day-7 return rate), and page views counted per day, page and kind of referrer,
+-- with no IP address, cookie or user stored.
+CREATE TABLE IF NOT EXISTS user_activity (
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    day     DATE NOT NULL,
+    PRIMARY KEY (user_id, day)
+);
+CREATE TABLE IF NOT EXISTS page_views (
+    day    DATE NOT NULL,
+    path   TEXT NOT NULL,
+    source TEXT NOT NULL,
+    views  INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, path, source)
+);

@@ -7,11 +7,14 @@ import Tour from "@/components/Tour";
 import AlertWatcher from "@/components/practice/AlertWatcher";
 import { UserProvider } from "@/lib/useUser";
 import { THEME_SCRIPT } from "@/lib/themeScript";
+import { SITE_URL } from "@/lib/site";
+import PageView from "@/components/PageView";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "Trading Lab: charts, backtests and paper trading",
   description: "Chart, backtest and practise trading gold, commodities, forex, indices, stocks and crypto, with news insights matched to your risk appetite.",
 };
@@ -37,6 +40,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           <Toaster />
           <Tour />
           <AlertWatcher />
+          <PageView />
         </UserProvider>
       </body>
     </html>

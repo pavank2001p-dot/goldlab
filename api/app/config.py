@@ -63,6 +63,8 @@ RESET_TOKEN_MINUTES = int(os.getenv("RESET_TOKEN_MINUTES", "60"))
 # Google sign-in stays hidden until both are set. Authorised redirect URI: {APP_URL}/api/auth/google/callback
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+# Signed-in accounts allowed to see the product metrics page (comma-separated emails).
+ADMIN_EMAILS = {e.strip().lower() for e in os.getenv("ADMIN_EMAILS", "").split(",") if e.strip()}
 
 if COOKIE_SECURE and JWT_SECRET.startswith("dev-only"):
     raise RuntimeError("Set JWT_SECRET to a long random value in production")

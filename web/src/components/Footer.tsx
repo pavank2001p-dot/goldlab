@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { TourLink } from "./Tour";
 import { useT } from "@/lib/i18n";
+import { LANDINGS } from "./landing/Landing";
 
 export default function Footer() {
   const { t } = useT();
@@ -17,6 +18,9 @@ export default function Footer() {
             TradingView
           </a>{" "}
           Lightweight Charts™. New here? <TourLink className="underline hover:text-foreground" />.
+        </p>
+        <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+          {LANDINGS.map((l) => <Link key={l.path} href={l.path} className="hover:text-foreground">{l.label}</Link>)}
         </p>
       </div>
     </footer>
