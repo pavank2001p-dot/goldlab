@@ -229,8 +229,9 @@ class _Book:
         and the rest stays open under the original id with its stop and target."""
         part = self.c.execute(
             f"""INSERT INTO paper_positions (user_id, symbol, side, units, entry_price, opened_at, stop_loss, take_profit,
-                                             order_kind, agent, trail)
-                SELECT user_id, symbol, side, %s, entry_price, opened_at, stop_loss, take_profit, order_kind, agent, trail
+                                             order_kind, agent, trail, stop_widened, planned_stop)
+                SELECT user_id, symbol, side, %s, entry_price, opened_at, stop_loss, take_profit, order_kind, agent, trail,
+                       stop_widened, planned_stop
                 FROM paper_positions WHERE id = %s RETURNING {POS_COLS}""", (units, p["id"])).fetchone()
         rest = self.c.execute(f"UPDATE paper_positions SET units = units - %s WHERE id = %s RETURNING {POS_COLS}",
                               (units, p["id"])).fetchone()
@@ -688,7 +689,9 @@ def protect(pid: int, body: ProtectIn, user: UserOut = Depends(current_user)):
         # The coach flags a stop moved further from the entry (or removed): giving a loser more room.
         old = p["stop_loss"]
         if old is not None and (sl is None or (sl < old if p["side"] == "long" else sl > old)):
-            c.execute("UPDATE paper_positions SET stop_widened = true WHERE id = %s", (pid,))
+            # Keep the stop as it was before the first widening, so the disciplined twin can trade the plan.
+            c.execute("UPDATE paper_positions SET stop_widened = true, planned_stop = COALESCE(planned_stop, %s) "
+                      "WHERE id = %s", (old, pid))
     return {"position": row}
 
 

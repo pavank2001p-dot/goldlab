@@ -372,3 +372,6 @@ CREATE TABLE IF NOT EXISTS daily_candle_plays (
     PRIMARY KEY (user_id, day)
 );
 CREATE INDEX IF NOT EXISTS daily_candle_plays_day_idx ON daily_candle_plays (day);
+
+-- The stop a position had before it was first moved further away (app/twin.py trades the plan with it).
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS planned_stop DOUBLE PRECISION;

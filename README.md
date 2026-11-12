@@ -62,6 +62,12 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
   monthly pay and something they are saving for, in their own currency (saved as the `mirror` pref). The order ticket
   then shows each stop as real money, hours of work and a share of the goal, and the home desk shows paper results so
   far as a goal jar.
+- **Disciplined twin and session glyphs** (`api/app/twin.py`, `/coach`): every closed paper trade is taken again by
+  a copy that keeps the rules the coach tags: it skips revenge trades and trades next to a big release, keeps the
+  stop as first planned (stored as `planned_stop` when a stop is first widened), uses a stop at the risk limit when
+  there was none, and sizes to the limit. Twin stops are checked on minute bars (hourly where minutes aren't kept)
+  up to the user's exit. The page shows both running results, the gap, and what each habit cost. Session glyphs
+  draw each trading day of the last five weeks as an emblem: a ring per trade, jagged when a rule was broken.
 - **Trade log** (`api/app/trades.py`): manual entry or CSV import (MetaTrader 4/5 and most broker exports; gold
   rows only; re-imports skip known tickets). Produces the same report as a backtest (`api/app/report.py`).
 
