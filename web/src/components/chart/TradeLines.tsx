@@ -24,6 +24,8 @@ export type TradeActions = {
   modify: (id: number, body: OrderEdit) => Promise<boolean>;
   cancel: (id: number) => Promise<boolean>;
   close: (id: number) => Promise<boolean>;
+  /** Moves a position's stop loss to its entry price. */
+  breakeven?: (id: number) => Promise<boolean>;
   place: (o: PaperOrderInput) => Promise<boolean>;
 };
 
@@ -397,6 +399,11 @@ export default function TradeLines({ chart, series, below, positions, orders, pr
           {l.draggable && <Grip />}
           <span>{text}</span>
           {pos?.pnl != null && <span className={pos.pnl >= 0 ? "text-up" : "text-down"}>{signedUsd(pos.pnl)}</span>}
+          {pos && actions.breakeven && pos.mark != null && (pos.side === "long" ? pos.mark > pos.entry_price : pos.mark < pos.entry_price)
+            && !(pos.stop_loss != null && (pos.side === "long" ? pos.stop_loss >= pos.entry_price : pos.stop_loss <= pos.entry_price)) && (
+            <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={() => actions.breakeven?.(pos.id)} disabled={busy}
+              className={`${mini} text-calm`} title="Move the stop loss to the entry price" aria-label="Move the stop to break-even">BE</button>
+          )}
           {!has("sl") && <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={() => addLevel(l, "sl")} disabled={busy}
             className={`${mini} text-down`} title="Add a stop loss, then drag it" aria-label="Add a stop loss">+SL</button>}
           {!has("tp") && <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={() => addLevel(l, "tp")} disabled={busy}

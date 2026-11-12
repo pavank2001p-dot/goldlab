@@ -153,3 +153,16 @@ def test_new_trading_day_starts_from_that_balance():
     r.roll(book, datetime(2026, 1, 6, 22, 0, tzinfo=timezone.utc))  # 17:00 New York: the next trading day
     assert ch["day"] == date(2026, 1, 7) and ch["day_start_balance"] == 9_800
     assert r.floors() == (9_300, 9_000)
+
+
+def test_trailing_stop_works_inside_a_challenge(client):
+    signup(client)
+    bar(-2, 2000, 2001, 1999, 2000)
+    custom(client)
+    r = client.post("/paper/orders", json={"side": "long", "units": 10, "trail": 3})
+    assert r.status_code == 201, r.text
+    bar(1, 2000, 2010, 2000, 2009)  # the stop trails up to 2007
+    bar(2, 2008, 2008, 2005, 2006)  # and closes the trade in profit
+    s = client.get("/paper").json()
+    assert s["positions"] == [] and s["history"][0]["close_reason"] == "stop_loss" and s["history"][0]["pnl"] > 0
+    assert s["challenge"]["status"] == "active" and s["challenge"]["checks"][3]["value"] == 1

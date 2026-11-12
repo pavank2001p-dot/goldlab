@@ -10,6 +10,11 @@ losses and take profits are checked against every minute bar since the account w
 using each bar's high and low, so nothing is missed while the page is closed. When a stop and a
 target are both touched within one bar, the stop is assumed to have come first.
 
+Broker-style tools: a trailing stop moves the stop loss behind the best price by a fixed distance
+(checked after the bar's stop, so it never fills on the same bar it moved in); break-even moves the
+stop to the entry; a partial close books part of a position as its own closed trade; and two pending
+orders can be paired as one-cancels-other, so when one fills the other is cancelled.
+
 No real money or broker is involved. This is for practice and learning only."""
 
 import time
@@ -43,8 +48,9 @@ LIVE_AGE = 120           # a live quote younger than this is used ahead of saved
 MAX_BARS = 20_000        # minute bars applied per market per request; the rest are applied next time
 MAX_PRICE = 1e9
 POS_COLS = ("id, symbol, side, units, entry_price, opened_at, stop_loss, take_profit, order_kind, closed_at, "
-            "exit_price, close_reason, swap, pnl")
-ORDER_COLS = "id, symbol, side, kind, units, price, stop_loss, take_profit, status, note, created_at, done_at"
+            "exit_price, close_reason, swap, pnl, trail, trailed_at")
+ORDER_COLS = ("id, symbol, side, kind, units, price, stop_loss, take_profit, status, note, created_at, done_at, "
+              "trail, oco_id")
 
 
 def r2(x: float | None) -> float | None:
@@ -183,15 +189,21 @@ class _Book:
         return self.balance + sum(m["pnl"] for m in marks), sum(m["margin"] for m in marks)
 
     def open(self, side: str, units: float, price: float, at: datetime, sl, tp, kind: str,
-             symbol: str = GOLD.symbol) -> dict:
+             symbol: str = GOLD.symbol, trail: float | None = None) -> dict:
         if self.locked:
             raise HTTPException(409, self.locked)
         inst = _inst(symbol)
+        if trail:
+            # A trailing stop starts its distance from the fill, unless a tighter stop was given.
+            start = _exit_price(side, price - (inst.spread if side == "long" else 0), inst)
+            start = start - trail if side == "long" else start + trail
+            sl = start if sl is None else (max(sl, start) if side == "long" else min(sl, start))
+            sl = inst.round(sl)
         p = self.c.execute(
             f"""INSERT INTO paper_positions (user_id, symbol, side, units, entry_price, opened_at, stop_loss, take_profit,
-                                             order_kind)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING {POS_COLS}""",
-            (self.user_id, inst.symbol, side, units, inst.round(price), at, sl, tp, kind)).fetchone()
+                                             order_kind, trail)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING {POS_COLS}""",
+            (self.user_id, inst.symbol, side, units, inst.round(price), at, sl, tp, kind, trail or None)).fetchone()
         self.positions.append(p)
         return p
 
@@ -205,6 +217,23 @@ class _Book:
             (at, _of(p).round(exit_price), reason, round(swap, 2), pnl, p["id"])).fetchone()
         self.positions = [q for q in self.positions if q["id"] != p["id"]]
         return row
+
+    def close_part(self, p: dict, units: float, exit_price: float, at: datetime, reason: str) -> dict:
+        """Close some of a position: the closed part becomes its own closed trade with the same entry,
+        and the rest stays open under the original id with its stop and target."""
+        part = self.c.execute(
+            f"""INSERT INTO paper_positions (user_id, symbol, side, units, entry_price, opened_at, stop_loss, take_profit,
+                                             order_kind, agent, trail)
+                SELECT user_id, symbol, side, %s, entry_price, opened_at, stop_loss, take_profit, order_kind, agent, trail
+                FROM paper_positions WHERE id = %s RETURNING {POS_COLS}""", (units, p["id"])).fetchone()
+        rest = self.c.execute(f"UPDATE paper_positions SET units = units - %s WHERE id = %s RETURNING {POS_COLS}",
+                              (units, p["id"])).fetchone()
+        self.positions = [rest if q["id"] == p["id"] else q for q in self.positions] + [part]
+        return self.close(part, exit_price, at, reason)
+
+    def set_stop(self, p: dict, sl: float, at: datetime) -> None:
+        self.c.execute("UPDATE paper_positions SET stop_loss = %s, trailed_at = %s WHERE id = %s", (sl, at, p["id"]))
+        p["stop_loss"], p["trailed_at"] = sl, at
 
     def finish_order(self, o: dict, status: str, at: datetime, note: str = "") -> None:
         self.c.execute("UPDATE paper_orders SET status = %s, done_at = %s, note = %s WHERE id = %s",
@@ -239,12 +268,20 @@ class _Book:
                 self.finish_order(o, "cancelled", at, "Not enough free margin when the price was reached")
                 continue
             self.finish_order(o, "filled", at)
-            self.open(o["side"], o["units"], fill, at, o["stop_loss"], o["take_profit"], o["kind"], inst.symbol)
+            self.open(o["side"], o["units"], fill, at, o["stop_loss"], o["take_profit"], o["kind"], inst.symbol,
+                      o.get("trail"))
+            # One-cancels-other: the paired order goes as soon as this one fills.
+            mate = next((q for q in self.orders if o.get("oco_id") and q["id"] == o["oco_id"]), None)
+            if mate:
+                self.finish_order(mate, "cancelled", at, "Its one-cancels-other partner filled")
 
         for p in list(self.positions):
             if p["symbol"] != inst.symbol or p["opened_at"] >= at:
                 continue
             sl, tp = p["stop_loss"], p["take_profit"]
+            # A bar that already moved a trailing stop is never re-checked against the stop it produced.
+            if p.get("trailed_at") and at <= p["trailed_at"]:
+                sl = None
             if p["side"] == "long":
                 if sl and lo <= sl:
                     self.close(p, min(sl, o_), at, "stop_loss")
@@ -255,6 +292,19 @@ class _Book:
                     self.close(p, max(sl, o_ + sp), at, "stop_loss")
                 elif tp and lo + sp <= tp:
                     self.close(p, min(tp, o_ + sp), at, "take_profit")
+
+        # Trailing stops ratchet behind the best price of the bar, after this bar's stops were checked.
+        for p in self.positions:
+            if p["symbol"] != inst.symbol or not p.get("trail") or p["opened_at"] >= at:
+                continue
+            if p["side"] == "long":
+                want = inst.round(hi - p["trail"])
+                if p["stop_loss"] is None or want > p["stop_loss"]:
+                    self.set_stop(p, want, at)
+            else:
+                want = inst.round(lo + sp + p["trail"])
+                if p["stop_loss"] is None or want < p["stop_loss"]:
+                    self.set_stop(p, want, at)
 
         if self.positions:
             eq, used = self.equity(at=at)
@@ -386,9 +436,13 @@ class OrderIn(BaseModel):
     price: float | None = Field(None, gt=0, lt=MAX_PRICE, description="Trigger price for limit and stop orders")
     stop_loss: float | None = Field(None, gt=0, lt=MAX_PRICE)
     take_profit: float | None = Field(None, gt=0, lt=MAX_PRICE)
+    trail: float | None = Field(None, gt=0, lt=MAX_PRICE, description="Trailing stop distance in price")
+    oco_with: int | None = Field(None, description="A pending order to pair with: when either fills, the other is cancelled")
 
     @model_validator(mode="after")
     def _check(self):
+        if self.oco_with is not None and self.kind == "market":
+            raise ValueError("Only limit and stop orders can be paired as one-cancels-other")
         if self.kind == "market":
             self.price = None
         elif self.price is None:
@@ -399,6 +453,11 @@ class OrderIn(BaseModel):
 class ProtectIn(BaseModel):
     stop_loss: float | None = Field(None, gt=0, lt=MAX_PRICE)
     take_profit: float | None = Field(None, gt=0, lt=MAX_PRICE)
+    trail: float | None = Field(None, gt=0, lt=MAX_PRICE, description="Trailing distance; left out keeps it, null removes it")
+
+
+class CloseIn(BaseModel):
+    units: float | None = Field(None, gt=0, le=1e12, description="Units to close; left out closes the whole position")
 
 
 class OrderEditIn(BaseModel):
@@ -494,16 +553,28 @@ def place(o: OrderIn, user: UserOut = Depends(current_user)):
                        if inst.max_leverage < acct["leverage"] else "")
                 raise HTTPException(422, f"Not enough free margin: this needs ${need:,.2f} and ${max(eq - used, 0):,.2f} "
                                          f"is free.{cap} Try a smaller size.")
-            p = book.open(o.side, o.units, fill, now, o.stop_loss, o.take_profit, "market", inst.symbol)
+            p = book.open(o.side, o.units, fill, now, o.stop_loss, o.take_profit, "market", inst.symbol, o.trail)
             c.execute("UPDATE paper_accounts SET balance = %s WHERE user_id = %s", (round(book.balance, 2), user.id))
             return {"position": p}
 
         _check_trigger(o.side, o.kind, o.price, price)
         _check_protection(o.side, o.price, o.stop_loss, o.take_profit)
+        mate = None
+        if o.oco_with is not None:
+            mate = next((q for q in book.orders if q["id"] == o.oco_with), None)
+            if not mate:
+                raise HTTPException(404, "The order to pair with isn't pending any more")
+            if mate["symbol"] != inst.symbol:
+                raise HTTPException(422, "One-cancels-other orders must be in the same market")
+            if mate["oco_id"]:
+                raise HTTPException(422, "That order is already paired with another")
         row = c.execute(
-            f"""INSERT INTO paper_orders (user_id, symbol, side, kind, units, price, stop_loss, take_profit)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING {ORDER_COLS}""",
-            (user.id, inst.symbol, o.side, o.kind, o.units, o.price, o.stop_loss, o.take_profit)).fetchone()
+            f"""INSERT INTO paper_orders (user_id, symbol, side, kind, units, price, stop_loss, take_profit, trail, oco_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING {ORDER_COLS}""",
+            (user.id, inst.symbol, o.side, o.kind, o.units, o.price, o.stop_loss, o.take_profit, o.trail,
+             mate["id"] if mate else None)).fetchone()
+        if mate:
+            c.execute("UPDATE paper_orders SET oco_id = %s WHERE id = %s", (row["id"], mate["id"]))
         return {"order": row}
 
 
@@ -548,14 +619,39 @@ def _open_position(book: _Book, pid: int) -> dict:
 
 
 @router.post("/positions/{pid}/close")
-def close(pid: int, user: UserOut = Depends(current_user)):
+def close(pid: int, body: CloseIn | None = None, user: UserOut = Depends(current_user)):
+    """Close a position, or only `units` of it (a partial close)."""
     with db.conn() as c:
         acct, book, _ = sync(c, user.id)
         p = _open_position(book, pid)
         inst = _of(p)
         price = _need_price(current_price(inst.symbol), inst)
-        row = book.close(p, _exit_price(p["side"], price["bid"], inst), datetime.now(timezone.utc), "manual")
+        exit_, now = _exit_price(p["side"], price["bid"], inst), datetime.now(timezone.utc)
+        units = body.units if body and body.units is not None else None
+        if units is not None and units > p["units"] + 1e-9:
+            raise HTTPException(422, f"The position only has {p['units']:g} to close")
+        if units is None or units >= p["units"] - 1e-9:
+            row = book.close(p, exit_, now, "manual")
+        else:
+            row = book.close_part(p, units, exit_, now, "partial")
         c.execute("UPDATE paper_accounts SET balance = %s WHERE user_id = %s", (round(book.balance, 2), user.id))
+    return {"position": row}
+
+
+@router.post("/positions/{pid}/breakeven")
+def breakeven(pid: int, user: UserOut = Depends(current_user)):
+    """Move the stop loss to the entry price, so the trade can no longer lose (apart from gaps and swap).
+    Only allowed once the price has moved past the entry."""
+    with db.conn() as c:
+        acct, book, _ = sync(c, user.id)
+        p = _open_position(book, pid)
+        inst = _of(p)
+        price = current_price(p["symbol"])
+        if not price:
+            raise HTTPException(409, "No price is available yet")
+        _check_protection(p["side"], _exit_price(p["side"], price["bid"], inst), p["entry_price"], None)
+        row = c.execute(f"UPDATE paper_positions SET stop_loss = %s WHERE id = %s RETURNING {POS_COLS}",
+                        (p["entry_price"], pid)).fetchone()
     return {"position": row}
 
 
@@ -565,10 +661,22 @@ def protect(pid: int, body: ProtectIn, user: UserOut = Depends(current_user)):
         acct, book, _ = sync(c, user.id)
         p = _open_position(book, pid)
         price = current_price(p["symbol"])
+        inst = _of(p)
+        trail = body.trail if "trail" in body.model_fields_set else p["trail"]
+        sl = body.stop_loss
+        if trail and price and "trail" in body.model_fields_set:
+            # Turning on (or changing) a trail places the stop that distance from the current price at once.
+            mark = _exit_price(p["side"], price["bid"], inst)
+            start = inst.round(mark - trail if p["side"] == "long" else mark + trail)
+            sl = start if sl is None else (max(sl, start) if p["side"] == "long" else min(sl, start))
         if price:
-            _check_protection(p["side"], _exit_price(p["side"], price["bid"], _of(p)), body.stop_loss, body.take_profit)
-        row = c.execute(f"UPDATE paper_positions SET stop_loss = %s, take_profit = %s WHERE id = %s RETURNING {POS_COLS}",
-                        (body.stop_loss, body.take_profit, pid)).fetchone()
+            _check_protection(p["side"], _exit_price(p["side"], price["bid"], inst), sl, body.take_profit)
+        row = c.execute(f"UPDATE paper_positions SET stop_loss = %s, take_profit = %s, trail = %s WHERE id = %s "
+                        f"RETURNING {POS_COLS}", (sl, body.take_profit, trail, pid)).fetchone()
+        # The coach flags a stop moved further from the entry (or removed): giving a loser more room.
+        old = p["stop_loss"]
+        if old is not None and (sl is None or (sl < old if p["side"] == "long" else sl > old)):
+            c.execute("UPDATE paper_positions SET stop_widened = true WHERE id = %s", (pid,))
     return {"position": row}
 
 

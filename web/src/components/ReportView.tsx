@@ -12,6 +12,7 @@ const REASONS: Record<string, string> = {
   end_of_test: "End of test",
   account_wiped_out: "Account wiped out",
   manual: "Closed by you",
+  partial: "Part closed",
   stop_out: "Margin stop-out",
 };
 

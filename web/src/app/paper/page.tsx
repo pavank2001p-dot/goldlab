@@ -20,8 +20,10 @@ import { toast } from "@/components/Toaster";
 import { useUser } from "@/lib/useUser";
 import AlertsCard from "@/components/practice/AlertsCard";
 import Insights from "@/components/practice/Insights";
-import SizeCalculator from "@/components/practice/SizeCalculator";
 import TradeReview from "@/components/practice/TradeReview";
+import { usePref } from "@/lib/prefs";
+import TagChips from "@/components/coach/TagChips";
+import type { CoachTags, PreTrade } from "@/lib/api";
 
 type Side = "long" | "short";
 type Kind = "market" | "limit" | "stop";
@@ -37,6 +39,7 @@ const short = (v: number) =>
   v >= 1e12 ? `$${+(v / 1e12).toFixed(2)}T` : v >= 1e9 ? `$${+(v / 1e9).toFixed(2)}B` : v >= 1e6 ? `$${+(v / 1e6).toFixed(2)}M` : v >= 1e3 ? `$${+(v / 1e3).toFixed(1)}k` : `$${v}`;
 const REASON: Record<string, string> = {
   manual: "Closed by you",
+  partial: "Part closed",
   stop_loss: "Stop loss hit",
   take_profit: "Take profit hit",
   stop_out: "Margin stop-out",
@@ -133,16 +136,25 @@ function Track({ p, d = 2 }: { p: PaperPosition; d?: number }) {
   );
 }
 
-function PositionRow({ p, m, onClose, onSave, busy }: {
+function PositionRow({ p, m, onClose, onSave, onBreakeven, onPartial, busy }: {
   p: PaperPosition;
   m: Market;
   onClose: () => void;
-  onSave: (sl: number | null, tp: number | null) => Promise<boolean>;
+  onSave: (sl: number | null, tp: number | null, trail: number | null) => Promise<boolean>;
+  onBreakeven: () => void;
+  onPartial: (units: number) => Promise<boolean>;
   busy: boolean;
 }) {
   const [edit, setEdit] = useState(false);
+  const [part, setPart] = useState<string | null>(null);
   const [sl, setSl] = useState(p.stop_loss?.toString() ?? "");
   const [tp, setTp] = useState(p.take_profit?.toString() ?? "");
+  const [trail, setTrail] = useState(p.trail?.toString() ?? "");
+  useEffect(() => { if (!edit) { setSl(p.stop_loss?.toString() ?? ""); setTp(p.take_profit?.toString() ?? ""); setTrail(p.trail?.toString() ?? ""); } }, [edit, p.stop_loss, p.take_profit, p.trail]);
+  // Break-even is offered once the price has moved past the entry and the stop isn't there already.
+  const inProfit = p.mark != null && (p.side === "long" ? p.mark > p.entry_price : p.mark < p.entry_price);
+  const atEntry = p.stop_loss != null && (p.side === "long" ? p.stop_loss >= p.entry_price : p.stop_loss <= p.entry_price);
+  const btn = "rounded-lg border border-border px-3 py-1.5 text-xs transition hover:border-muted disabled:opacity-50";
   return (
     <div className="rise-in rounded-2xl border border-border bg-surface p-3.5">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -154,8 +166,17 @@ function PositionRow({ p, m, onClose, onSave, busy }: {
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <Track p={p} d={m.decimals} />
         <span className="text-xs text-muted">Opened {when(p.opened_at)}{p.order_kind !== "market" && ` · ${p.order_kind} order`}</span>
-        <div className="ml-auto flex gap-2">
-          <button onClick={() => setEdit(!edit)} className="rounded-lg border border-border px-3 py-1.5 text-xs transition hover:border-muted">
+        {p.trail != null && <span className="rounded-full bg-gold/15 px-2 py-0.5 text-[11px] text-gold" title="The stop follows the best price by this distance">Trailing {px(p.trail, m.decimals)}</span>}
+        <div className="ml-auto flex flex-wrap gap-2">
+          {inProfit && !atEntry && (
+            <button onClick={onBreakeven} disabled={busy} className={btn} title="Move the stop loss to your entry price">Break-even</button>
+          )}
+          {p.units > 0.01 && (
+            <button onClick={() => { setPart(part == null ? String(+(p.units / 2).toPrecision(6)) : null); setEdit(false); }} className={btn}>
+              {part != null ? "Cancel" : "Close part"}
+            </button>
+          )}
+          <button onClick={() => { setEdit(!edit); setPart(null); }} className={btn}>
             {edit ? "Cancel" : "Edit stop / target"}
           </button>
           <button onClick={onClose} disabled={busy} className="rounded-lg bg-foreground px-3 py-1.5 text-xs font-medium text-background transition hover:opacity-90 disabled:opacity-50">
@@ -166,11 +187,29 @@ function PositionRow({ p, m, onClose, onSave, busy }: {
       {edit && (
         <form className="quiz-in mt-3 flex flex-wrap items-end gap-2" onSubmit={async (e) => {
           e.preventDefault();
-          if (await onSave(num(sl), num(tp))) setEdit(false);
+          if (await onSave(num(sl), num(tp), num(trail))) setEdit(false);
         }}>
           <label className="text-xs text-muted">Stop loss<input value={sl} onChange={(e) => setSl(e.target.value)} inputMode="decimal" className={`${input} mt-1 w-32`} placeholder="none" /></label>
           <label className="text-xs text-muted">Take profit<input value={tp} onChange={(e) => setTp(e.target.value)} inputMode="decimal" className={`${input} mt-1 w-32`} placeholder="none" /></label>
+          <label className="text-xs text-muted" title="The stop follows the best price by this distance and never moves back">Trailing distance<input value={trail} onChange={(e) => setTrail(e.target.value)} inputMode="decimal" className={`${input} mt-1 w-32`} placeholder="off" /></label>
           <button disabled={busy} className="rounded-lg bg-gold px-3 py-2 text-xs font-medium text-black disabled:opacity-50">Save</button>
+        </form>
+      )}
+      {part != null && (
+        <form className="quiz-in mt-3 flex flex-wrap items-end gap-2" onSubmit={async (e) => {
+          e.preventDefault();
+          const n = Number(part);
+          if (n > 0 && (await onPartial(n))) setPart(null);
+        }}>
+          <label className="text-xs text-muted">Close how many {unitShort(m, 2)}?<input value={part} onChange={(e) => setPart(e.target.value)} inputMode="decimal" className={`${input} mt-1 w-32`} /></label>
+          {[0.25, 0.5, 0.75].map((f) => (
+            <button key={f} type="button" onClick={() => setPart(String(+(p.units * f).toPrecision(6)))}
+              className="rounded-full border border-border px-2.5 py-1 text-xs text-muted transition hover:border-muted">{f * 100}%</button>
+          ))}
+          <button disabled={busy || !(Number(part) > 0)} className="rounded-lg bg-foreground px-3 py-2 text-xs font-medium text-background disabled:opacity-50">
+            Close {Number(part) >= p.units ? "all" : part}
+          </button>
+          <span className="w-full text-xs text-muted">The rest stays open with the same stop and target. The closed part shows in History as its own trade.</span>
         </form>
       )}
     </div>
@@ -188,6 +227,8 @@ function OrderRow({ o, m, price, onCancel, busy }: {
     <div className="rise-in flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-dashed border-border bg-surface/60 p-3.5">
       <SidePill side={o.side} />
       <span className="rounded-full bg-border px-2 py-0.5 text-[11px] capitalize">{o.kind}</span>
+      {o.oco_id != null && <span className="rounded-full bg-calm/15 px-2 py-0.5 text-[11px] text-calm" title="When either order of the pair fills, the other is cancelled">OCO pair</span>}
+      {o.trail != null && <span className="rounded-full bg-gold/15 px-2 py-0.5 text-[11px] text-gold">Trailing {px(o.trail, m.decimals)}</span>}
       <span className="text-sm tabular-nums">{o.units} {unitShort(m, o.units)}{(o.symbol ?? GOLD.symbol) !== GOLD.symbol ? ` ${m.name}` : ""} at {px(o.price, m.decimals)}</span>
       {gap != null && <span className="text-xs text-muted tabular-nums">{Math.abs(gap).toFixed(m.decimals)} {gap > 0 ? "above" : "below"} now</span>}
       <span className="text-xs text-muted tabular-nums">
@@ -200,8 +241,9 @@ function OrderRow({ o, m, price, onCancel, busy }: {
   );
 }
 
-function Ticket({ state, market, profile, onPlaced, busy, setBusy, preset }: {
-  preset?: { oz: number; n: number } | null;
+type TradingPrefs = { oneClick: boolean };
+
+function Ticket({ state, market, profile, onPlaced, busy, setBusy }: {
   state: PaperState;
   market: Market;
   profile: RiskProfile | null;
@@ -221,23 +263,41 @@ function Ticket({ state, market, profile, onPlaced, busy, setBusy, preset }: {
   const [useTp, setUseTp] = useState(false);
   const [sl, setSl] = useState("");
   const [tp, setTp] = useState("");
+  const [useTrail, setUseTrail] = useState(false);
+  const [trail, setTrail] = useState("");
+  const [oco, setOco] = useState<number | null>(null);
+  // Size by units, or by the share of the account the stop would cost.
+  const [sizeBy, setSizeBy] = useState<"units" | "risk">("units");
+  const [riskIn, setRiskIn] = useState(String(profile?.max_risk_per_trade_pct ?? 1));
+  useEffect(() => { if (profile) setRiskIn(String(profile.max_risk_per_trade_pct)); }, [profile]);
+  const [prefs, setPrefs] = usePref<TradingPrefs>("trading", "goldlab.trading", { oneClick: false });
+  const oneClick = !!prefs?.oneClick;
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { if (preset) setUnits(String(preset.oz)); }, [preset]);
   // Orders go through a short review first, so the loss is read in plain words before anything is placed.
   const [review, setReview] = useState(false);
-  useEffect(() => setReview(false), [side, kind, units, price, useSl, useTp, sl, tp]);
+  useEffect(() => setReview(false), [side, kind, units, price, useSl, useTp, sl, tp, useTrail, trail, sizeBy, riskIn, oco]);
   const q = state.price;
   const long = side === "long";
+  // Pending orders in this market that aren't paired yet can be paired with a new limit or stop order.
+  const pairable = state.orders.filter((o) => (o.symbol ?? GOLD.symbol) === market.symbol && o.oco_id == null);
+  useEffect(() => { if (kind === "market" || (oco != null && !pairable.some((o) => o.id === oco))) setOco(null); }, [kind, oco, pairable]);
 
   // Entry the order would fill at: the current ask or bid for a market order, otherwise its own price.
   const entry = kind === "market" ? (q ? (long ? q.ask : q.bid) : null) : num(price);
-  const u = Number(units) || 0;
-  const slN = useSl ? num(sl) : null, tpN = useTp ? num(tp) : null;
+  const trailN = useTrail ? num(trail) : null;
+  const slSet = useSl ? num(sl) : null, tpN = useTp ? num(tp) : null;
+  // A trailing stop starts its distance from the entry; with a fixed stop too, the tighter one counts.
+  const trailStart = entry != null && trailN ? entry - (long ? 1 : -1) * trailN : null;
+  const slN = trailStart == null ? slSet : slSet == null ? trailStart : long ? Math.max(slSet, trailStart) : Math.min(slSet, trailStart);
+  const limit = profile?.max_risk_per_trade_pct ?? 1;
+  const riskWanted = Number(riskIn) || 0;
+  const byRisk = sizeBy === "risk" && entry != null && slN != null && entry !== slN && riskWanted > 0
+    ? Math.max(Math.floor(((state.account.equity * riskWanted) / 100 / Math.abs(entry - slN)) * 100) / 100, 0.01) : null;
+  const u = sizeBy === "risk" ? (byRisk ?? 0) : Number(units) || 0;
   const risk = entry != null && slN != null ? Math.abs(entry - slN) * u : null;
   const reward = entry != null && tpN != null ? Math.abs(tpN - entry) * u : null;
   const riskPct = risk != null && state.account.equity > 0 ? (risk / state.account.equity) * 100 : null;
   const margin = entry != null ? u * entry * (state.settings.margin_rate_pct / 100) : null;
-  const limit = profile?.max_risk_per_trade_pct ?? 1;
   const over = riskPct != null && riskPct > limit + 0.05;
 
   // Sensible starting values whenever the side, type or price changes.
@@ -251,6 +311,7 @@ function Ticket({ state, market, profile, onPlaced, busy, setBusy, preset }: {
     if (kind !== "market") setPrice(p.toFixed(d));
     setSl((p - dir * step * 2).toFixed(d));
     setTp((p + dir * step * 4).toFixed(d));
+    setTrail((step * 2).toFixed(d));
     setError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [side, kind, base == null, market.symbol]);
@@ -259,18 +320,22 @@ function Ticket({ state, market, profile, onPlaced, busy, setBusy, preset }: {
     if (entry == null || slN == null || entry === slN) return;
     const oz = (state.account.equity * limit) / 100 / Math.abs(entry - slN);
     setUnits(String(Math.max(Math.floor(oz * 100) / 100, 0.01)));
+    setSizeBy("units");
   }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!review) {
+    if (!review && !oneClick) {
       setReview(true);
       return;
     }
     setBusy(true);
     try {
-      const body: PaperOrderInput = { symbol: market.symbol, side, kind, units: u, stop_loss: slN, take_profit: tpN, price: kind === "market" ? null : num(price) };
+      const body: PaperOrderInput = {
+        symbol: market.symbol, side, kind, units: u, stop_loss: slSet, take_profit: tpN, price: kind === "market" ? null : num(price),
+        trail: trailN, oco_with: kind === "market" ? null : oco,
+      };
       const r = await api.paperOrder(body);
       const verb = long ? "Bought" : "Sold";
       setReview(false);
@@ -320,9 +385,35 @@ function Ticket({ state, market, profile, onPlaced, busy, setBusy, preset }: {
       )}
 
       <div>
+        <div className="mb-1.5 flex items-center justify-between text-sm">
+          <span className="text-muted">Size</span>
+          <Chips<"units" | "risk"> value={sizeBy} onChange={setSizeBy} options={[
+            { key: "units", label: market.unit === "MMBtu" ? "MMBtu" : `${market.unit[0].toUpperCase()}${market.unit.slice(1)}s` }, { key: "risk", label: "Risk %" },
+          ]} />
+        </div>
+        {sizeBy === "risk" ? (
+          <div className="quiz-in">
+            <label className="block text-sm">
+              <span className="flex justify-between text-muted">Risk per trade, % of equity <span className="text-xs tabular-nums">{fmtUsd((state.account.equity * riskWanted) / 100)}</span></span>
+              <input value={riskIn} onChange={(e) => setRiskIn(e.target.value)} inputMode="decimal" className={`${input} mt-1`} aria-label="Risk per trade in percent" />
+            </label>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {[0.25, 0.5, 1, 2].map((r) => (
+                <button key={r} type="button" onClick={() => setRiskIn(String(r))}
+                  className={`rounded-full border px-2.5 py-0.5 text-xs tabular-nums transition ${riskWanted === r ? "border-gold text-foreground" : "border-border text-muted hover:border-muted"}`}>{r}%</button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-xs text-muted tabular-nums">
+              {byRisk != null
+                ? <>That is <span className="text-foreground">{byRisk.toLocaleString("en-US")} {ux(byRisk)}</span>{market.lot > 1 ? ` (${(byRisk / market.lot).toFixed(2)} lot)` : ""} with the stop at {px(slN, d)}.</>
+                : "Set a stop loss or trailing stop to size by risk."}
+            </p>
+          </div>
+        ) : (
+        <>
         <label className="block text-sm">
-          <span className="flex justify-between text-muted">Size in {market.unit === "MMBtu" ? "MMBtu" : `${market.unit}s`} <span className="text-xs tabular-nums">{u && market.lot > 1 ? `${(u / market.lot).toFixed(2)} lot` : ""}</span></span>
-          <input value={units} onChange={(e) => setUnits(e.target.value)} inputMode="decimal" className={`${input} mt-1`} />
+          <span className="flex justify-between text-muted"><span className="sr-only">Size in {market.unit}s</span><span /> <span className="text-xs tabular-nums">{u && market.lot > 1 ? `${(u / market.lot).toFixed(2)} lot` : ""}</span></span>
+          <input value={units} onChange={(e) => setUnits(e.target.value)} inputMode="decimal" className={`${input} mt-1`} aria-label={`Size in ${market.unit}s`} />
         </label>
         <div className="mt-2 flex flex-wrap gap-1.5">
           {sizes.map((s) => (
@@ -339,26 +430,46 @@ function Ticket({ state, market, profile, onPlaced, busy, setBusy, preset }: {
             </button>
           )}
         </div>
+        </>
+        )}
       </div>
 
-      {(["sl", "tp"] as const).map((k) => {
-        const on = k === "sl" ? useSl : useTp;
+      {(["sl", "tp", "trail"] as const).map((k) => {
+        const on = k === "sl" ? useSl : k === "tp" ? useTp : useTrail;
+        const setOn = k === "sl" ? setUseSl : k === "tp" ? setUseTp : setUseTrail;
+        const val = k === "sl" ? sl : k === "tp" ? tp : trail;
+        const setVal = k === "sl" ? setSl : k === "tp" ? setTp : setTrail;
+        const name = k === "sl" ? "Stop loss" : k === "tp" ? "Take profit" : "Trailing stop";
         return (
           <div key={k}>
             <label className="flex cursor-pointer items-center justify-between text-sm">
-              <span className="text-muted">{k === "sl" ? "Stop loss" : "Take profit"}</span>
+              <span className="text-muted">{name}{k === "trail" && on ? <span className="text-xs"> · distance in price</span> : null}</span>
               <span className={`relative h-5 w-9 rounded-full transition-colors ${on ? "bg-gold" : "bg-border"}`}>
                 <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-foreground transition-all ${on ? "left-4.5" : "left-0.5"}`} />
               </span>
-              <input type="checkbox" className="sr-only" checked={on} onChange={(e) => (k === "sl" ? setUseSl : setUseTp)(e.target.checked)} />
+              <input type="checkbox" className="sr-only" checked={on} onChange={(e) => setOn(e.target.checked)} />
             </label>
             {on && (
-              <input value={k === "sl" ? sl : tp} onChange={(e) => (k === "sl" ? setSl : setTp)(e.target.value)}
-                     inputMode="decimal" className={`${input} quiz-in mt-1`} aria-label={k === "sl" ? "Stop loss price" : "Take profit price"} />
+              <input value={val} onChange={(e) => setVal(e.target.value)}
+                     inputMode="decimal" className={`${input} quiz-in mt-1`} aria-label={k === "trail" ? "Trailing stop distance" : `${name} price`} />
             )}
+            {on && k === "trail" && <p className="mt-1 text-xs text-muted">The stop follows the best price by this distance and never moves back.</p>}
           </div>
         );
       })}
+
+      {kind !== "market" && pairable.length > 0 && (
+        <label className="block text-sm">
+          <span className="text-muted">One-cancels-other</span>
+          <select value={oco ?? ""} onChange={(e) => setOco(e.target.value ? Number(e.target.value) : null)} className={`${input} mt-1`}>
+            <option value="">Not paired</option>
+            {pairable.map((o) => (
+              <option key={o.id} value={o.id}>Pair with {o.side === "long" ? "buy" : "sell"} {o.kind} {o.units} at {px(o.price, d)}</option>
+            ))}
+          </select>
+          {oco != null && <span className="mt-1 block text-xs text-muted">When either order fills, the other is cancelled.</span>}
+        </label>
+      )}
 
       <div className="space-y-1.5 rounded-lg bg-background p-3 text-xs">
         <div className="flex justify-between"><span className="text-muted">Margin needed at 1:{state.account.leverage}</span><span className="tabular-nums">{fmtUsd(margin)} of {fmtUsd(state.account.free_margin)} free</span></div>
@@ -418,6 +529,7 @@ function Ticket({ state, market, profile, onPlaced, busy, setBusy, preset }: {
               <Check ok={reward >= risk}>The target would make {(reward / risk).toFixed(1)} times what the stop would lose.</Check>
             )}
           </ul>
+          <PreTradeCheck />
           <p className="text-xs text-muted">Virtual money only. You can change anything, or simply not place it.</p>
           <div className="grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setReview(false)} className="rounded-full border border-border py-2.5 text-sm transition-colors hover:bg-surface-2">
@@ -429,13 +541,60 @@ function Ticket({ state, market, profile, onPlaced, busy, setBusy, preset }: {
             </button>
           </div>
         </div>
+      ) : oneClick ? (
+        <button disabled={busy || !u || !!closedForMarket}
+          className={`w-full rounded-full py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-50 ${long ? "bg-up" : "bg-down"}`}>
+          {busy ? "Placing…" : `${long ? "Buy" : "Sell"} ${u || ""} ${ux(u)} ${kind === "market" ? "now" : `${kind} at ${px(num(price), d)}`}`}
+        </button>
       ) : (
         <button disabled={busy || !u || !!closedForMarket}
           className="w-full rounded-full border border-border bg-surface-2 py-2.5 text-sm font-medium transition-colors hover:border-gold/60 disabled:opacity-50">
           Review {long ? "buy" : "sell"} of {u || ""} {ux(u)} {kind === "market" ? "at market" : `${kind} at ${px(num(price), d)}`}
         </button>
       )}
+      <label className="flex cursor-pointer items-center justify-between gap-3 text-xs text-muted">
+        <span>One-click trading{oneClick ? ": orders are placed without the review step" : ""}</span>
+        <span className={`relative h-4 w-7 shrink-0 rounded-full transition-colors ${oneClick ? "bg-gold" : "bg-border"}`}>
+          <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-foreground transition-all ${oneClick ? "left-3.5" : "left-0.5"}`} />
+        </span>
+        <input type="checkbox" className="sr-only" checked={oneClick} onChange={(e) => setPrefs({ oneClick: e.target.checked })} />
+      </label>
     </form>
+  );
+}
+
+/** The user's own playbook as a checklist, plus the coach's warnings for right now (a recent loss, a big release). */
+function PreTradeCheck() {
+  const [d, setD] = useState<PreTrade | null>(null);
+  const [ticked, setTicked] = useState<Set<number>>(new Set());
+  useEffect(() => { api.coachPreTrade().then(setD, () => {}); }, []);
+  if (!d) return null;
+  return (
+    <div className="space-y-2 border-t border-calm/20 pt-3">
+      {d.warnings.map((w) => (
+        <p key={w.key} className="flex gap-2 rounded-lg bg-gold/10 p-2 text-xs text-gold"><Icon name="bolt" className="mt-0.5 h-3.5 w-3.5 shrink-0" />{w.text}</p>
+      ))}
+      {d.rules.length > 0 && (
+        <>
+          <p className="flex justify-between text-xs text-muted">
+            <span>Your playbook</span>
+            <Link href="/coach" className="text-gold hover:underline">Edit</Link>
+          </p>
+          <ul className="space-y-1">
+            {d.rules.map((r, i) => (
+              <li key={i}>
+                <label className="flex cursor-pointer gap-2 text-xs">
+                  <input type="checkbox" className="mt-0.5 accent-[var(--gold)]" checked={ticked.has(i)}
+                    onChange={() => setTicked((t) => { const n = new Set(t); if (n.has(i)) n.delete(i); else n.add(i); return n; })} />
+                  <span className={ticked.has(i) ? "" : "text-muted"}>{r}</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+          {ticked.size < d.rules.length && <p className="text-[11px] text-muted">{d.rules.length - ticked.size} of your rules not ticked yet.</p>}
+        </>
+      )}
+    </div>
   );
 }
 
@@ -560,13 +719,13 @@ export default function PaperPage() {
   const [tab, setTab] = useState<Tab>("positions");
   const [busy, setBusy] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
-  const [preset, setPreset] = useState<{ oz: number; n: number } | null>(null);
   const [setupDone, setSetupDone] = useState(true);
   useEffect(() => {
     try { setSetupDone(!!localStorage.getItem(SETUP_KEY)); } catch {}
   }, []);
   const [error, setError] = useState<string | null>(null);
   const [grades, setGrades] = useState<Record<string, "A" | "B" | "C" | "D">>({});
+  const [coachTags, setCoachTags] = useState<CoachTags | null>(null);
   const seen = useRef<Set<number> | null>(null);
   const lastChallenge = useRef<string | null>(null);
   const openIds = useRef<Set<number> | null>(null);
@@ -615,7 +774,8 @@ export default function PaperPage() {
   const closedCount = state?.account.closed_trades ?? 0;
   useEffect(() => {
     if (user && tab === "history") api.reviewGrades().then(setGrades, () => {});
-  }, [user, tab]);
+    if (user && tab === "history") api.coachTags().then(setCoachTags, () => {});
+  }, [user, tab, closedCount]);
   useEffect(() => {
     if (user && tab === "report") api.paperReport().then(setReport, () => {});
   }, [user, tab, closedCount]);
@@ -644,6 +804,7 @@ export default function PaperPage() {
     modify: (id, body) => act(() => api.paperModify(id, body), "Order moved"),
     cancel: (id) => act(() => api.paperCancel(id), "Order cancelled"),
     close: (id) => act(() => api.paperClose(id), "Position closed"),
+    breakeven: (id) => act(() => api.paperBreakeven(id), "Stop moved to break-even"),
     place: async (o) => {
       let filled: PaperPosition | undefined, waiting: PaperOrder | undefined;
       const d = market.decimals, u = `${unitShort(market, o.units)} of ${market.name}`;
@@ -774,7 +935,9 @@ export default function PaperPage() {
                   {state.positions.map((p) => (
                     <PositionRow key={p.id} p={p} m={marketOf(p.symbol)} busy={busy}
                       onClose={() => act(() => api.paperClose(p.id), "Position closed")}
-                      onSave={(sl, tp) => act(() => api.paperProtect(p.id, sl, tp), "Stop and target saved")} />
+                      onBreakeven={() => act(() => api.paperBreakeven(p.id), "Stop moved to break-even")}
+                      onPartial={(n) => act(() => api.paperClose(p.id, n), `Closed ${n} ${unitShort(marketOf(p.symbol), n)}`)}
+                      onSave={(sl, tp, trail) => act(() => api.paperProtect(p.id, sl, tp, trail), "Stop and target saved")} />
                   ))}
                 </div>
               )}
@@ -804,6 +967,7 @@ export default function PaperPage() {
                       <span className="text-xs text-muted tabular-nums">{px(h.entry_price, marketOf(h.symbol).decimals)} → {px(h.exit_price, marketOf(h.symbol).decimals)}</span>
                       <span className="rounded-full bg-border px-2 py-0.5 text-[11px] text-muted">{REASON[h.close_reason ?? ""]}</span>
                       <span className="text-xs text-muted">{h.closed_at && when(h.closed_at)}</span>
+                      <TagChips tags={coachTags?.by_trade[String(h.id)]} labels={coachTags?.labels} />
                       <span className={`ml-auto font-medium tabular-nums ${tone(h.pnl)}`}>{signed(h.pnl)}</span>
                       <TradeReview id={h.id} grade={grades[String(h.id)]} onGraded={(g) => setGrades((m) => ({ ...m, [String(h.id)]: g }))} />
                     </div>
@@ -826,7 +990,7 @@ export default function PaperPage() {
                   {state.locked} <Link href="/paper/prop" className="text-gold underline-offset-2 hover:underline">Go to the challenge page</Link>
                 </p>
               )}
-              <Ticket state={state} market={market} profile={profile} busy={busy} setBusy={setBusy} preset={preset}
+              <Ticket state={state} market={market} profile={profile} busy={busy} setBusy={setBusy}
                 onPlaced={async (msg) => { await load(); setTab((t) => (t === "report" || t === "history" ? "positions" : t)); if (msg) say(msg, "up"); }} />
               <p className="text-xs leading-relaxed text-muted">
                 {market.name}: spread {st!.spread.toFixed(market.decimals)} per {market.unit}. Overnight swap {swapText(st!.swap_long, market.swap_long_pct)} long
@@ -835,8 +999,6 @@ export default function PaperPage() {
                 Trading hours: {market.hours}. Stops and targets are checked against every minute of real prices,
                 even while this page is closed. Practice only, not advice.
               </p>
-              <SizeCalculator equity={a.equity} leverage={a.leverage} price={state.price?.ask ?? null}
-                riskPct={profile?.max_risk_per_trade_pct ?? 1} onUse={(oz) => setPreset((p) => ({ oz, n: (p?.n ?? 0) + 1 }))} />
               {symbol === GOLD.symbol && <AlertsCard price={state.price?.bid ?? null} />}
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <Link href="/paper/replay" className="card flex items-center gap-2 p-3 hover:border-gold/40"><Icon name="clock" className="h-4 w-4 text-gold" />Replay a day</Link>

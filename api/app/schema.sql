@@ -270,6 +270,25 @@ CREATE TABLE IF NOT EXISTS user_prefs (
 ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS symbol TEXT NOT NULL DEFAULT 'XAUUSD';
 ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS symbol TEXT NOT NULL DEFAULT 'XAUUSD';
 
+-- Broker-style order handling: a trailing stop follows the price by a fixed distance; one-cancels-other
+-- pairs two pending orders so that when one fills the other is cancelled.
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS trail DOUBLE PRECISION;
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS trailed_at TIMESTAMPTZ;  -- bar that last moved the trailing stop
+ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS trail DOUBLE PRECISION;
+ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS oco_id BIGINT;
+
+-- AI coach: a stop moved further away while the trade was open, the user's own pre-trade playbook,
+-- and the weekly coach report, written once a week has ended.
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS stop_widened BOOLEAN NOT NULL DEFAULT false;
+CREATE TABLE IF NOT EXISTS coach_reports (
+    user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    week       TEXT NOT NULL,                      -- ISO week, e.g. 2026-W45
+    report     JSONB NOT NULL,
+    source     TEXT NOT NULL,                      -- 'ai' or 'rules'
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, week)
+);
+
 -- Prop challenges: evaluation rules (profit target, daily and overall loss limits, minimum trading days)
 -- run on the paper account. paper_accounts.challenge_id is the challenge the account is in, if any.
 CREATE TABLE IF NOT EXISTS prop_challenges (

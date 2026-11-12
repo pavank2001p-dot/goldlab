@@ -276,9 +276,11 @@ export type PaperPosition = {
   order_kind: "market" | "limit" | "stop" | "agent";
   closed_at: string | null;
   exit_price: number | null;
-  close_reason: "manual" | "stop_loss" | "take_profit" | "stop_out" | "agent" | "challenge_daily_loss" | "challenge_max_loss" | null;
+  close_reason: "manual" | "partial" | "stop_loss" | "take_profit" | "stop_out" | "agent" | "challenge_daily_loss" | "challenge_max_loss" | null;
   swap: number | null;
   pnl: number | null;
+  /** Trailing stop distance in price, when the stop follows the price. */
+  trail?: number | null;
   mark?: number | null;
   margin?: number | null;
 };
@@ -295,6 +297,9 @@ export type PaperOrder = {
   note: string;
   created_at: string;
   done_at: string | null;
+  trail?: number | null;
+  /** The pending order this one is paired with as one-cancels-other. */
+  oco_id?: number | null;
 };
 export type PaperAccount = {
   starting_balance: number;
@@ -399,6 +404,26 @@ export type PaperOrderInput = {
   price?: number | null;
   stop_loss?: number | null;
   take_profit?: number | null;
+  trail?: number | null;
+  oco_with?: number | null;
+};
+
+export type CoachTag = "no_stop" | "stop_widened" | "revenge" | "oversized" | "red_folder" | "stop_out";
+export type CoachTags = {
+  labels: Record<CoachTag, { label: string; explain: string }>;
+  by_trade: Record<string, CoachTag[]>;
+  counts: Record<CoachTag, number>;
+  trades: number;
+  clean: number;
+};
+export type Playbook = { rules: string[]; custom: boolean; max: number };
+export type PreTrade = { rules: string[]; warnings: { key: string; text: string }[]; risk_limit_pct: number };
+type WeekSummary = { trades: number; net: number; win_rate_pct: number | null; clean_trades: number; tags: Partial<Record<CoachTag, number>> };
+export type CoachWeek = {
+  week: string; finished: boolean; source: "ai" | "rules"; created_at: string;
+  headline: string; went_well: string[]; work_on: string; next_week_goal: string;
+  facts: { this_week: WeekSummary; week_before: WeekSummary };
+  trades: { id: number; symbol: string; side: "long" | "short"; pnl: number; tags: CoachTag[]; closed_at: string }[];
 };
 
 export type PlanStats = {
@@ -547,7 +572,7 @@ export type ChartMarker = { t: number; title: string; kind: "fed" | "inflation" 
 
 export const api = {
   prefs: () => call<Record<string, unknown>>("/prefs"),
-  setPref: (key: "drawings" | "indicators" | "chart_events", value: unknown) =>
+  setPref: (key: "drawings" | "indicators" | "chart_events" | "trading", value: unknown) =>
     call<{ ok: boolean }>(`/prefs/${key}`, { method: "PUT", body: JSON.stringify({ value }) }),
   markers: (start: number, end: number, scheduled = true) =>
     call<ChartMarker[]>(`/calendar/markers?start=${start}&end=${end}&scheduled=${scheduled}`),
@@ -627,15 +652,26 @@ export const api = {
   paperCancel: (id: number) => call<void>(`/paper/orders/${id}`, { method: "DELETE" }),
   paperModify: (id: number, body: { price?: number; stop_loss?: number | null; take_profit?: number | null }) =>
     call<{ order: PaperOrder }>(`/paper/orders/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
-  paperClose: (id: number) => call<{ position: PaperPosition }>(`/paper/positions/${id}/close`, { method: "POST" }),
-  paperProtect: (id: number, stop_loss: number | null, take_profit: number | null) =>
-    call<{ position: PaperPosition }>(`/paper/positions/${id}`, { method: "PATCH", body: JSON.stringify({ stop_loss, take_profit }) }),
+  /** Closes a position, or only `units` of it. */
+  paperClose: (id: number, units?: number) =>
+    call<{ position: PaperPosition }>(`/paper/positions/${id}/close`, { method: "POST", ...(units ? { body: JSON.stringify({ units }) } : {}) }),
+  paperBreakeven: (id: number) => call<{ position: PaperPosition }>(`/paper/positions/${id}/breakeven`, { method: "POST" }),
+  /** Moves the stop and target. `trail` left out keeps the trailing stop as it is; null turns it off. */
+  paperProtect: (id: number, stop_loss: number | null, take_profit: number | null, trail?: number | null) =>
+    call<{ position: PaperPosition }>(`/paper/positions/${id}`, {
+      method: "PATCH", body: JSON.stringify(trail === undefined ? { stop_loss, take_profit } : { stop_loss, take_profit, trail }),
+    }),
   paperReset: (balance: number, leverage: number, symbol?: string) =>
     call<PaperState>(withSym("/paper/reset", symbol), { method: "POST", body: JSON.stringify({ balance, leverage }) }),
   paperLeverage: (leverage: number, symbol?: string) =>
     call<PaperState>(withSym("/paper/settings", symbol), { method: "PATCH", body: JSON.stringify({ leverage }) }),
   paperFunds: (amount: number, symbol?: string) =>
     call<PaperState>(withSym("/paper/funds", symbol), { method: "POST", body: JSON.stringify({ amount }) }),
+  coachTags: () => call<CoachTags>("/coach/tags"),
+  coachPlaybook: () => call<Playbook>("/coach/playbook"),
+  coachSavePlaybook: (rules: string[]) => call<Playbook>("/coach/playbook", { method: "PUT", body: JSON.stringify({ rules }) }),
+  coachPreTrade: () => call<PreTrade>("/coach/pretrade"),
+  coachWeek: (week?: string) => call<CoachWeek>(week ? `/coach/weekly?week=${week}` : "/coach/weekly"),
   paperReport: () => call<Report>("/paper/report"),
   prop: () => call<PropOverview>("/prop"),
   propStart: (body: PropStartInput) => call<{ current: PropChallenge }>("/prop/start", { method: "POST", body: JSON.stringify(body) }),
