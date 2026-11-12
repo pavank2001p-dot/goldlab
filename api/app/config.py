@@ -44,5 +44,8 @@ CALENDAR_FEED_URL = os.getenv("CALENDAR_FEED_URL", "https://nfs.faireconomy.medi
 ASSISTANT_MODEL = os.getenv("ASSISTANT_MODEL", "claude-opus-5-5")
 ASSISTANT_DAILY_LIMIT = int(os.getenv("ASSISTANT_DAILY_LIMIT", "20"))
 
+# Exchange rates for the local gold price (ECB reference rates via Frankfurter, no key needed).
+FX_URL = os.getenv("FX_URL", "https://api.frankfurter.dev/v1/latest")
+
 if COOKIE_SECURE and JWT_SECRET.startswith("dev-only"):
     raise RuntimeError("Set JWT_SECRET to a long random value in production")

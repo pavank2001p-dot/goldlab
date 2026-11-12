@@ -441,6 +441,8 @@ export default function PriceChart({ height = 520, initialTf = "1h", tools = fal
   return (
     <div
       ref={wrap}
+      // Charts read left to right (time runs that way) whatever the page language.
+      dir="ltr"
       className={`flex flex-col overflow-hidden border border-border bg-surface ${full ? "fixed inset-0 z-50" : "rounded-lg"}`}
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-3 py-2 text-sm">

@@ -587,6 +587,9 @@ export type Lesson = LessonSummary & { body: string[]; next: string | null };
 export type LessonProgress = Record<string, { return_pct: number; trades: number; completed_at: string }>;
 export type ChartMarker = { t: number; title: string; kind: "fed" | "inflation" | "jobs" | "growth" | "dollar" | "shock" | "other"; impact: string; why: string; history: boolean };
 
+/** US dollar exchange rates, for showing gold in a local currency. */
+export type FxRates = { base: "USD"; rates: Record<string, number>; as_of: string | null; source: "ecb" | "fallback"; pegged: string[] };
+
 export const api = {
   prefs: () => call<Record<string, unknown>>("/prefs"),
   setPref: (key: "drawings" | "indicators" | "chart_events" | "trading", value: unknown) =>
@@ -645,6 +648,7 @@ export const api = {
   markets: () => call<MarketList>("/prices/markets"),
   summary: (symbol?: string) => call<Summary>(withSym("/prices/summary", symbol)),
   live: (symbol?: string) => call<LiveQuote>(withSym("/prices/live", symbol)),
+  fx: () => call<FxRates>("/fx"),
   scenario: (p: Partial<ScenarioInput>) => call<Scenario>("/scenarios", { method: "POST", body: JSON.stringify(p) }),
   candles: (tf: ChartTf, opts: { start?: number; end?: number; limit?: number; symbol?: string } = {}) => {
     const q = new URLSearchParams({ tf, limit: String(opts.limit ?? 1000) });
