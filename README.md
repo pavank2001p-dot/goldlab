@@ -1,6 +1,8 @@
-# GoldLab
+# Trading Lab
 
-Educational XAU/USD (gold) analysis: charts, strategy backtests, news insights and risk-profile fit.
+Educational trading practice across markets, each with its own lab: Commodity Lab (gold, silver, oil, gas),
+Forex Lab, Index Lab, Stock Lab and Crypto Lab. Charts, strategy backtests, paper trading, news insights and
+risk-profile fit.
 Nothing here is investment advice.
 
 ```
@@ -12,7 +14,7 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
 
 - **Chart** (`web/src/components/PriceChart.tsx`, `api/app/prices.py`, `api/app/live.py`): 13 timeframes
   from 1 second to 1 month, zoom, full screen and a live price. Hourly and daily bars go back to `HISTORY_SINCE` (2003-05-01);
-  minute bars cover the last `MINUTE_DAYS` (60) and one-second bars the last `SECOND_DAYS` (2), from
+  minute bars cover the last `MINUTE_DAYS` (60) for gold and `MARKET_MINUTE_DAYS` (14) for other markets, and one-second bars the last `SECOND_DAYS` (2), from
   Dukascopy. Other timeframes are aggregated on request. Live quotes stream from Finnhub's websocket
   (OANDA:XAU_USD) when `FINNHUB_API_KEY` is set (turn off with `LIVE_PRICES=false`); they move the newest
   candle and are saved as 1s/1m/1h bars until Dukascopy's data for that hour replaces them. The **All**
@@ -43,6 +45,14 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
   and a journal streak. They never reward profit. Shown on the signed-in home dashboard and the account page.
 - **Look and feel**: dark, light or follow-the-device themes and four accent colours (`web/src/lib/theme.ts`), a
   first-visit tour, fill confirmations, and shareable result images drawn in the browser (`ShareCard.tsx`).
+- **Prop challenge** (`api/app/prop.py`, `/paper/prop`): practise a funded-trader style evaluation on the paper
+  account. Starter ($10k, +8%, 6% daily and 12% overall loss limits), two-step (+10% then +5%, 5% / 10%) and
+  one-step (+10%, 3% / 6%) plans in $10k to $200k sizes, or custom rules. Limits are checked against equity at every
+  minute bar's worst price (open trades included, day rolls at 17:00 New York); breaking one closes everything and
+  fails the challenge. A phase passes at the target with nothing open and the minimum trading days met; each phase
+  starts on a fresh account. A live rule panel on the paper page warns about trades without stops or stops that would
+  break a limit, links the lesson for the rule at risk, and a pass gives a shareable certificate image. Balance and
+  leverage are locked during a challenge; starting over or leaving ends it.
 - **Trade log** (`api/app/trades.py`): manual entry or CSV import (MetaTrader 4/5 and most broker exports; gold
   rows only; re-imports skip known tickets). Produces the same report as a backtest (`api/app/report.py`).
 
@@ -66,7 +76,12 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
   chart; drag a pending order's line to move it (its stop and target move with it), drag stop loss and take
   profit lines to move them, add or remove them, and close or cancel from the chart. New orders start from the
   chart's Buy and Sell buttons or by right-clicking a price (press and hold on touch screens), then are adjusted
-  by dragging before they're placed. `PATCH /paper/orders/{id}` moves a pending order. Closed paper trades get the same report and profile fit as the
+  by dragging before they're placed. `PATCH /paper/orders/{id}` moves a pending order.
+  **Order tools** like a broker's: a trailing stop that follows the best price by a fixed distance, a break-even button
+  (`POST /paper/positions/{id}/breakeven`, also a **BE** button on the chart), partial close (`POST
+  /paper/positions/{id}/close` with `units`; the closed part becomes its own trade), one-cancels-other pairs of pending
+  orders (`oco_with`), one-click trading (skips the review step; saved to the account), and sizing by risk % right in
+  the order ticket from the stop distance. Closed paper trades get the same report and profile fit as the
   trade log. No real money or broker is involved.
 - **Risk quiz** (`api/app/risk.py`): 17 questions in five parts place a user as conservative, moderate or aggressive,
   with risk-per-trade, drawdown and leverage limits.
@@ -137,6 +152,23 @@ until 1959, then World Bank monthly averages. The API stores them as `1mo` bars 
 for monthly candles before the first daily bar, and the assistant uses them for questions about earlier
 years. Daily charts and backtests use only the hourly data.
 
+### Other markets
+
+Besides gold, the charts, backtests and paper trading work on silver, WTI and Brent oil, natural gas,
+EUR/USD, GBP/USD, AUD/USD, the S&P 500, Nasdaq 100 and Dow Jones, Apple, Microsoft, Nvidia, Amazon,
+Tesla, Bitcoin and Ether (all quoted in US dollars). The list and each market's rules live in
+`api/app/instruments.py`: trading hours (forex hours, US stock hours, or around the clock for crypto),
+contract size, a leverage cap (the account's leverage applies up to it), spread and overnight swap.
+
+- History comes from the same free Dukascopy feed, no key needed, from `MARKET_HISTORY_SINCE`
+  (default 2015-01-01). Gold keeps its full history from 2003.
+- Live quotes come from Finnhub's free websocket with the same `FINNHUB_API_KEY`: OANDA prices for
+  metals, energy, forex and indices, US stock trades, and Binance for crypto.
+- `MARKETS` limits which markets are fetched (`all` by default, or a comma-separated list of symbols such as
+  `XAUUSD,EURUSD,AAPLUSUSD`). `SECOND_SYMBOLS` lists the markets that keep 1-second bars (gold by default).
+- Not included: Indian (NSE/BSE) stocks and futures, which have no free feed here and would need a paid
+  data provider; and markets not priced in dollars (USD/JPY, the DAX), which would need currency conversion.
+
 Switching source wipes the old bars so the two never mix (the monthly history is kept). `python -m app.ingest update` refreshes the
 latest bars; set `ENABLE_SCHEDULER=true` to have the API do this every `UPDATE_INTERVAL_MIN` minutes.
 
@@ -148,7 +180,7 @@ latest bars; set `ENABLE_SCHEDULER=true` to have the API do this every `UPDATE_I
    `COOKIE_SECURE=true`, `PRICE_SOURCE=dukascopy`, `ENABLE_SCHEDULER=true`, and for news and the
    assistant `FINNHUB_API_KEY` and `ANTHROPIC_API_KEY`. Optional: `ASSISTANT_DAILY_LIMIT` (default 20).
    For account emails: `APP_URL=https://<your-site>`, `RESEND_API_KEY` and `EMAIL_FROM` (an address on a
-   domain verified in Resend, e.g. `GoldLab <no-reply@yourdomain.com>`). For Google sign-in:
+   domain verified in Resend, e.g. `Trading Lab <no-reply@yourdomain.com>`). For Google sign-in:
    `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` from a Google Cloud OAuth client (type "Web application")
    whose authorised redirect URI is `https://<your-site>/api/auth/google/callback`. The Google button only
    appears once both are set.

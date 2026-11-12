@@ -8,7 +8,10 @@ import type { Bar } from "@/lib/api";
 type P = { t: number; p: number };
 type Kind = "trend" | "ray" | "hline" | "vline" | "rect" | "fib" | "text" | "measure";
 type Tool = "cursor" | Kind;
-type Drawing = { id: string; kind: Kind; a: P; b?: P; text?: string; color: string };
+// `sym` is the market a drawing belongs to; drawings saved before other markets existed are gold's.
+type Drawing = { id: string; kind: Kind; a: P; b?: P; text?: string; color: string; sym?: string };
+const GOLD_SYMBOL = "XAUUSD";
+const mine = (d: Drawing, symbol: string) => (d.sym ?? GOLD_SYMBOL) === symbol;
 
 const KEY = "goldlab-drawings";
 const FIB = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
@@ -36,8 +39,9 @@ function distToSeg(px: number, py: number, x1: number, y1: number, x2: number, y
 
 /** Drawing tools over a lightweight-charts chart. Drawings are kept in time and price, so they stay put
  *  as you pan, zoom or change timeframe, and are saved with the account when signed in. */
-export default function Drawings({ chart, series, bars, accent }: {
+export default function Drawings({ chart, series, bars, accent, symbol = GOLD_SYMBOL }: {
   chart: IChartApi | null; series: ISeriesApi<"Candlestick"> | null; bars: React.RefObject<Bar[]>; accent: string;
+  symbol?: string;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [tool, setTool] = useState<Tool>("cursor");
@@ -57,8 +61,13 @@ export default function Drawings({ chart, series, bars, accent }: {
 
   // Saved in this browser and, when signed in, in the account so drawings follow the user to other devices.
   const [saved, setSaved] = usePref<Drawing[]>("drawings", KEY, NONE);
-  useEffect(() => setItems(saved), [saved]);
-  const commit = useCallback((next: Drawing[]) => { setItems(next); setSaved(next.filter((d) => d.kind !== "measure")); }, [setSaved]);
+  useEffect(() => setItems(saved.filter((d) => mine(d, symbol))), [saved, symbol]);
+  // Each market keeps its own drawings; saving this market's leaves the others' alone.
+  const commit = useCallback((next: Drawing[]) => {
+    setItems(next);
+    const others = saved.filter((d) => !mine(d, symbol));
+    setSaved([...others, ...next.filter((d) => d.kind !== "measure").map((d) => ({ ...d, sym: symbol }))]);
+  }, [setSaved, saved, symbol]);
 
   // Time <-> x through the bar index, so points between bars and beyond the last one still place correctly.
   const xOf = useCallback((t: number): number | null => {

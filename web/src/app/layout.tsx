@@ -12,8 +12,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "GoldLab: gold (XAU/USD) analysis and backtesting",
-  description: "Chart, backtest and understand gold trading, with news insights matched to your risk appetite.",
+  title: "Trading Lab: charts, backtests and paper trading",
+  description: "Chart, backtest and practise trading gold, commodities, forex, indices, stocks and crypto, with news insights matched to your risk appetite.",
 };
 
 export const viewport: Viewport = {

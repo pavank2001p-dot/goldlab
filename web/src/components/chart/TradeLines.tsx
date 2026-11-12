@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
-import { fmtPrice, fmtUsd, type PaperOrder, type PaperOrderInput, type PaperPosition, type PaperPrice } from "@/lib/api";
+import { fmtUsd, type Market, type PaperOrder, type PaperOrderInput, type PaperPosition, type PaperPrice } from "@/lib/api";
+import { GOLD, fmtMarketPrice } from "@/lib/markets";
 
 type Side = "long" | "short";
 type Role = "entry" | "sl" | "tp";
@@ -23,11 +24,14 @@ export type TradeActions = {
   modify: (id: number, body: OrderEdit) => Promise<boolean>;
   cancel: (id: number) => Promise<boolean>;
   close: (id: number) => Promise<boolean>;
+  /** Moves a position's stop loss to its entry price. */
+  breakeven?: (id: number) => Promise<boolean>;
   place: (o: PaperOrderInput) => Promise<boolean>;
 };
 
 const COLOR: Record<Role, string> = { entry: "var(--calm)", sl: "var(--down)", tp: "var(--up)" };
-const r2 = (v: number) => Math.round(v * 100) / 100;
+/** Rounds to a market's price step (two decimals for gold, five for most currencies). */
+const roundTo = (v: number, d: number) => Math.round(v * 10 ** d) / 10 ** d;
 const dirOf = (s: Side) => (s === "long" ? 1 : -1);
 /** Profit or loss if the price reaches `at`, before spread and swap. */
 const pnlAt = (side: Side, entry: number, at: number, units: number) => (at - entry) * units * dirOf(side);
@@ -54,11 +58,16 @@ function Grip() {
 /** Paper orders and positions drawn on the price chart, like a broker's trading chart: drag a pending order's
  *  line to move its price, drag stop loss and take profit lines to move them, and place new orders from the
  *  chart (the Buy and Sell buttons, or right-click / long-press a price). Works with a mouse and with touch. */
-export default function TradeLines({ chart, series, below, positions, orders, price, equity, riskLimit, busy, actions }: {
+export default function TradeLines({ chart, series, below, positions, orders, price, equity, riskLimit, busy, actions, market = GOLD }: {
+  market?: Market;
   chart: IChartApi; series: ISeriesApi<"Candlestick">; below: HTMLElement | null;
   positions: PaperPosition[]; orders: PaperOrder[]; price: PaperPrice | null;
   equity: number; riskLimit: number; busy: boolean; actions: TradeActions;
 }) {
+  const dp = market.decimals;
+  const r2 = useCallback((v: number) => roundTo(v, dp), [dp]);
+  const fmtPrice = (p: number) => fmtMarketPrice(p, market);
+  const unit = market.unit === "ounce" ? "oz" : market.unit === "share" ? "shares" : "units";
   const root = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -178,15 +187,15 @@ export default function TradeLines({ chart, series, below, positions, orders, pr
     const r = root.current!.getBoundingClientRect();
     const p = series.coordinateToPrice(clientY - r.top);
     return p == null ? null : r2(p);
-  }, [series]);
+  }, [series, r2]);
 
   // A sensible gap for a new stop or target: about 60 pixels at the current zoom.
   const gapAt = useCallback((at: number) => {
     const y = series.priceToCoordinate(at);
     const p = y == null ? null : series.coordinateToPrice(y + 60);
     const g = p == null ? 0 : Math.abs(at - p);
-    return r2(g > 0 ? g : Math.max(at * 0.0025, 0.5));
-  }, [series]);
+    return r2(g > 0 ? g : Math.max(at * 0.0025, 10 ** -dp));
+  }, [series, r2, dp]);
 
   // ---- Dragging --------------------------------------------------------------------------------------
   function down(e: React.PointerEvent, l: Line) {
@@ -285,7 +294,7 @@ export default function TradeLines({ chart, series, below, positions, orders, pr
     const fit = Math.max(Math.floor(((equity * riskLimit) / 100 / g) * 100) / 100, 0.01);
     setDraft((d) => ({ side, market: at == null, price: entry, sl: r2(entry - dir * g), tp: r2(entry + dir * 2 * g), units: d?.units ?? String(fit) }));
     setMenu(null);
-  }, [price, gapAt, equity, riskLimit]);
+  }, [price, gapAt, equity, riskLimit, r2]);
 
   // Right-click a price (or press and hold it on a touch screen) to place an order there.
   useEffect(() => {
@@ -322,7 +331,7 @@ export default function TradeLines({ chart, series, below, positions, orders, pr
       el.removeEventListener("pointerup", clear);
       el.removeEventListener("pointercancel", clear);
     };
-  }, [chart, series]);
+  }, [chart, series, r2]);
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
@@ -382,14 +391,19 @@ export default function TradeLines({ chart, series, below, positions, orders, pr
       const pos = l.owner === "pos" ? positions.find((p) => p.id === l.id) : null;
       const ord = l.owner === "order" ? orders.find((o) => o.id === l.id) : null;
       const verb = l.side === "long" ? "Buy" : "Sell";
-      const text = l.owner === "pos" ? `${verb} ${l.units} oz`
-        : l.owner === "order" ? `${verb} ${ord?.kind ?? ""} ${l.units} oz`
-        : `${verb} ${draftKind ?? ""} ${draft?.units || 0} oz`.replace("  ", " ");
+      const text = l.owner === "pos" ? `${verb} ${l.units} ${unit}`
+        : l.owner === "order" ? `${verb} ${ord?.kind ?? ""} ${l.units} ${unit}`
+        : `${verb} ${draftKind ?? ""} ${draft?.units || 0} ${unit}`.replace("  ", " ");
       return (
         <>
           {l.draggable && <Grip />}
           <span>{text}</span>
           {pos?.pnl != null && <span className={pos.pnl >= 0 ? "text-up" : "text-down"}>{signedUsd(pos.pnl)}</span>}
+          {pos && actions.breakeven && pos.mark != null && (pos.side === "long" ? pos.mark > pos.entry_price : pos.mark < pos.entry_price)
+            && !(pos.stop_loss != null && (pos.side === "long" ? pos.stop_loss >= pos.entry_price : pos.stop_loss <= pos.entry_price)) && (
+            <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={() => actions.breakeven?.(pos.id)} disabled={busy}
+              className={`${mini} text-calm`} title="Move the stop loss to the entry price" aria-label="Move the stop to break-even">BE</button>
+          )}
           {!has("sl") && <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={() => addLevel(l, "sl")} disabled={busy}
             className={`${mini} text-down`} title="Add a stop loss, then drag it" aria-label="Add a stop loss">+SL</button>}
           {!has("tp") && <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={() => addLevel(l, "tp")} disabled={busy}
@@ -456,13 +470,13 @@ export default function TradeLines({ chart, series, below, positions, orders, pr
           <button type="button" onClick={() => setDraft({ ...draft, market: true })} className="text-gold hover:underline">Use market</button>
         )}
         <label className="ml-auto flex items-center gap-1 text-muted">
-          <input value={draft.units} onChange={(e) => setDraft({ ...draft, units: e.target.value })} inputMode="decimal" aria-label="Size in ounces"
+          <input value={draft.units} onChange={(e) => setDraft({ ...draft, units: e.target.value })} inputMode="decimal" aria-label={`Size in ${unit}`}
             className="w-20 rounded-md border border-border bg-background px-1.5 py-1 text-right text-base tabular-nums text-foreground outline-none focus:border-gold sm:text-xs" />
-          oz
+          {unit}
         </label>
       </div>
       <p className="leading-relaxed text-muted">
-        {draft.side === "long" ? "Buy" : "Sell"} {units || 0} oz {draft.market ? <>at about <b className="text-foreground">{fmtPrice(draftEntry)}</b></> : <>if gold reaches <b className="text-foreground">{fmtPrice(draft.price)}</b></>}.{" "}
+        {draft.side === "long" ? "Buy" : "Sell"} {units || 0} {unit} {draft.market ? <>at about <b className="text-foreground">{fmtPrice(draftEntry)}</b></> : <>if {market.symbol === GOLD.symbol ? "gold" : market.name} reaches <b className="text-foreground">{fmtPrice(draft.price)}</b></>}.{" "}
         {risk != null && riskPct != null
           ? <>Stop at {fmtPrice(draft.sl!)}: lose <b className={over ? "text-down" : "text-foreground"}>{fmtUsd(risk)}</b> ({pct(riskPct)}{over ? `, over your ${riskLimit}% limit` : ""}).</>
           : <>No stop loss, so the loss isn&apos;t limited.</>}{" "}

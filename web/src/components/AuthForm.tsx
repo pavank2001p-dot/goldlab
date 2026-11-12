@@ -11,7 +11,7 @@ const GOOGLE_ERRORS: Record<string, string> = {
   google_cancelled: "Google sign-in was cancelled.",
   google_expired: "That Google sign-in took too long or was opened in another browser. Please try again.",
   google_failed: "Google sign-in didn't work this time. Please try again.",
-  google_unverified: "We couldn't use that Google account. Its email isn't confirmed with Google, or it's already linked to another GoldLab account.",
+  google_unverified: "We couldn't use that Google account. Its email isn't confirmed with Google, or it's already linked to another Trading Lab account.",
 };
 
 function GoogleLogo() {

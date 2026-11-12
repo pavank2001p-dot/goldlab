@@ -9,32 +9,43 @@ import ReportView from "@/components/ReportView";
 import SignInPrompt from "@/components/SignInPrompt";
 import { Chips, CountUp, Empty, Icon, PageHeader, SidePill } from "@/components/ui";
 import {
-  api, fmtUsd, type PaperOrder, type PaperOrderInput, type PaperPosition, type PaperState, type Report, type RiskProfile,
+  api, fmtUsd, type Market, type PaperOrder, type PaperOrderInput, type PaperPosition, type PaperState, type Report, type RiskProfile,
 } from "@/lib/api";
+import MarketPicker from "@/components/markets/MarketPicker";
+import { GOLD, unitsLabel, useMarket } from "@/lib/markets";
 import AccountSetup, { SETUP_KEY } from "@/components/paper/AccountSetup";
+import RulePanel from "@/components/prop/RulePanel";
 import LeveragePicker from "@/components/paper/LeveragePicker";
 import { toast } from "@/components/Toaster";
 import { useUser } from "@/lib/useUser";
 import AlertsCard from "@/components/practice/AlertsCard";
 import Insights from "@/components/practice/Insights";
-import SizeCalculator from "@/components/practice/SizeCalculator";
 import TradeReview from "@/components/practice/TradeReview";
+import { usePref } from "@/lib/prefs";
+import TagChips from "@/components/coach/TagChips";
+import type { CoachTags, PreTrade } from "@/lib/api";
 
 type Side = "long" | "short";
 type Kind = "market" | "limit" | "stop";
 type Tab = "positions" | "orders" | "history" | "report" | "habits";
 
 const POLL_MS = 5000;
-const SIZES = [1, 5, 10, 50, 100];
+// Quick sizes as multiples of the market's usual trade (1, 5, 10, 50 and 100 oz for gold).
+const SIZE_STEPS = [0.2, 1, 2, 10, 20];
+/** Short unit for sizes: "oz" for metals, otherwise "shares", "barrels", "units"... */
+const unitShort = (m: Pick<Market, "unit">, n?: number) => (m.unit === "ounce" ? "oz" : unitsLabel(m, n));
 const BALANCES = [1_000, 10_000, 100_000, 1_000_000, 10_000_000];
 const short = (v: number) =>
   v >= 1e12 ? `$${+(v / 1e12).toFixed(2)}T` : v >= 1e9 ? `$${+(v / 1e9).toFixed(2)}B` : v >= 1e6 ? `$${+(v / 1e6).toFixed(2)}M` : v >= 1e3 ? `$${+(v / 1e3).toFixed(1)}k` : `$${v}`;
 const REASON: Record<string, string> = {
   manual: "Closed by you",
+  partial: "Part closed",
   stop_loss: "Stop loss hit",
   take_profit: "Take profit hit",
   stop_out: "Margin stop-out",
   agent: "Closed by the agent",
+  challenge_daily_loss: "Challenge daily loss limit broken",
+  challenge_max_loss: "Challenge maximum loss broken",
 };
 const KIND_HELP: Record<Kind, string> = {
   market: "Fills now at the current price.",
@@ -43,7 +54,7 @@ const KIND_HELP: Record<Kind, string> = {
 };
 
 const input = "w-full rounded-lg border border-border bg-background px-3 py-2 text-base tabular-nums outline-none transition focus:border-gold sm:text-sm";
-const px = (v: number | null | undefined) => (v == null ? "–" : v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+const px = (v: number | null | undefined, d = 2) => (v == null ? "–" : v.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }));
 const signed = (v: number | null | undefined) => (v == null ? "–" : `${v > 0 ? "+" : ""}${fmtUsd(v)}`);
 const tone = (v: number | null | undefined) => (v == null || v === 0 ? "text-muted" : v > 0 ? "text-up" : "text-down");
 const num = (v: string) => (v.trim() === "" ? null : Number(v));
@@ -57,7 +68,7 @@ function ago(s: number) {
 }
 
 /** Bid and ask, flashing green or red when they move. */
-function Quote({ price }: { price: PaperState["price"] }) {
+function Quote({ price, market }: { price: PaperState["price"]; market: Market }) {
   const last = useRef<number | null>(null);
   const [flash, setFlash] = useState<"up" | "down" | null>(null);
   useEffect(() => {
@@ -76,12 +87,20 @@ function Quote({ price }: { price: PaperState["price"] }) {
     <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
       <div>
         <p className="text-[11px] uppercase tracking-wide text-muted">Sell at (bid)</p>
-        <p className={`text-xl font-semibold tabular-nums transition-colors ${cls}`}>{px(price.bid)}</p>
+        <p className={`text-xl font-semibold tabular-nums transition-colors ${cls}`}>{px(price.bid, market.decimals)}</p>
       </div>
       <div>
         <p className="text-[11px] uppercase tracking-wide text-muted">Buy at (ask)</p>
-        <p className={`text-xl font-semibold tabular-nums transition-colors ${cls}`}>{px(price.ask)}</p>
+        <p className={`text-xl font-semibold tabular-nums transition-colors ${cls}`}>{px(price.ask, market.decimals)}</p>
       </div>
+      {price.wide && price.open && (
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-gold/15 px-2.5 py-1 text-xs text-gold"
+          title="Spreads widen at real brokers around these times; stops can also fill a little past their price around releases.">
+          <Icon name="bolt" className="h-3 w-3" />
+          {price.wide === "news" ? "Big release: spread widened" : "Daily rollover: spread widened"}
+          {price.spread != null ? ` to ${px(price.spread, market.decimals)}` : ""}
+        </span>
+      )}
       <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ${price.open ? "bg-up/15 text-up" : "bg-border text-muted"}`}>
         <span className={`h-1.5 w-1.5 rounded-full ${price.open ? "breathe bg-up" : "bg-muted"}`} />
         {price.open ? (price.source === "live" ? "Live" : `Updated ${ago(price.age_seconds)}`) : `Market closed · last price ${ago(price.age_seconds)}`}
@@ -101,7 +120,7 @@ function Stat({ label, children, hint, icon }: { label: string; children: React.
 }
 
 /** Where the price sits between the stop loss and the take profit. */
-function Track({ p }: { p: PaperPosition }) {
+function Track({ p, d = 2 }: { p: PaperPosition; d?: number }) {
   if (p.mark == null || (p.stop_loss == null && p.take_profit == null)) return <span className="text-xs text-muted">No stop or target</span>;
   const long = p.side === "long";
   // Left end is the stop (or the entry), right end the target (or the entry), in the trade's direction.
@@ -117,36 +136,55 @@ function Track({ p }: { p: PaperPosition }) {
               style={{ left: `${mark}%` }} />
       </div>
       <div className="mt-1 flex justify-between text-[10px] tabular-nums text-muted">
-        <span>{p.stop_loss != null ? `SL ${px(p.stop_loss)}` : ""}</span>
-        <span>{p.take_profit != null ? `TP ${px(p.take_profit)}` : ""}</span>
+        <span>{p.stop_loss != null ? `SL ${px(p.stop_loss, d)}` : ""}</span>
+        <span>{p.take_profit != null ? `TP ${px(p.take_profit, d)}` : ""}</span>
       </div>
       {!long && <span className="sr-only">Short position</span>}
     </div>
   );
 }
 
-function PositionRow({ p, onClose, onSave, busy }: {
+function PositionRow({ p, m, onClose, onSave, onBreakeven, onPartial, busy }: {
   p: PaperPosition;
+  m: Market;
   onClose: () => void;
-  onSave: (sl: number | null, tp: number | null) => Promise<boolean>;
+  onSave: (sl: number | null, tp: number | null, trail: number | null) => Promise<boolean>;
+  onBreakeven: () => void;
+  onPartial: (units: number) => Promise<boolean>;
   busy: boolean;
 }) {
   const [edit, setEdit] = useState(false);
+  const [part, setPart] = useState<string | null>(null);
   const [sl, setSl] = useState(p.stop_loss?.toString() ?? "");
   const [tp, setTp] = useState(p.take_profit?.toString() ?? "");
+  const [trail, setTrail] = useState(p.trail?.toString() ?? "");
+  useEffect(() => { if (!edit) { setSl(p.stop_loss?.toString() ?? ""); setTp(p.take_profit?.toString() ?? ""); setTrail(p.trail?.toString() ?? ""); } }, [edit, p.stop_loss, p.take_profit, p.trail]);
+  // Break-even is offered once the price has moved past the entry and the stop isn't there already.
+  const inProfit = p.mark != null && (p.side === "long" ? p.mark > p.entry_price : p.mark < p.entry_price);
+  const atEntry = p.stop_loss != null && (p.side === "long" ? p.stop_loss >= p.entry_price : p.stop_loss <= p.entry_price);
+  const btn = "rounded-lg border border-border px-3 py-1.5 text-xs transition hover:border-muted disabled:opacity-50";
   return (
     <div className="rise-in rounded-2xl border border-border bg-surface p-3.5">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <SidePill side={p.side} />
-        <span className="text-sm tabular-nums">{p.units} oz</span>
-        <span className="text-xs text-muted tabular-nums">from {px(p.entry_price)} → now {px(p.mark)}</span>
+        <span className="text-sm tabular-nums">{p.units} {unitShort(m, p.units)}{m.symbol !== GOLD.symbol || p.symbol !== GOLD.symbol ? <span className="text-muted"> {m.name}</span> : null}</span>
+        <span className="text-xs text-muted tabular-nums">from {px(p.entry_price, m.decimals)} → now {px(p.mark, m.decimals)}</span>
         <span className={`ml-auto text-lg font-semibold tabular-nums ${tone(p.pnl)}`}>{signed(p.pnl)}</span>
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-3">
-        <Track p={p} />
+        <Track p={p} d={m.decimals} />
         <span className="text-xs text-muted">Opened {when(p.opened_at)}{p.order_kind !== "market" && ` · ${p.order_kind} order`}</span>
-        <div className="ml-auto flex gap-2">
-          <button onClick={() => setEdit(!edit)} className="rounded-lg border border-border px-3 py-1.5 text-xs transition hover:border-muted">
+        {p.trail != null && <span className="rounded-full bg-gold/15 px-2 py-0.5 text-[11px] text-gold" title="The stop follows the best price by this distance">Trailing {px(p.trail, m.decimals)}</span>}
+        <div className="ml-auto flex flex-wrap gap-2">
+          {inProfit && !atEntry && (
+            <button onClick={onBreakeven} disabled={busy} className={btn} title="Move the stop loss to your entry price">Break-even</button>
+          )}
+          {p.units > 0.01 && (
+            <button onClick={() => { setPart(part == null ? String(+(p.units / 2).toPrecision(6)) : null); setEdit(false); }} className={btn}>
+              {part != null ? "Cancel" : "Close part"}
+            </button>
+          )}
+          <button onClick={() => { setEdit(!edit); setPart(null); }} className={btn}>
             {edit ? "Cancel" : "Edit stop / target"}
           </button>
           <button onClick={onClose} disabled={busy} className="rounded-lg bg-foreground px-3 py-1.5 text-xs font-medium text-background transition hover:opacity-90 disabled:opacity-50">
@@ -157,28 +195,52 @@ function PositionRow({ p, onClose, onSave, busy }: {
       {edit && (
         <form className="quiz-in mt-3 flex flex-wrap items-end gap-2" onSubmit={async (e) => {
           e.preventDefault();
-          if (await onSave(num(sl), num(tp))) setEdit(false);
+          if (await onSave(num(sl), num(tp), num(trail))) setEdit(false);
         }}>
           <label className="text-xs text-muted">Stop loss<input value={sl} onChange={(e) => setSl(e.target.value)} inputMode="decimal" className={`${input} mt-1 w-32`} placeholder="none" /></label>
           <label className="text-xs text-muted">Take profit<input value={tp} onChange={(e) => setTp(e.target.value)} inputMode="decimal" className={`${input} mt-1 w-32`} placeholder="none" /></label>
+          <label className="text-xs text-muted" title="The stop follows the best price by this distance and never moves back">Trailing distance<input value={trail} onChange={(e) => setTrail(e.target.value)} inputMode="decimal" className={`${input} mt-1 w-32`} placeholder="off" /></label>
           <button disabled={busy} className="rounded-lg bg-gold px-3 py-2 text-xs font-medium text-black disabled:opacity-50">Save</button>
+        </form>
+      )}
+      {part != null && (
+        <form className="quiz-in mt-3 flex flex-wrap items-end gap-2" onSubmit={async (e) => {
+          e.preventDefault();
+          const n = Number(part);
+          if (n > 0 && (await onPartial(n))) setPart(null);
+        }}>
+          <label className="text-xs text-muted">Close how many {unitShort(m, 2)}?<input value={part} onChange={(e) => setPart(e.target.value)} inputMode="decimal" className={`${input} mt-1 w-32`} /></label>
+          {[0.25, 0.5, 0.75].map((f) => (
+            <button key={f} type="button" onClick={() => setPart(String(+(p.units * f).toPrecision(6)))}
+              className="rounded-full border border-border px-2.5 py-1 text-xs text-muted transition hover:border-muted">{f * 100}%</button>
+          ))}
+          <button disabled={busy || !(Number(part) > 0)} className="rounded-lg bg-foreground px-3 py-2 text-xs font-medium text-background disabled:opacity-50">
+            Close {Number(part) >= p.units ? "all" : part}
+          </button>
+          <span className="w-full text-xs text-muted">The rest stays open with the same stop and target. The closed part shows in History as its own trade.</span>
         </form>
       )}
     </div>
   );
 }
 
-function OrderRow({ o, price, onCancel, busy }: { o: PaperOrder; price: PaperState["price"]; onCancel: () => void; busy: boolean }) {
-  const ref = price ? (o.side === "long" ? price.ask : price.bid) : null;
+function OrderRow({ o, m, price, onCancel, busy }: {
+  o: PaperOrder; m: Market; price: PaperState["price"]; onCancel: () => void; busy: boolean;
+}) {
+  // The gap to now only makes sense when the price shown is this order's market.
+  const same = (price?.symbol ?? GOLD.symbol) === (o.symbol ?? GOLD.symbol);
+  const ref = price && same ? (o.side === "long" ? price.ask : price.bid) : null;
   const gap = ref != null ? o.price - ref : null;
   return (
     <div className="rise-in flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-dashed border-border bg-surface/60 p-3.5">
       <SidePill side={o.side} />
       <span className="rounded-full bg-border px-2 py-0.5 text-[11px] capitalize">{o.kind}</span>
-      <span className="text-sm tabular-nums">{o.units} oz at {px(o.price)}</span>
-      {gap != null && <span className="text-xs text-muted tabular-nums">{Math.abs(gap).toFixed(2)} {gap > 0 ? "above" : "below"} now</span>}
+      {o.oco_id != null && <span className="rounded-full bg-calm/15 px-2 py-0.5 text-[11px] text-calm" title="When either order of the pair fills, the other is cancelled">OCO pair</span>}
+      {o.trail != null && <span className="rounded-full bg-gold/15 px-2 py-0.5 text-[11px] text-gold">Trailing {px(o.trail, m.decimals)}</span>}
+      <span className="text-sm tabular-nums">{o.units} {unitShort(m, o.units)}{(o.symbol ?? GOLD.symbol) !== GOLD.symbol ? ` ${m.name}` : ""} at {px(o.price, m.decimals)}</span>
+      {gap != null && <span className="text-xs text-muted tabular-nums">{Math.abs(gap).toFixed(m.decimals)} {gap > 0 ? "above" : "below"} now</span>}
       <span className="text-xs text-muted tabular-nums">
-        {o.stop_loss != null && `SL ${px(o.stop_loss)} `}{o.take_profit != null && `TP ${px(o.take_profit)}`}
+        {o.stop_loss != null && `SL ${px(o.stop_loss, m.decimals)} `}{o.take_profit != null && `TP ${px(o.take_profit, m.decimals)}`}
       </span>
       <button onClick={onCancel} disabled={busy} className="ml-auto rounded-lg border border-border px-3 py-1.5 text-xs transition hover:border-down hover:text-down disabled:opacity-50">
         Cancel
@@ -187,9 +249,11 @@ function OrderRow({ o, price, onCancel, busy }: { o: PaperOrder; price: PaperSta
   );
 }
 
-function Ticket({ state, profile, onPlaced, busy, setBusy, preset }: {
-  preset?: { oz: number; n: number } | null;
+type TradingPrefs = { oneClick: boolean };
+
+function Ticket({ state, market, profile, onPlaced, busy, setBusy }: {
   state: PaperState;
+  market: Market;
   profile: RiskProfile | null;
   onPlaced: (msg: string | null) => Promise<void>;
   busy: boolean;
@@ -197,29 +261,51 @@ function Ticket({ state, profile, onPlaced, busy, setBusy, preset }: {
 }) {
   const [side, setSide] = useState<Side>("long");
   const [kind, setKind] = useState<Kind>("market");
-  const [units, setUnits] = useState("10");
+  const [units, setUnits] = useState(String(market.default_units * 2));
+  const d = market.decimals;
+  const ux = (n?: number) => unitShort(market, n);
+  const sizes = SIZE_STEPS.map((k) => +(market.default_units * k).toPrecision(6));
+  useEffect(() => { setUnits(String(market.default_units * 2)); }, [market.symbol, market.default_units]);
   const [price, setPrice] = useState("");
   const [useSl, setUseSl] = useState(true);
   const [useTp, setUseTp] = useState(false);
   const [sl, setSl] = useState("");
   const [tp, setTp] = useState("");
+  const [useTrail, setUseTrail] = useState(false);
+  const [trail, setTrail] = useState("");
+  const [oco, setOco] = useState<number | null>(null);
+  // Size by units, or by the share of the account the stop would cost.
+  const [sizeBy, setSizeBy] = useState<"units" | "risk">("units");
+  const [riskIn, setRiskIn] = useState(String(profile?.max_risk_per_trade_pct ?? 1));
+  useEffect(() => { if (profile) setRiskIn(String(profile.max_risk_per_trade_pct)); }, [profile]);
+  const [prefs, setPrefs] = usePref<TradingPrefs>("trading", "goldlab.trading", { oneClick: false });
+  const oneClick = !!prefs?.oneClick;
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { if (preset) setUnits(String(preset.oz)); }, [preset]);
   // Orders go through a short review first, so the loss is read in plain words before anything is placed.
   const [review, setReview] = useState(false);
-  useEffect(() => setReview(false), [side, kind, units, price, useSl, useTp, sl, tp]);
+  useEffect(() => setReview(false), [side, kind, units, price, useSl, useTp, sl, tp, useTrail, trail, sizeBy, riskIn, oco]);
   const q = state.price;
   const long = side === "long";
+  // Pending orders in this market that aren't paired yet can be paired with a new limit or stop order.
+  const pairable = state.orders.filter((o) => (o.symbol ?? GOLD.symbol) === market.symbol && o.oco_id == null);
+  useEffect(() => { if (kind === "market" || (oco != null && !pairable.some((o) => o.id === oco))) setOco(null); }, [kind, oco, pairable]);
 
   // Entry the order would fill at: the current ask or bid for a market order, otherwise its own price.
   const entry = kind === "market" ? (q ? (long ? q.ask : q.bid) : null) : num(price);
-  const u = Number(units) || 0;
-  const slN = useSl ? num(sl) : null, tpN = useTp ? num(tp) : null;
+  const trailN = useTrail ? num(trail) : null;
+  const slSet = useSl ? num(sl) : null, tpN = useTp ? num(tp) : null;
+  // A trailing stop starts its distance from the entry; with a fixed stop too, the tighter one counts.
+  const trailStart = entry != null && trailN ? entry - (long ? 1 : -1) * trailN : null;
+  const slN = trailStart == null ? slSet : slSet == null ? trailStart : long ? Math.max(slSet, trailStart) : Math.min(slSet, trailStart);
+  const limit = profile?.max_risk_per_trade_pct ?? 1;
+  const riskWanted = Number(riskIn) || 0;
+  const byRisk = sizeBy === "risk" && entry != null && slN != null && entry !== slN && riskWanted > 0
+    ? Math.max(Math.floor(((state.account.equity * riskWanted) / 100 / Math.abs(entry - slN)) * 100) / 100, 0.01) : null;
+  const u = sizeBy === "risk" ? (byRisk ?? 0) : Number(units) || 0;
   const risk = entry != null && slN != null ? Math.abs(entry - slN) * u : null;
   const reward = entry != null && tpN != null ? Math.abs(tpN - entry) * u : null;
   const riskPct = risk != null && state.account.equity > 0 ? (risk / state.account.equity) * 100 : null;
   const margin = entry != null ? u * entry * (state.settings.margin_rate_pct / 100) : null;
-  const limit = profile?.max_risk_per_trade_pct ?? 1;
   const over = riskPct != null && riskPct > limit + 0.05;
 
   // Sensible starting values whenever the side, type or price changes.
@@ -227,40 +313,47 @@ function Ticket({ state, profile, onPlaced, busy, setBusy, preset }: {
   useEffect(() => {
     if (base == null) return;
     const dir = long ? 1 : -1;
-    const p = kind === "market" ? base : kind === "limit" ? base - dir * 5 : base + dir * 5;
-    if (kind !== "market") setPrice(p.toFixed(2));
-    setSl((p - dir * 10).toFixed(2));
-    setTp((p + dir * 20).toFixed(2));
+    // Distances scale with the price: about $5, $10 and $20 away for gold, the same share for other markets.
+    const step = base * 0.002;
+    const p = kind === "market" ? base : kind === "limit" ? base - dir * step : base + dir * step;
+    if (kind !== "market") setPrice(p.toFixed(d));
+    setSl((p - dir * step * 2).toFixed(d));
+    setTp((p + dir * step * 4).toFixed(d));
+    setTrail((step * 2).toFixed(d));
     setError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [side, kind, base == null]);
+  }, [side, kind, base == null, market.symbol]);
 
   function sizeByRisk() {
     if (entry == null || slN == null || entry === slN) return;
     const oz = (state.account.equity * limit) / 100 / Math.abs(entry - slN);
     setUnits(String(Math.max(Math.floor(oz * 100) / 100, 0.01)));
+    setSizeBy("units");
   }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!review) {
+    if (!review && !oneClick) {
       setReview(true);
       return;
     }
     setBusy(true);
     try {
-      const body: PaperOrderInput = { side, kind, units: u, stop_loss: slN, take_profit: tpN, price: kind === "market" ? null : num(price) };
+      const body: PaperOrderInput = {
+        symbol: market.symbol, side, kind, units: u, stop_loss: slSet, take_profit: tpN, price: kind === "market" ? null : num(price),
+        trail: trailN, oco_with: kind === "market" ? null : oco,
+      };
       const r = await api.paperOrder(body);
       const verb = long ? "Bought" : "Sold";
       setReview(false);
       if (r.position) {
-        toast(`Filled: ${verb.toLowerCase()} ${u} oz`, {
+        toast(`Filled: ${verb.toLowerCase()} ${u} ${ux(u)}${market.symbol !== GOLD.symbol ? ` ${market.name}` : ""}`, {
           tone: "fill",
-          body: `At ${px(r.position.entry_price)}${slN != null ? `, stop at ${px(slN)}` : ", no stop set"}`,
+          body: `At ${px(r.position.entry_price, d)}${slN != null ? `, stop at ${px(slN, d)}` : ", no stop set"}`,
         });
         await onPlaced(null);
-      } else await onPlaced(`${long ? "Buy" : "Sell"} ${kind} order placed: ${u} oz at ${px(r.order?.price)}`);
+      } else await onPlaced(`${long ? "Buy" : "Sell"} ${kind} order placed: ${u} ${ux(u)} at ${px(r.order?.price, d)}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't place the order");
     } finally {
@@ -280,7 +373,7 @@ function Ticket({ state, profile, onPlaced, busy, setBusy, preset }: {
             <span className={`flex items-center gap-1 text-sm font-semibold ${s === "long" ? "text-up" : "text-down"}`}>
               <Icon name={s === "long" ? "up" : "down"} className="h-3.5 w-3.5" strokeWidth={2.4} />{s === "long" ? "Buy" : "Sell"}
             </span>
-            <span className="text-xs tabular-nums text-muted">{q ? px(s === "long" ? q.ask : q.bid) : "–"}</span>
+            <span className="text-xs tabular-nums text-muted">{q ? px(s === "long" ? q.ask : q.bid, d) : "–"}</span>
           </button>
         ))}
       </div>
@@ -300,45 +393,91 @@ function Ticket({ state, profile, onPlaced, busy, setBusy, preset }: {
       )}
 
       <div>
+        <div className="mb-1.5 flex items-center justify-between text-sm">
+          <span className="text-muted">Size</span>
+          <Chips<"units" | "risk"> value={sizeBy} onChange={setSizeBy} options={[
+            { key: "units", label: market.unit === "MMBtu" ? "MMBtu" : `${market.unit[0].toUpperCase()}${market.unit.slice(1)}s` }, { key: "risk", label: "Risk %" },
+          ]} />
+        </div>
+        {sizeBy === "risk" ? (
+          <div className="quiz-in">
+            <label className="block text-sm">
+              <span className="flex justify-between text-muted">Risk per trade, % of equity <span className="text-xs tabular-nums">{fmtUsd((state.account.equity * riskWanted) / 100)}</span></span>
+              <input value={riskIn} onChange={(e) => setRiskIn(e.target.value)} inputMode="decimal" className={`${input} mt-1`} aria-label="Risk per trade in percent" />
+            </label>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {[0.25, 0.5, 1, 2].map((r) => (
+                <button key={r} type="button" onClick={() => setRiskIn(String(r))}
+                  className={`rounded-full border px-2.5 py-0.5 text-xs tabular-nums transition ${riskWanted === r ? "border-gold text-foreground" : "border-border text-muted hover:border-muted"}`}>{r}%</button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-xs text-muted tabular-nums">
+              {byRisk != null
+                ? <>That is <span className="text-foreground">{byRisk.toLocaleString("en-US")} {ux(byRisk)}</span>{market.lot > 1 ? ` (${(byRisk / market.lot).toFixed(2)} lot)` : ""} with the stop at {px(slN, d)}.</>
+                : "Set a stop loss or trailing stop to size by risk."}
+            </p>
+          </div>
+        ) : (
+        <>
         <label className="block text-sm">
-          <span className="flex justify-between text-muted">Size in ounces <span className="text-xs tabular-nums">{u ? `${(u / 100).toFixed(2)} lot` : ""}</span></span>
-          <input value={units} onChange={(e) => setUnits(e.target.value)} inputMode="decimal" className={`${input} mt-1`} />
+          <span className="flex justify-between text-muted"><span className="sr-only">Size in {market.unit}s</span><span /> <span className="text-xs tabular-nums">{u && market.lot > 1 ? `${(u / market.lot).toFixed(2)} lot` : ""}</span></span>
+          <input value={units} onChange={(e) => setUnits(e.target.value)} inputMode="decimal" className={`${input} mt-1`} aria-label={`Size in ${market.unit}s`} />
         </label>
         <div className="mt-2 flex flex-wrap gap-1.5">
-          {SIZES.map((s) => (
+          {sizes.map((s) => (
             <button key={s} type="button" onClick={() => setUnits(String(s))}
               className={`rounded-full border px-2.5 py-0.5 text-xs tabular-nums transition ${u === s ? "border-gold text-foreground" : "border-border text-muted hover:border-muted"}`}>
-              {s} oz
+              {s.toLocaleString("en-US")} {ux(s)}
             </button>
           ))}
           {entry != null && state.account.free_margin > 0 && (
-            <button type="button" title={`The most your free margin allows at 1:${state.account.leverage}`}
+            <button type="button" title={`The most your free margin allows at 1:${state.settings.market_leverage ?? state.account.leverage}`}
               onClick={() => setUnits(String(Math.max(Math.floor((state.account.free_margin / (entry * state.settings.margin_rate_pct / 100)) * 100) / 100, 0.01)))}
               className="rounded-full border border-border px-2.5 py-0.5 text-xs text-muted transition hover:border-gold hover:text-foreground">
               Max
             </button>
           )}
         </div>
+        </>
+        )}
       </div>
 
-      {(["sl", "tp"] as const).map((k) => {
-        const on = k === "sl" ? useSl : useTp;
+      {(["sl", "tp", "trail"] as const).map((k) => {
+        const on = k === "sl" ? useSl : k === "tp" ? useTp : useTrail;
+        const setOn = k === "sl" ? setUseSl : k === "tp" ? setUseTp : setUseTrail;
+        const val = k === "sl" ? sl : k === "tp" ? tp : trail;
+        const setVal = k === "sl" ? setSl : k === "tp" ? setTp : setTrail;
+        const name = k === "sl" ? "Stop loss" : k === "tp" ? "Take profit" : "Trailing stop";
         return (
           <div key={k}>
             <label className="flex cursor-pointer items-center justify-between text-sm">
-              <span className="text-muted">{k === "sl" ? "Stop loss" : "Take profit"}</span>
+              <span className="text-muted">{name}{k === "trail" && on ? <span className="text-xs"> · distance in price</span> : null}</span>
               <span className={`relative h-5 w-9 rounded-full transition-colors ${on ? "bg-gold" : "bg-border"}`}>
                 <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-foreground transition-all ${on ? "left-4.5" : "left-0.5"}`} />
               </span>
-              <input type="checkbox" className="sr-only" checked={on} onChange={(e) => (k === "sl" ? setUseSl : setUseTp)(e.target.checked)} />
+              <input type="checkbox" className="sr-only" checked={on} onChange={(e) => setOn(e.target.checked)} />
             </label>
             {on && (
-              <input value={k === "sl" ? sl : tp} onChange={(e) => (k === "sl" ? setSl : setTp)(e.target.value)}
-                     inputMode="decimal" className={`${input} quiz-in mt-1`} aria-label={k === "sl" ? "Stop loss price" : "Take profit price"} />
+              <input value={val} onChange={(e) => setVal(e.target.value)}
+                     inputMode="decimal" className={`${input} quiz-in mt-1`} aria-label={k === "trail" ? "Trailing stop distance" : `${name} price`} />
             )}
+            {on && k === "trail" && <p className="mt-1 text-xs text-muted">The stop follows the best price by this distance and never moves back.</p>}
           </div>
         );
       })}
+
+      {kind !== "market" && pairable.length > 0 && (
+        <label className="block text-sm">
+          <span className="text-muted">One-cancels-other</span>
+          <select value={oco ?? ""} onChange={(e) => setOco(e.target.value ? Number(e.target.value) : null)} className={`${input} mt-1`}>
+            <option value="">Not paired</option>
+            {pairable.map((o) => (
+              <option key={o.id} value={o.id}>Pair with {o.side === "long" ? "buy" : "sell"} {o.kind} {o.units} at {px(o.price, d)}</option>
+            ))}
+          </select>
+          {oco != null && <span className="mt-1 block text-xs text-muted">When either order fills, the other is cancelled.</span>}
+        </label>
+      )}
 
       <div className="space-y-1.5 rounded-lg bg-background p-3 text-xs">
         <div className="flex justify-between"><span className="text-muted">Margin needed at 1:{state.account.leverage}</span><span className="tabular-nums">{fmtUsd(margin)} of {fmtUsd(state.account.free_margin)} free</span></div>
@@ -368,18 +507,23 @@ function Ticket({ state, profile, onPlaced, busy, setBusy, preset }: {
       </div>
 
       {error && <p className="text-sm text-down">{error}</p>}
-      {closedForMarket && <p className="text-xs text-muted">The market looks closed, so market orders are paused. Limit and stop orders still work.</p>}
+      {closedForMarket && (
+        <p className="text-xs text-muted">
+          {q?.in_hours === false ? `${market.name} trades ${market.hours}. ` : "The market looks closed. "}
+          Market orders are paused until it opens; limit and stop orders still work.
+        </p>
+      )}
       {review ? (
         <div className="rise-in space-y-3 rounded-2xl border border-calm/30 bg-calm/5 p-4 text-sm">
           <p className="font-medium">Before you place it</p>
           <p className="leading-relaxed text-muted">
-            You&apos;re {long ? "buying" : "selling"} <span className="text-foreground">{u} oz</span> of gold
-            {kind === "market" ? <> at about <span className="text-foreground">{px(entry)}</span></> : <> if the price reaches <span className="text-foreground">{px(num(price))}</span></>}.
+            You&apos;re {long ? "buying" : "selling"} <span className="text-foreground">{u} {ux(u)}</span> of {market.symbol === GOLD.symbol ? "gold" : market.name}
+            {kind === "market" ? <> at about <span className="text-foreground">{px(entry, d)}</span></> : <> if the price reaches <span className="text-foreground">{px(num(price), d)}</span></>}.
           </p>
           <ul className="space-y-1.5">
             <Check ok={slN != null}>
               {slN != null && risk != null
-                ? <>If gold {long ? "falls" : "rises"} to {px(slN)}, the most you lose is {fmtUsd(risk)} ({riskPct!.toFixed(1)}% of your account).</>
+                ? <>If {market.symbol === GOLD.symbol ? "gold" : market.name} {long ? "falls" : "rises"} to {px(slN, d)}, the most you lose is {fmtUsd(risk)} ({riskPct!.toFixed(1)}% of your account).</>
                 : <>There&apos;s no stop loss, so the loss isn&apos;t limited.</>}
             </Check>
             {riskPct != null && (
@@ -393,6 +537,7 @@ function Ticket({ state, profile, onPlaced, busy, setBusy, preset }: {
               <Check ok={reward >= risk}>The target would make {(reward / risk).toFixed(1)} times what the stop would lose.</Check>
             )}
           </ul>
+          <PreTradeCheck />
           <p className="text-xs text-muted">Virtual money only. You can change anything, or simply not place it.</p>
           <div className="grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setReview(false)} className="rounded-full border border-border py-2.5 text-sm transition-colors hover:bg-surface-2">
@@ -404,13 +549,60 @@ function Ticket({ state, profile, onPlaced, busy, setBusy, preset }: {
             </button>
           </div>
         </div>
+      ) : oneClick ? (
+        <button disabled={busy || !u || !!closedForMarket}
+          className={`w-full rounded-full py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-50 ${long ? "bg-up" : "bg-down"}`}>
+          {busy ? "Placing…" : `${long ? "Buy" : "Sell"} ${u || ""} ${ux(u)} ${kind === "market" ? "now" : `${kind} at ${px(num(price), d)}`}`}
+        </button>
       ) : (
         <button disabled={busy || !u || !!closedForMarket}
           className="w-full rounded-full border border-border bg-surface-2 py-2.5 text-sm font-medium transition-colors hover:border-gold/60 disabled:opacity-50">
-          Review {long ? "buy" : "sell"} of {u || ""} oz {kind === "market" ? "at market" : `${kind} at ${px(num(price))}`}
+          Review {long ? "buy" : "sell"} of {u || ""} {ux(u)} {kind === "market" ? "at market" : `${kind} at ${px(num(price), d)}`}
         </button>
       )}
+      <label className="flex cursor-pointer items-center justify-between gap-3 text-xs text-muted">
+        <span>One-click trading{oneClick ? ": orders are placed without the review step" : ""}</span>
+        <span className={`relative h-4 w-7 shrink-0 rounded-full transition-colors ${oneClick ? "bg-gold" : "bg-border"}`}>
+          <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-foreground transition-all ${oneClick ? "left-3.5" : "left-0.5"}`} />
+        </span>
+        <input type="checkbox" className="sr-only" checked={oneClick} onChange={(e) => setPrefs({ oneClick: e.target.checked })} />
+      </label>
     </form>
+  );
+}
+
+/** The user's own playbook as a checklist, plus the coach's warnings for right now (a recent loss, a big release). */
+function PreTradeCheck() {
+  const [d, setD] = useState<PreTrade | null>(null);
+  const [ticked, setTicked] = useState<Set<number>>(new Set());
+  useEffect(() => { api.coachPreTrade().then(setD, () => {}); }, []);
+  if (!d) return null;
+  return (
+    <div className="space-y-2 border-t border-calm/20 pt-3">
+      {d.warnings.map((w) => (
+        <p key={w.key} className="flex gap-2 rounded-lg bg-gold/10 p-2 text-xs text-gold"><Icon name="bolt" className="mt-0.5 h-3.5 w-3.5 shrink-0" />{w.text}</p>
+      ))}
+      {d.rules.length > 0 && (
+        <>
+          <p className="flex justify-between text-xs text-muted">
+            <span>Your playbook</span>
+            <Link href="/coach" className="text-gold hover:underline">Edit</Link>
+          </p>
+          <ul className="space-y-1">
+            {d.rules.map((r, i) => (
+              <li key={i}>
+                <label className="flex cursor-pointer gap-2 text-xs">
+                  <input type="checkbox" className="mt-0.5 accent-[var(--gold)]" checked={ticked.has(i)}
+                    onChange={() => setTicked((t) => { const n = new Set(t); if (n.has(i)) n.delete(i); else n.add(i); return n; })} />
+                  <span className={ticked.has(i) ? "" : "text-muted"}>{r}</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+          {ticked.size < d.rules.length && <p className="text-[11px] text-muted">{d.rules.length - ticked.size} of your rules not ticked yet.</p>}
+        </>
+      )}
+    </div>
   );
 }
 
@@ -447,6 +639,16 @@ function Settings({ state, busy, act, onClose }: {
   );
   return (
     <div id="account-settings" className="quiz-in mt-6 grid scroll-mt-24 gap-5 rounded-2xl border border-gold/30 bg-surface p-4 lg:grid-cols-[1.5fr_1fr_1fr]">
+      {state.challenge ? (
+        <section className="lg:col-span-2">
+          <h3 className="flex items-center gap-2 text-sm font-medium"><Icon name="trophy" className="h-4 w-4 text-gold" />Set by your prop challenge</h3>
+          <p className="mt-1 text-sm text-muted">
+            The account runs the {state.challenge.label} at {fmtUsd(state.challenge.size)} and 1:{state.challenge.leverage}, so its balance
+            and leverage can&apos;t change during the challenge, as at a prop firm.
+          </p>
+          <Link href="/paper/prop" className="mt-3 inline-block text-sm text-gold underline-offset-2 hover:underline">Challenge details, or leave the challenge</Link>
+        </section>
+      ) : <>
       <section>
         <h3 className="flex items-center gap-2 text-sm font-medium"><Icon name="layers" className="h-4 w-4 text-gold" />Leverage</h3>
         <p className="mt-1 text-xs text-muted">Applies to open positions too, as it does at a broker.</p>
@@ -463,6 +665,16 @@ function Settings({ state, busy, act, onClose }: {
           <input value={custom} onChange={(e) => setCustom(e.target.value)} inputMode="numeric" placeholder={`Other, up to ${st.max_leverage}`} className={`${input} w-44`} aria-label="Other leverage" />
           <button disabled={busy || !custom} className="rounded-lg border border-border px-3 text-xs transition hover:border-gold disabled:opacity-50">Set</button>
         </form>
+        <label className="mt-4 flex cursor-pointer items-start gap-2 text-sm">
+          <input type="checkbox" disabled={busy} checked={st.realistic_fills ?? true} className="mt-1 accent-[var(--gold)]"
+            onChange={(e) => act(() => api.paperRealisticFills(e.target.checked), e.target.checked ? "Realistic fills on" : "Realistic fills off")} />
+          <span>Realistic fills
+            <span className="block text-xs text-muted">
+              Like a real broker, spreads widen about {st.rollover_spread_x ?? 3}× at the 5pm New York rollover and {st.news_spread_x ?? 4}× around
+              high-impact releases, and stops can fill a little past their price during a release.
+            </span>
+          </span>
+        </label>
       </section>
 
       <section>
@@ -482,10 +694,11 @@ function Settings({ state, busy, act, onClose }: {
             className="rounded-lg border border-border py-2 text-sm transition hover:border-muted disabled:opacity-50">Take out</button>
         </div>
       </section>
+      </>}
 
       <section>
         <h3 className="flex items-center gap-2 text-sm font-medium"><Icon name="clock" className="h-4 w-4 text-gold" />Start over</h3>
-        <p className="mt-1 text-xs text-muted">A fresh account with any balance and leverage. This deletes every paper position, order and result.</p>
+        <p className="mt-1 text-xs text-muted">A fresh account with any balance and leverage. This deletes every paper position, order and result{state.challenge ? ", and ends your prop challenge" : ""}.</p>
         <input value={balance} onChange={(e) => { setBalance(e.target.value); setConfirm(false); }} inputMode="decimal" className={`${input} mt-3`} aria-label="Starting balance in dollars" />
         <div className="mt-2 flex flex-wrap gap-1.5">
           {BALANCES.map((v) => (
@@ -515,26 +728,30 @@ function Settings({ state, busy, act, onClose }: {
 
 export default function PaperPage() {
   const { user } = useUser();
+  const [market, setSymbol, markets] = useMarket();
+  const symbol = market.symbol;
+  const marketOf = useCallback((s?: string | null) => markets.find((m) => m.symbol === (s ?? GOLD.symbol)) ?? (s === market.symbol ? market : GOLD), [markets, market]);
   const [state, setState] = useState<PaperState | null>(null);
   const [report, setReport] = useState<Report | null>(null);
   const [profile, setProfile] = useState<RiskProfile | null>(null);
   const [tab, setTab] = useState<Tab>("positions");
   const [busy, setBusy] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
-  const [preset, setPreset] = useState<{ oz: number; n: number } | null>(null);
   const [setupDone, setSetupDone] = useState(true);
   useEffect(() => {
     try { setSetupDone(!!localStorage.getItem(SETUP_KEY)); } catch {}
   }, []);
   const [error, setError] = useState<string | null>(null);
   const [grades, setGrades] = useState<Record<string, "A" | "B" | "C" | "D">>({});
+  const [coachTags, setCoachTags] = useState<CoachTags | null>(null);
   const seen = useRef<Set<number> | null>(null);
+  const lastChallenge = useRef<string | null>(null);
   const openIds = useRef<Set<number> | null>(null);
 
   const say = useCallback((msg: string, t: "up" | "down" | "info" = "info") => toast(msg, { tone: t }), []);
 
   const load = useCallback(async () => {
-    const s = await api.paper();
+    const s = await api.paper(symbol);
     // Tell the user about positions the server closed (stop, target or stop-out) since the last look.
     if (seen.current) {
       for (const h of s.history)
@@ -546,12 +763,21 @@ export default function PaperPage() {
     if (openIds.current) {
       for (const p of s.positions)
         if (!openIds.current.has(p.id) && (p.order_kind === "limit" || p.order_kind === "stop"))
-          toast(`Your ${p.order_kind} order filled`, { tone: "fill", body: `${p.side === "long" ? "Long" : "Short"} ${p.units} oz at ${px(p.entry_price)}` });
+          toast(`Your ${p.order_kind} order filled`, { tone: "fill", body: `${p.side === "long" ? "Long" : "Short"} ${p.units} ${unitShort(marketOf(p.symbol), p.units)} of ${marketOf(p.symbol).name} at ${px(p.entry_price, marketOf(p.symbol).decimals)}` });
     }
     openIds.current = new Set(s.positions.map((p) => p.id));
-    setState(s);
+    // Announce a prop challenge phase passing, passing or failing since the last look.
+    const ch = s.challenge;
+    const key = ch ? `${ch.id}:${ch.status}:${ch.phase}` : null;
+    if (lastChallenge.current && ch && key !== lastChallenge.current && lastChallenge.current.startsWith(`${ch.id}:`)) {
+      if (ch.status === "failed") toast("Prop challenge failed", { tone: "down", body: ch.fail_detail ?? undefined });
+      else if (ch.status === "passed") toast("You passed the prop challenge", { tone: "fill", body: "Your certificate is ready to share on the challenge page." });
+      else if (ch.status === "active") toast(`Phase ${ch.phase - 1} passed`, { tone: "fill", body: `Phase ${ch.phase} starts on a fresh ${fmtUsd(ch.size)} account.` });
+    }
+    lastChallenge.current = key;
+    setState(s.symbol && s.symbol !== symbol ? null : s);
     return s;
-  }, [say]);
+  }, [say, symbol, marketOf]);
 
   useEffect(() => {
     if (!user) return;
@@ -566,12 +792,13 @@ export default function PaperPage() {
   const closedCount = state?.account.closed_trades ?? 0;
   useEffect(() => {
     if (user && tab === "history") api.reviewGrades().then(setGrades, () => {});
-  }, [user, tab]);
+    if (user && tab === "history") api.coachTags().then(setCoachTags, () => {});
+  }, [user, tab, closedCount]);
   useEffect(() => {
     if (user && tab === "report") api.paperReport().then(setReport, () => {});
   }, [user, tab, closedCount]);
 
-  if (user === null) return <SignInPrompt what="practise trading gold with virtual money" next="/paper" />;
+  if (user === null) return <SignInPrompt what="practise trading with virtual money" next="/paper" />;
   if (user === undefined) return null;
 
   async function act(fn: () => Promise<unknown>, done?: string) {
@@ -595,13 +822,15 @@ export default function PaperPage() {
     modify: (id, body) => act(() => api.paperModify(id, body), "Order moved"),
     cancel: (id) => act(() => api.paperCancel(id), "Order cancelled"),
     close: (id) => act(() => api.paperClose(id), "Position closed"),
+    breakeven: (id) => act(() => api.paperBreakeven(id), "Stop moved to break-even"),
     place: async (o) => {
       let filled: PaperPosition | undefined, waiting: PaperOrder | undefined;
-      const ok = await act(async () => { const r = await api.paperOrder(o); filled = r.position; waiting = r.order; });
-      if (filled) toast(`Filled: ${o.side === "long" ? "bought" : "sold"} ${o.units} oz`, {
-        tone: "fill", body: `At ${px(filled.entry_price)}${o.stop_loss != null ? `, stop at ${px(o.stop_loss)}` : ", no stop set"}`,
+      const d = market.decimals, u = `${unitShort(market, o.units)} of ${market.name}`;
+      const ok = await act(async () => { const r = await api.paperOrder({ ...o, symbol }); filled = r.position; waiting = r.order; });
+      if (filled) toast(`Filled: ${o.side === "long" ? "bought" : "sold"} ${o.units} ${u}`, {
+        tone: "fill", body: `At ${px(filled.entry_price, d)}${o.stop_loss != null ? `, stop at ${px(o.stop_loss, d)}` : ", no stop set"}`,
       });
-      else if (waiting) say(`${o.side === "long" ? "Buy" : "Sell"} ${o.kind} order placed: ${o.units} oz at ${px(waiting.price)}`, "up");
+      else if (waiting) say(`${o.side === "long" ? "Buy" : "Sell"} ${o.kind} order placed: ${o.units} ${u} at ${px(waiting.price, d)}`, "up");
       if (ok) setTab((t) => (t === "report" || t === "history" ? (filled ? "positions" : "orders") : t));
       return ok;
     },
@@ -609,12 +838,22 @@ export default function PaperPage() {
 
   const a = state?.account;
   const level = a?.margin_level_pct;
+  // The chart shows the market being traded, so it only draws that market's positions and orders.
+  const here = <T extends { symbol?: string | null }>(xs: T[]) => xs.filter((x) => (x.symbol ?? GOLD.symbol) === symbol);
+  const st = state?.settings;
+  const swapText = (v: number | null | undefined, pct: number) => v != null ? `${v > 0 ? "+" : ""}${v.toFixed(2)} per ${market.unit}` : `${pct > 0 ? "+" : ""}${pct}% a year of the position's value`;
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
       <PageHeader icon="wallet" title="Paper trading"
-        subtitle="Practise trading gold with virtual money on real XAU/USD prices. Orders fill at the real bid and ask, with spread and overnight swap, but no real money or broker is involved."
+        subtitle="Practise trading gold, currencies, indices, stocks and crypto with virtual money on real prices. Orders fill at the real bid and ask, with spread and overnight swap, but no real money or broker is involved."
         right={
           <div className="flex flex-wrap items-center gap-2">
+            <MarketPicker market={market} markets={markets} onChange={setSymbol} />
+            {!state?.challenge && (
+              <Link href="/paper/prop" className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm transition hover:border-gold/60 hover:text-gold">
+                <Icon name="trophy" className="h-4 w-4" />Prop challenge
+              </Link>
+            )}
             <Link href="/paper/agent" className="flex items-center gap-1.5 rounded-lg border border-gold/60 px-3 py-1.5 text-sm text-gold transition hover:bg-gold/10">
               <Icon name="assistant" className="h-4 w-4" />Strategy agent
             </Link>
@@ -630,7 +869,8 @@ export default function PaperPage() {
           </div>
         } />
 
-      {state && !setupDone && !resetOpen && state.account.closed_trades === 0 && !state.positions.length && !state.orders.length && (
+      {state?.challenge && <div className="mt-6"><RulePanel ch={state.challenge} compact /></div>}
+      {state && !state.challenge && !setupDone && !resetOpen && state.account.closed_trades === 0 && !state.positions.length && !state.orders.length && (
         <AccountSetup state={state} onDone={async (m) => { setSetupDone(true); if (m) { await load(); toast(m, { tone: "fill" }); } }} />
       )}
       {state?.account.margin_call && (
@@ -653,8 +893,8 @@ export default function PaperPage() {
           <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
             <div className="col-span-2 rounded-2xl border border-gold/40 bg-gradient-to-br from-gold/15 to-transparent p-3.5 lg:col-span-1">
               <p className="flex items-center gap-1.5 text-xs text-gold"><Icon name="wallet" className="h-3.5 w-3.5" />Account value (equity)
-                <button type="button" onClick={() => { setResetOpen(true); setTimeout(() => document.getElementById("account-settings")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }}
-                  className="ml-auto rounded-full border border-gold/40 px-2 py-0.5 text-[11px] text-gold transition hover:bg-gold/15">Edit balance</button>
+                {!state.challenge && <button type="button" onClick={() => { setResetOpen(true); setTimeout(() => document.getElementById("account-settings")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }}
+                  className="ml-auto rounded-full border border-gold/40 px-2 py-0.5 text-[11px] text-gold transition hover:bg-gold/15">Edit balance</button>}
               </p>
               <p className="mt-1 text-2xl font-semibold tabular-nums"><CountUp value={a.equity} format={(v) => fmtUsd(v)} /></p>
               <p className={`text-xs tabular-nums ${tone(a.return_pct)}`}>
@@ -685,9 +925,9 @@ export default function PaperPage() {
 
           <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
             <div className="min-w-0 space-y-4">
-              <div className="rounded-2xl border border-border bg-surface p-4"><Quote price={state.price} /></div>
-              <PriceChart height={400} initialTf="1m" tools overlay={({ chart, series, below }) => (
-                <TradeLines chart={chart} series={series} below={below} positions={state.positions} orders={state.orders} price={state.price}
+              <div className="rounded-2xl border border-border bg-surface p-4"><Quote price={state.price} market={market} /></div>
+              <PriceChart height={400} initialTf="1m" tools market={market} overlay={({ chart, series, below }) => (
+                <TradeLines chart={chart} series={series} below={below} positions={here(state.positions)} orders={here(state.orders)} price={state.price} market={market}
                   equity={a.equity} riskLimit={profile?.max_risk_per_trade_pct ?? 1} busy={busy} actions={chartActions} />
               )} />
               <p className="-mt-2 text-xs text-muted">
@@ -711,9 +951,11 @@ export default function PaperPage() {
                     <Empty icon="wallet" title="No open positions">Use the order ticket or the chart to buy or sell. Try a small size with a stop loss first.</Empty>
                   )}
                   {state.positions.map((p) => (
-                    <PositionRow key={p.id} p={p} busy={busy}
+                    <PositionRow key={p.id} p={p} m={marketOf(p.symbol)} busy={busy}
                       onClose={() => act(() => api.paperClose(p.id), "Position closed")}
-                      onSave={(sl, tp) => act(() => api.paperProtect(p.id, sl, tp), "Stop and target saved")} />
+                      onBreakeven={() => act(() => api.paperBreakeven(p.id), "Stop moved to break-even")}
+                      onPartial={(n) => act(() => api.paperClose(p.id, n), `Closed ${n} ${unitShort(marketOf(p.symbol), n)}`)}
+                      onSave={(sl, tp, trail) => act(() => api.paperProtect(p.id, sl, tp, trail), "Stop and target saved")} />
                   ))}
                 </div>
               )}
@@ -722,11 +964,11 @@ export default function PaperPage() {
                 <div className="space-y-3">
                   {state.orders.length === 0 && <Empty icon="clock" title="No pending orders">Limit and stop orders wait here until the price reaches them.</Empty>}
                   {state.orders.map((o) => (
-                    <OrderRow key={o.id} o={o} price={state.price} busy={busy} onCancel={() => act(() => api.paperCancel(o.id), "Order cancelled")} />
+                    <OrderRow key={o.id} o={o} m={marketOf(o.symbol)} price={state.price} busy={busy} onCancel={() => act(() => api.paperCancel(o.id), "Order cancelled")} />
                   ))}
                   {state.cancelled_orders.filter((o) => o.note && o.note !== "Cancelled by you").slice(0, 3).map((o) => (
                     <p key={o.id} className="text-xs text-muted">
-                      {o.side === "long" ? "Buy" : "Sell"} {o.kind} at {px(o.price)} was cancelled: {o.note.toLowerCase()}.
+                      {o.side === "long" ? "Buy" : "Sell"} {marketOf(o.symbol).name} {o.kind} at {px(o.price, marketOf(o.symbol).decimals)} was cancelled: {o.note.toLowerCase()}.
                     </p>
                   ))}
                 </div>
@@ -739,10 +981,11 @@ export default function PaperPage() {
                     <div key={h.id} className="rise-in flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-border bg-surface px-3.5 py-2.5 text-sm"
                          style={{ animationDelay: `${Math.min(i, 10) * 25}ms` }}>
                       <SidePill side={h.side} />
-                      <span className="tabular-nums">{h.units} oz</span>
-                      <span className="text-xs text-muted tabular-nums">{px(h.entry_price)} → {px(h.exit_price)}</span>
+                      <span className="tabular-nums">{h.units} {unitShort(marketOf(h.symbol), h.units)}{(h.symbol ?? GOLD.symbol) !== GOLD.symbol && ` ${marketOf(h.symbol).name}`}</span>
+                      <span className="text-xs text-muted tabular-nums">{px(h.entry_price, marketOf(h.symbol).decimals)} → {px(h.exit_price, marketOf(h.symbol).decimals)}</span>
                       <span className="rounded-full bg-border px-2 py-0.5 text-[11px] text-muted">{REASON[h.close_reason ?? ""]}</span>
                       <span className="text-xs text-muted">{h.closed_at && when(h.closed_at)}</span>
+                      <TagChips tags={coachTags?.by_trade[String(h.id)]} labels={coachTags?.labels} />
                       <span className={`ml-auto font-medium tabular-nums ${tone(h.pnl)}`}>{signed(h.pnl)}</span>
                       <TradeReview id={h.id} grade={grades[String(h.id)]} onGraded={(g) => setGrades((m) => ({ ...m, [String(h.id)]: g }))} />
                     </div>
@@ -760,16 +1003,21 @@ export default function PaperPage() {
 
             <aside className="order-first space-y-3 lg:sticky lg:top-20 lg:order-none lg:self-start">
               <h2 className="flex items-center gap-2 font-medium"><Icon name="bolt" className="h-4 w-4 text-gold" />New order</h2>
-              <Ticket state={state} profile={profile} busy={busy} setBusy={setBusy} preset={preset}
+              {state.locked && (
+                <p role="status" className="rounded-xl border border-border bg-surface p-3 text-sm text-muted">
+                  {state.locked} <Link href="/paper/prop" className="text-gold underline-offset-2 hover:underline">Go to the challenge page</Link>
+                </p>
+              )}
+              <Ticket state={state} market={market} profile={profile} busy={busy} setBusy={setBusy}
                 onPlaced={async (msg) => { await load(); setTab((t) => (t === "report" || t === "history" ? "positions" : t)); if (msg) say(msg, "up"); }} />
               <p className="text-xs leading-relaxed text-muted">
-                Spread {state.settings.spread.toFixed(2)} per ounce. Overnight swap {state.settings.swap_long.toFixed(2)} long and{" "}
-                +{state.settings.swap_short.toFixed(2)} short per ounce. Stops and targets are checked against every minute of real prices,
+                {market.name}: spread {st!.spread.toFixed(market.decimals)} per {market.unit}. Overnight swap {swapText(st!.swap_long, market.swap_long_pct)} long
+                and {swapText(st!.swap_short, market.swap_short_pct)} short.
+                {st!.market_max_leverage && st!.market_max_leverage < a.leverage ? ` Leverage on ${market.name} is capped at 1:${st!.market_max_leverage}.` : ""}{" "}
+                Trading hours: {market.hours}. Stops and targets are checked against every minute of real prices,
                 even while this page is closed. Practice only, not advice.
               </p>
-              <SizeCalculator equity={a.equity} leverage={a.leverage} price={state.price?.ask ?? null}
-                riskPct={profile?.max_risk_per_trade_pct ?? 1} onUse={(oz) => setPreset((p) => ({ oz, n: (p?.n ?? 0) + 1 }))} />
-              <AlertsCard price={state.price?.bid ?? null} />
+              {symbol === GOLD.symbol && <AlertsCard price={state.price?.bid ?? null} />}
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <Link href="/paper/replay" className="card flex items-center gap-2 p-3 hover:border-gold/40"><Icon name="clock" className="h-4 w-4 text-gold" />Replay a day</Link>
                 <Link href="/paper/challenge" className="card flex items-center gap-2 p-3 hover:border-gold/40"><Icon name="trophy" className="h-4 w-4 text-gold" />Weekly challenge</Link>

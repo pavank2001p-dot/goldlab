@@ -283,7 +283,7 @@ def preview(body: PreviewIn) -> dict:
     start = date.today() - timedelta(days=round(body.years * 365.25))
     cfg = bt.BacktestIn(strategy="custom", rules=body.rules, tf=body.tf, start=start, capital=10_000, size_pct=100,
                         stop_loss_pct=body.stop_loss_pct)
-    bars = bt.load_bars(cfg.tf, cfg.start, None)
+    bars = bt.load_bars(cfg.tf, cfg.start, None, cfg.symbol)
     if len(bars) < 30:
         raise HTTPException(422, "Not enough price history for that period yet")
     rep = bt.run(cfg, bars)

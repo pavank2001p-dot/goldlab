@@ -28,7 +28,7 @@ export default function ForgotPasswordPage() {
     return (
       <AuthShell title="Check your email">
         <p className="mt-3 text-sm leading-relaxed text-muted">
-          If there&apos;s a GoldLab account for <span className="text-foreground">{sentTo}</span>, we&apos;ve sent it a link to
+          If there&apos;s a Trading Lab account for <span className="text-foreground">{sentTo}</span>, we&apos;ve sent it a link to
           choose a new password. The link works for an hour. Nothing there? Check your spam folder, or try again in a minute.
         </p>
         <Link href="/login" className="mt-6 inline-block text-sm text-gold">Back to log in</Link>

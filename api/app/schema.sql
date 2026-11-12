@@ -284,3 +284,56 @@ CREATE TABLE IF NOT EXISTS user_prefs (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (user_id, key)
 );
+
+-- Markets beyond gold: every paper order and position belongs to one market (see app/instruments.py).
+ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS symbol TEXT NOT NULL DEFAULT 'XAUUSD';
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS symbol TEXT NOT NULL DEFAULT 'XAUUSD';
+
+-- Broker-style order handling: a trailing stop follows the price by a fixed distance; one-cancels-other
+-- pairs two pending orders so that when one fills the other is cancelled.
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS trail DOUBLE PRECISION;
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS trailed_at TIMESTAMPTZ;  -- bar that last moved the trailing stop
+ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS trail DOUBLE PRECISION;
+ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS oco_id BIGINT;
+
+-- AI coach: a stop moved further away while the trade was open, the user's own pre-trade playbook,
+-- and the weekly coach report, written once a week has ended.
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS stop_widened BOOLEAN NOT NULL DEFAULT false;
+CREATE TABLE IF NOT EXISTS coach_reports (
+    user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    week       TEXT NOT NULL,                      -- ISO week, e.g. 2026-W45
+    report     JSONB NOT NULL,
+    source     TEXT NOT NULL,                      -- 'ai' or 'rules'
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, week)
+);
+
+-- Realistic fills (app/fills.py): wider spreads and stop slippage around big releases and the daily rollover.
+ALTER TABLE paper_accounts ADD COLUMN IF NOT EXISTS realistic_fills BOOLEAN NOT NULL DEFAULT true;
+
+-- Prop challenges: evaluation rules (profit target, daily and overall loss limits, minimum trading days)
+-- run on the paper account. paper_accounts.challenge_id is the challenge the account is in, if any.
+CREATE TABLE IF NOT EXISTS prop_challenges (
+    id                BIGSERIAL PRIMARY KEY,
+    user_id           BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    plan              TEXT NOT NULL,
+    size              DOUBLE PRECISION NOT NULL,
+    leverage          INTEGER NOT NULL,
+    rules             JSONB NOT NULL,                 -- targets per phase, daily_loss_pct, max_loss_pct, min_days
+    phase             SMALLINT NOT NULL DEFAULT 1,
+    status            TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'passed', 'failed', 'abandoned')),
+    phase_started_at  TIMESTAMPTZ NOT NULL,
+    day               DATE,                           -- current trading day (17:00 New York rollover)
+    day_start_balance DOUBLE PRECISION NOT NULL,
+    min_equity        DOUBLE PRECISION,
+    worst_daily_pct   DOUBLE PRECISION NOT NULL DEFAULT 0,
+    fail_rule         TEXT,
+    fail_detail       TEXT,
+    phase_results     JSONB NOT NULL DEFAULT '[]',
+    final             JSONB,
+    started_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    ended_at          TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS prop_challenges_user_idx ON prop_challenges (user_id, started_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS prop_challenges_active_idx ON prop_challenges (user_id) WHERE status = 'active';
+ALTER TABLE paper_accounts ADD COLUMN IF NOT EXISTS challenge_id BIGINT;

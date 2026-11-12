@@ -12,6 +12,7 @@ const REASONS: Record<string, string> = {
   end_of_test: "End of test",
   account_wiped_out: "Account wiped out",
   manual: "Closed by you",
+  partial: "Part closed",
   stop_out: "Margin stop-out",
 };
 
@@ -82,6 +83,12 @@ export default function ReportView({ report, kind }: { report: Report; kind: "ba
         <p className="rounded-lg border border-down/50 bg-down/10 p-3 text-sm">
           The account ran out of money during this test, so it stopped early. The trade size is too large for the
           starting capital; try fewer ounces per trade or a stop loss.
+        </p>
+      )}
+      {s.slipped_stops != null && (
+        <p className="text-xs text-muted">
+          Realistic fills: spreads widen at the rollover and around big releases.{" "}
+          {s.slipped_stops ? `${s.slipped_stops} stop${s.slipped_stops === 1 ? "" : "s"} slipped past ${s.slipped_stops === 1 ? "its" : "their"} price during a release.` : "No stop was hit during a release."}
         </p>
       )}
       <div className="grid gap-3 @4xl:grid-cols-[1fr_220px]">

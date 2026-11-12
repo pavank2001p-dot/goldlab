@@ -88,7 +88,7 @@ export default function AlertsCard({ price: given = null, open: startOpen = fals
         </ul>
       )}
       <p className="mt-3 text-[11px] text-muted">
-        Checked every 30 seconds while GoldLab is open in a tab, and caught up when you come back.
+        Checked every 30 seconds while Trading Lab is open in a tab, and caught up when you come back.
         {perm === "default" && <> <button type="button" onClick={() => Notification.requestPermission().then(setPerm)} className="text-gold underline">Also show browser notifications</button>.</>}
         {perm === "granted" && " Browser notifications are on."}
       </p>

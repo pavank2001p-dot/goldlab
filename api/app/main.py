@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from . import achievements, agent, assistant, auth, backtest, calendar, config, custom, db, fit, ingest, learn, live, news, paper, planner, practice, prefs, prices, review, risk, scenarios, trades
+from . import achievements, agent, assistant, auth, backtest, calendar, coach, config, custom, db, fit, ingest, learn, live, news, paper, planner, practice, prefs, prices, prop, review, risk, scenarios, trades
 
 log = logging.getLogger("api")
 
@@ -12,7 +12,7 @@ log = logging.getLogger("api")
 async def _price_updater():
     while True:
         try:
-            n = await asyncio.to_thread(ingest.update, config.PRICE_SOURCE)
+            n = await asyncio.to_thread(ingest.update_all, config.PRICE_SOURCE)
             log.info("price update stored %d bars", n)
         except Exception:
             log.exception("price update failed")
@@ -56,7 +56,7 @@ async def lifespan(app: FastAPI):
     db.close()
 
 
-app = FastAPI(title="GoldLab API", lifespan=lifespan)
+app = FastAPI(title="Trading Lab API", lifespan=lifespan)
 app.include_router(auth.router)
 app.include_router(prices.router)
 app.include_router(live.router)
@@ -70,11 +70,13 @@ app.include_router(fit.router)
 app.include_router(planner.router)
 app.include_router(scenarios.router)
 app.include_router(paper.router)
+app.include_router(prop.router)
 app.include_router(agent.router)
 app.include_router(assistant.router)
 app.include_router(achievements.router)
 app.include_router(practice.router)
 app.include_router(review.router)
+app.include_router(coach.router)
 app.include_router(learn.router)
 app.include_router(prefs.router)
 

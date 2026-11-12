@@ -77,7 +77,7 @@ def send(m: Mail) -> bool:
 def _layout(title: str, intro: str, button: str, url: str, outro: str) -> str:
     return f"""<!doctype html><html><body style="margin:0;background:#f6f5f2;font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1c1b19">
 <div style="max-width:480px;margin:32px auto;background:#fff;border-radius:16px;padding:32px;border:1px solid #e6e2d8">
-<p style="margin:0 0 4px;font-weight:600;color:#b8892b">GoldLab</p>
+<p style="margin:0 0 4px;font-weight:600;color:#b8892b">Trading Lab</p>
 <h1 style="margin:0 0 16px;font-size:20px">{title}</h1>
 <p style="line-height:1.5">{intro}</p>
 <p style="margin:24px 0"><a href="{url}" style="background:#d4a537;color:#000;text-decoration:none;padding:12px 20px;border-radius:10px;font-weight:600;display:inline-block">{button}</a></p>
@@ -91,15 +91,15 @@ def verification(to: str, name: str, url: str) -> Mail:
     hours = config.VERIFY_TOKEN_HOURS
     return Mail(
         to=to,
-        subject="Confirm your GoldLab email",
+        subject="Confirm your Trading Lab email",
         text=f"{hi}\n\nConfirm this is your email address by opening the link below:\n\n{url}\n\n"
-        f"The link works for {hours} hours. If you didn't create a GoldLab account, you can ignore this email.\n",
+        f"The link works for {hours} hours. If you didn't create a Trading Lab account, you can ignore this email.\n",
         html=_layout(
             "Confirm your email",
             f"{_html.escape(hi)} confirm this is your email address so you can reset your password if you ever need to.",
             "Confirm email",
             url,
-            f"The link works for {hours} hours. If you didn't create a GoldLab account, you can ignore this email.",
+            f"The link works for {hours} hours. If you didn't create a Trading Lab account, you can ignore this email.",
         ),
     )
 
@@ -109,12 +109,12 @@ def password_reset(to: str, name: str, url: str) -> Mail:
     mins = config.RESET_TOKEN_MINUTES
     return Mail(
         to=to,
-        subject="Reset your GoldLab password",
-        text=f"{hi}\n\nSomeone asked to reset the password for this GoldLab account. Choose a new one here:\n\n{url}\n\n"
+        subject="Reset your Trading Lab password",
+        text=f"{hi}\n\nSomeone asked to reset the password for this Trading Lab account. Choose a new one here:\n\n{url}\n\n"
         f"The link works for {mins} minutes and only once. If it wasn't you, ignore this email: your password stays the same.\n",
         html=_layout(
             "Reset your password",
-            f"{_html.escape(hi)} someone asked to reset the password for this GoldLab account.",
+            f"{_html.escape(hi)} someone asked to reset the password for this Trading Lab account.",
             "Choose a new password",
             url,
             f"The link works for {mins} minutes and only once. If it wasn't you, ignore this email: your password stays the same.",

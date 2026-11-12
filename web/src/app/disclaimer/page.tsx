@@ -1,16 +1,16 @@
-export const metadata = { title: "Disclaimer · GoldLab" };
+export const metadata = { title: "Disclaimer · Trading Lab" };
 
 export default function DisclaimerPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 text-sm leading-relaxed">
       <h1 className="text-2xl font-semibold">Disclaimer</h1>
-      <p className="mt-2 text-muted">Please read this before using GoldLab.</p>
+      <p className="mt-2 text-muted">Please read this before using Trading Lab.</p>
 
       <h2 className="mt-8 text-base font-medium">Education, not advice</h2>
       <p className="mt-2">
-        GoldLab is an educational tool for learning about gold (XAU/USD) markets. Nothing on this site, including
+        Trading Lab is an educational tool for learning about markets: gold and other commodities, currencies, indices, stocks and crypto. Nothing on this site, including
         backtests, news tags, risk-profile verdicts, suggested trade sizes and AI assistant answers, is investment,
-        financial, tax or legal advice, or a recommendation to buy, sell or hold anything. GoldLab is not a broker and
+        financial, tax or legal advice, or a recommendation to buy, sell or hold anything. Trading Lab is not a broker and
         is not authorised or regulated to give financial advice. Decide for yourself, and consider speaking to a
         qualified, regulated adviser.
       </p>

@@ -27,7 +27,7 @@ MAX_TURNS = 12  # model calls per question; building a strategy takes a few test
 MAX_SECONDS = 150
 MAX_HISTORY = 10
 
-SYSTEM = """You are the GoldLab assistant, built into an educational website about gold (XAU/USD) trading.
+SYSTEM = """You are the Trading Lab assistant, built into an educational trading website. You focus on gold (XAU/USD).
 
 What you do
 - Explain gold prices, strategies, backtests, risk and news in plain English for people who may be new to trading.
@@ -343,7 +343,7 @@ def t_my_custom_strategies(_: dict, user_id: int) -> list:
 
 def t_run_backtest(i: dict, user_id: int) -> dict:
     cfg = backtest.BacktestIn(**_with_custom(i, user_id))
-    rep = backtest.run(cfg, backtest.load_bars(cfg.tf, cfg.start, cfg.end))
+    rep = backtest.run(cfg, backtest.load_bars(cfg.tf, cfg.start, cfg.end, cfg.symbol))
     return {"settings": cfg.model_dump(mode="json"), "stats": rep["stats"],
             "period": {"start": _day(rep["period"]["start"]), "end": _day(rep["period"]["end"])}}
 
