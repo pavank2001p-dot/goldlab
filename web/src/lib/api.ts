@@ -536,6 +536,21 @@ export type AgentState = {
 export type Badge = { key: string; title: string; blurb: string; icon: string; progress: number; goal: number; earned: boolean };
 export type Achievements = { badges: Badge[]; earned: number; streak: { current: number; best: number; logged_today: boolean } };
 
+export type LabStageKey = "spark" | "build" | "test" | "play" | "review";
+export type LabAction = { title: string; detail: string; href: string; cta: string };
+export type LabStage = LabAction & { key: LabStageKey; name: string; blurb: string; state: "done" | "current" | "todo"; done_at: string | null };
+export type Lab = {
+  xp: number;
+  level: { rank: number; name: string; blurb: string; floor: number; next: { name: string; at: number } | null };
+  sources: { key: string; label: string; count: number; each: number; xp: number }[];
+  laps: number;
+  stage: number;
+  stages: LabStage[];
+  mission: LabAction & { stage: LabStageKey | "limits"; xp: number };
+  resume: { title: string; detail: string; href: string; ts: string }[];
+  active_days_this_week: number;
+};
+
 export type PriceAlert = {
   id: number; price: number; direction: "above" | "below"; note: string;
   created_at: string; triggered_at: string | null; triggered_price: number | null;
@@ -598,6 +613,7 @@ export const api = {
   completeLesson: (id: string, b: { return_pct: number; trades: number }) =>
     call<LessonProgress>(`/learn/${encodeURIComponent(id)}/complete`, { method: "POST", body: JSON.stringify(b) }),
   achievements: () => call<Achievements>("/achievements"),
+  lab: () => call<Lab>("/lab"),
   customCatalog: () => call<CustomCatalog>("/custom-strategies/catalog"),
   customList: () => call<SavedStrategy[]>("/custom-strategies"),
   customSave: (rules: Rules, id?: number) =>

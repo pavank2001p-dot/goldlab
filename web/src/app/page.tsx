@@ -3,25 +3,7 @@ import HomeTop, { SignedOut } from "@/components/HomeTop";
 import PriceChart from "@/components/PriceChart";
 import PriceTicker from "@/components/PriceTicker";
 import { Icon } from "@/components/ui";
-
-/** Three steps instead of ten tiles: each path says what it is for and links to its tools. */
-const paths = [
-  {
-    n: 1, title: "Know your limits", icon: "risk",
-    body: "A short quiz sets how much you are comfortable losing on one trade and overall. Every other page checks against it.",
-    links: [{ href: "/risk", label: "Take the risk quiz" }],
-  },
-  {
-    n: 2, title: "Test ideas on the past", icon: "backtest",
-    body: "See how a strategy would have done on more than 20 years of gold prices, with real costs, before you trust it.",
-    links: [{ href: "/strategies", label: "Strategy finder" }, { href: "/backtest", label: "Backtest" }, { href: "/strategies/builder", label: "Build your own" }, { href: "/scenarios", label: "Scenarios" }],
-  },
-  {
-    n: 3, title: "Practise without risk", icon: "wallet",
-    body: "Trade live prices with virtual money, or let a strategy trade and explain what went wrong. Nothing real is at stake.",
-    links: [{ href: "/paper", label: "Paper trading" }, { href: "/paper/agent", label: "Strategy agent" }, { href: "/trades", label: "Trade log" }],
-  },
-];
+import { LOOP, STAGE_ICON } from "@/lib/loop";
 
 const habits = [
   { icon: "drop", title: "Decide the loss first", body: "Set where you would be wrong before you enter, and see it in dollars." },
@@ -74,30 +56,33 @@ export default function Home() {
       </section>
 
       <section className="mt-20">
-        <h2 className="text-2xl font-bold">Three steps, at your own pace</h2>
-        <p className="mt-2 max-w-xl text-muted">Start anywhere. Each step uses what you set in the one before.</p>
-        <div className="mt-8 grid gap-5 md:grid-cols-3">
-          {paths.map((p) => (
-            <div key={p.n} className="card group flex flex-col p-6 transition-colors hover:border-gold/40">
+        <h2 className="text-2xl font-bold">One loop, played again and again</h2>
+        <p className="mt-2 max-w-xl text-muted">
+          Every idea goes round the same five stops. Each lap earns XP for good habits, never for profit, and the
+          next lap starts a little sharper.
+        </p>
+        <ol className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          {LOOP.map((p, i) => (
+            <li key={p.key} className="card group relative flex flex-col p-5 transition-colors hover:border-gold/40">
               <div className="flex items-center justify-between">
-                <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-gold/25 bg-gradient-to-br from-gold/20 to-gold/5 text-gold">
-                  <Icon name={p.icon} className="h-5 w-5" />
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-gold/25 bg-gradient-to-br from-gold/20 to-gold/5 text-gold">
+                  <Icon name={STAGE_ICON[p.key]} className="h-5 w-5" />
                 </span>
-                <span className="font-mono text-3xl font-bold text-border transition-colors group-hover:text-gold/40">0{p.n}</span>
+                <span className="font-mono text-2xl font-bold text-border transition-colors group-hover:text-gold/40">0{i + 1}</span>
               </div>
-              <h3 className="mt-5 text-lg font-semibold">{p.title}</h3>
-              <p className="mt-2 flex-1 text-sm leading-relaxed text-muted">{p.body}</p>
-              <div className="mt-5 flex flex-wrap gap-2">
+              <h3 className="mt-4 font-semibold">{p.name}</h3>
+              <p className="mt-1.5 flex-1 text-sm leading-relaxed text-muted">{p.body}</p>
+              <div className="mt-4 flex flex-wrap gap-1.5">
                 {p.links.map((l) => (
                   <Link key={l.href} href={l.href}
-                    className="flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-sm transition-colors hover:border-gold/60 hover:text-gold">
-                    {l.label} <Icon name="arrow" className="h-3.5 w-3.5" />
+                    className="rounded-full border border-border px-2.5 py-1 text-xs transition-colors hover:border-gold/60 hover:text-gold">
+                    {l.label}
                   </Link>
                 ))}
               </div>
-            </div>
+            </li>
           ))}
-        </div>
+        </ol>
       </section>
 
       <section className="mt-20 grid gap-8 card rounded-3xl p-6 sm:p-10 md:grid-cols-[1fr_2fr]">

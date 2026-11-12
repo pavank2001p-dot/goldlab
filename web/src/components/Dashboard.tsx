@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, fmtUsd, type Achievements, type AgentState, type CalendarEvent, type PaperState, type User } from "@/lib/api";
 import { useBadgeToasts, Streak } from "./Badges";
+import LabHome from "./LabHome";
 import PriceTicker from "./PriceTicker";
 import { CountUp, Icon } from "./ui";
 
@@ -100,7 +101,7 @@ export default function Dashboard({ user }: { user: User }) {
           <h1 className="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">
             {greeting(now)}{user.name ? <>, <span className="bg-gradient-to-r from-gold via-gold-hi to-gold bg-clip-text text-transparent">{user.name}</span></> : null}.
           </h1>
-          <p className="mt-1 text-muted">Here is your desk. Take a breath before you decide anything.</p>
+          <p className="mt-1 text-muted">Here is your lab. One lap at a time, and take a breath before you decide anything.</p>
         </div>
         <div className="flex gap-2">
           <Link href="/paper" className="rounded-full bg-gradient-to-b from-gold-hi to-gold px-5 py-2 text-sm font-semibold text-black shadow-[0_10px_30px_-14px_var(--gold)] transition-[filter] hover:brightness-105">
@@ -112,7 +113,9 @@ export default function Dashboard({ user }: { user: User }) {
         </div>
       </div>
 
-      <div className="relative mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <LabHome />
+
+      <div className="relative mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Tile title="Gold right now" icon="candles" href="/chart" cta="Chart" className="lg:col-span-2" tour="price">
           <PriceTicker />
           <div className="mt-3"><Spark closes={closes} /></div>
