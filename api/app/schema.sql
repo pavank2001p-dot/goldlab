@@ -289,6 +289,9 @@ CREATE TABLE IF NOT EXISTS coach_reports (
     PRIMARY KEY (user_id, week)
 );
 
+-- Realistic fills (app/fills.py): wider spreads and stop slippage around big releases and the daily rollover.
+ALTER TABLE paper_accounts ADD COLUMN IF NOT EXISTS realistic_fills BOOLEAN NOT NULL DEFAULT true;
+
 -- Prop challenges: evaluation rules (profit target, daily and overall loss limits, minimum trading days)
 -- run on the paper account. paper_accounts.challenge_id is the challenge the account is in, if any.
 CREATE TABLE IF NOT EXISTS prop_challenges (

@@ -126,6 +126,8 @@ export type Stats = {
   time_in_market_pct?: number;
   bars?: number;
   wiped_out?: boolean;
+  /** With realistic fills: stops that slipped because a big release fell inside their bar. */
+  slipped_stops?: number;
 };
 
 export type Report = {
@@ -151,6 +153,8 @@ export type BacktestParams = {
   stop_loss_pct?: number | null;
   take_profit_pct?: number | null;
   size_pct?: number | null;
+  /** Wider spreads at the rollover and around big releases, and stops that slip around releases. */
+  realistic_fills?: boolean;
 };
 
 export type Backtest = Report & { id: number; created_at: string; params: BacktestParams; period?: { start: number; end: number } };
@@ -261,6 +265,8 @@ export type Scenario = {
 
 export type PaperPrice = {
   symbol?: string; bid: number; ask: number; t: number; age_seconds: number; open: boolean; in_hours?: boolean; source: "live" | "bars";
+  /** The spread right now, and why it is wider than usual, if it is. */
+  spread?: number; wide?: "news" | "rollover" | null;
 };
 export type PaperPosition = {
   id: number;
@@ -334,6 +340,7 @@ export type PaperState = {
     spread: number; swap_long: number | null; swap_short: number | null; margin_rate_pct: number; stop_out_pct: number; margin_call_pct?: number;
     leverage: number; leverages: number[]; max_leverage: number; max_balance: number;
     market_leverage?: number; market_max_leverage?: number;
+    realistic_fills?: boolean; spread_now?: number; wide?: "news" | "rollover" | null; news_spread_x?: number; rollover_spread_x?: number;
   };
 };
 export type PropHelp = { tip: string; lesson: { id: string; title: string; takeaway: string } | null };
@@ -663,6 +670,8 @@ export const api = {
     }),
   paperReset: (balance: number, leverage: number, symbol?: string) =>
     call<PaperState>(withSym("/paper/reset", symbol), { method: "POST", body: JSON.stringify({ balance, leverage }) }),
+  paperRealisticFills: (on: boolean, symbol?: string) =>
+    call<PaperState>(withSym("/paper/settings", symbol), { method: "PATCH", body: JSON.stringify({ realistic_fills: on }) }),
   paperLeverage: (leverage: number, symbol?: string) =>
     call<PaperState>(withSym("/paper/settings", symbol), { method: "PATCH", body: JSON.stringify({ leverage }) }),
   paperFunds: (amount: number, symbol?: string) =>

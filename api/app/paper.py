@@ -24,7 +24,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, model_validator
 
-from . import config, db
+from . import config, db, fills
 from . import instruments as ins
 from .auth import UserOut, current_user
 from .fit import _profile, assess
@@ -74,8 +74,9 @@ def _of(row: dict) -> ins.Instrument:
 # Prices
 # ---------------------------------------------------------------------------
 
-def current_price(symbol: str = GOLD.symbol) -> dict | None:
-    """Latest bid for a market: the live quote when it is fresh, otherwise the newest saved bar's close."""
+def current_price(symbol: str = GOLD.symbol, realistic: bool = True) -> dict | None:
+    """Latest bid for a market: the live quote when it is fresh, otherwise the newest saved bar's close.
+    With realistic fills the ask carries the spread of this moment, wider around big releases and the rollover."""
     inst = _inst(symbol)
     live = feed if inst.symbol == GOLD.symbol else feed_of(inst.symbol)
     snap = live.snapshot() if live else {"price": None, "age_seconds": None}
@@ -97,9 +98,12 @@ def current_price(symbol: str = GOLD.symbol) -> dict | None:
     # Feeds simply stop when forex-hours markets close, so a fresh price is enough there. US stocks
     # keep their last bar for hours after the 16:00 close, so their session times are checked too.
     in_hours = inst.hours != "us_stock" or inst.is_open(datetime.now(timezone.utc))
-    return {"symbol": inst.symbol, "bid": inst.round(bid), "ask": inst.round(bid + inst.spread), "t": t,
+    now = datetime.now(timezone.utc)
+    cond = fills.now() if realistic else fills.Conditions(on=False)
+    spread = cond.spread(inst, now)
+    return {"symbol": inst.symbol, "bid": inst.round(bid), "ask": inst.round(bid + spread), "t": t,
             "age_seconds": round(age), "open": age <= MAX_PRICE_AGE and in_hours, "in_hours": in_hours,
-            "source": source}
+            "source": source, "spread": inst.round(spread), "wide": cond.why(inst, now)}
 
 
 def _bars(c, since: datetime, symbol: str) -> list[dict]:
@@ -162,6 +166,8 @@ class _Book:
                                 "ORDER BY created_at, id", (user_id,)).fetchall()
         # Latest bid per market, moved as bars are applied; a position with no price yet is marked at entry.
         self.bids: dict[str, float] = {}
+        # When spreads widen and stops slip (big releases, the rollover); sync loads the release times.
+        self.cond = fills.Conditions(on=account.get("realistic_fills", True))
         # A prop challenge's rule checker (app.prop), when the account is running one.
         self.rules = None
         # Why new trades are refused, e.g. a prop challenge that has ended. None when trading is open.
@@ -244,8 +250,8 @@ class _Book:
         """Apply one bar (bid prices) of one market. Orders placed before the bar opened can fill in it;
         positions opened before it can hit their stop or target."""
         inst = _inst(symbol)
-        sp = inst.spread
         at, o_, hi, lo, cl = b["ts"], b["open"], b["high"], b["low"], b["close"]
+        sp, slip = self.cond.spread(inst, at), self.cond.slip(inst, at)
         if self.rules:
             self.rules.before_bar(self, at)
         self.bids[inst.symbol] = cl
@@ -256,11 +262,11 @@ class _Book:
             if buy and o["kind"] == "limit" and lo + sp <= px:
                 fill = min(px, o_ + sp)
             elif buy and o["kind"] == "stop" and hi + sp >= px:
-                fill = max(px, o_ + sp)
+                fill = max(px, o_ + sp) + slip
             elif not buy and o["kind"] == "limit" and hi >= px:
                 fill = max(px, o_)
             elif not buy and o["kind"] == "stop" and lo <= px:
-                fill = min(px, o_)
+                fill = min(px, o_) - slip
             else:
                 continue
             eq, used = self.equity(at=at)
@@ -284,12 +290,12 @@ class _Book:
                 sl = None
             if p["side"] == "long":
                 if sl and lo <= sl:
-                    self.close(p, min(sl, o_), at, "stop_loss")
+                    self.close(p, min(sl, o_) - slip, at, "stop_loss")
                 elif tp and hi >= tp:
                     self.close(p, max(tp, o_), at, "take_profit")
             else:
                 if sl and hi + sp >= sl:
-                    self.close(p, max(sl, o_ + sp), at, "stop_loss")
+                    self.close(p, max(sl, o_ + sp) + slip, at, "stop_loss")
                 elif tp and lo + sp <= tp:
                     self.close(p, min(tp, o_ + sp), at, "take_profit")
 
@@ -310,8 +316,8 @@ class _Book:
             eq, used = self.equity(at=at)
             if used and eq < used * STOP_OUT_PCT / 100:
                 for p in list(self.positions):
-                    self.close(p, _exit_price(p["side"], self.bids.get(p["symbol"], p["entry_price"]), _of(p)),
-                               at, "stop_out")
+                    pi, bid = _of(p), self.bids.get(p["symbol"], p["entry_price"])
+                    self.close(p, bid if p["side"] == "long" else bid + self.cond.spread(pi, at), at, "stop_out")
 
         if self.rules:
             self.rules.after_bar(self, b, inst)
@@ -327,9 +333,12 @@ def sync(c, user_id: int, symbol: str = GOLD.symbol) -> tuple[dict, _Book, dict 
     prop.attach(c, acct, book)
     wanted = _inst(symbol).symbol
     markets = book.symbols() | {wanted}
-    prices = {s: current_price(s) for s in markets if s in ins.BY_SYMBOL}
+    realistic = acct.get("realistic_fills", True)
+    prices = {s: current_price(s, realistic) for s in markets if s in ins.BY_SYMBOL}
     if book.positions or book.orders:
         since = acct["checked_at"] - timedelta(minutes=1)
+        if realistic:
+            book.cond = fills.load(c, since, datetime.now(timezone.utc) + timedelta(hours=1))
         per_market = {s: _bars(c, since, s) for s in book.symbols() if s in ins.BY_SYMBOL}
         # Markets are applied together in time order, so margin and stop-outs see every price as it was.
         merged = sorted(((b["ts"], s, b) for s, rows in per_market.items() for b in rows), key=lambda x: (x[0], x[1]))
@@ -415,7 +424,9 @@ def summary(user_id: int, symbol: str = GOLD.symbol) -> dict:
         "history": history,
         "challenge": challenge,
         "locked": book.locked,
-        "settings": {"spread": inst.spread,
+        "settings": {"spread": inst.spread, "realistic_fills": acct.get("realistic_fills", True),
+                     "spread_now": price["spread"] if price else inst.spread, "wide": price["wide"] if price else None,
+                     "news_spread_x": fills.NEWS_SPREAD_X, "rollover_spread_x": fills.ROLLOVER_SPREAD_X,
                      "swap_long": _swap_now(inst, "long", price), "swap_short": _swap_now(inst, "short", price),
                      "margin_rate_pct": round(100 / lev, 4), "leverage": acct["leverage"],
                      "market_leverage": lev, "market_max_leverage": inst.max_leverage,
@@ -472,7 +483,8 @@ class ResetIn(BaseModel):
 
 
 class LeverageIn(BaseModel):
-    leverage: int = Field(ge=1, le=MAX_LEVERAGE)
+    leverage: int | None = Field(None, ge=1, le=MAX_LEVERAGE)
+    realistic_fills: bool | None = Field(None, description="Wider spreads and slippage around big releases and the rollover")
 
 
 class FundsIn(BaseModel):
@@ -625,8 +637,8 @@ def close(pid: int, body: CloseIn | None = None, user: UserOut = Depends(current
         acct, book, _ = sync(c, user.id)
         p = _open_position(book, pid)
         inst = _of(p)
-        price = _need_price(current_price(inst.symbol), inst)
-        exit_, now = _exit_price(p["side"], price["bid"], inst), datetime.now(timezone.utc)
+        price = _need_price(current_price(inst.symbol, acct.get("realistic_fills", True)), inst)
+        exit_, now = (price["bid"] if p["side"] == "long" else price["ask"]), datetime.now(timezone.utc)
         units = body.units if body and body.units is not None else None
         if units is not None and units > p["units"] + 1e-9:
             raise HTTPException(422, f"The position only has {p['units']:g} to close")
@@ -706,14 +718,17 @@ def settings(body: LeverageIn, symbol: str = GOLD.symbol, user: UserOut = Depend
     margin they would need takes the account to its stop-out level."""
     with db.conn() as c:
         acct, book, price = sync(c, user.id)
-        _no_changes_in_challenge(acct, "leverage")
-        if book.positions:
-            book.leverage = body.leverage
-            eq, used = book.equity(at=datetime.now(timezone.utc))
-            if used and eq < used * STOP_OUT_PCT / 100:
-                raise HTTPException(422, f"At 1:{body.leverage} your open positions would need ${used:,.2f} of margin, "
-                                         f"which would close them at once. Close some first or pick higher leverage.")
-        c.execute("UPDATE paper_accounts SET leverage = %s WHERE user_id = %s", (body.leverage, user.id))
+        if body.realistic_fills is not None:
+            c.execute("UPDATE paper_accounts SET realistic_fills = %s WHERE user_id = %s", (body.realistic_fills, user.id))
+        if body.leverage is not None:
+            _no_changes_in_challenge(acct, "leverage")
+            if book.positions:
+                book.leverage = body.leverage
+                eq, used = book.equity(at=datetime.now(timezone.utc))
+                if used and eq < used * STOP_OUT_PCT / 100:
+                    raise HTTPException(422, f"At 1:{body.leverage} your open positions would need ${used:,.2f} of "
+                                             "margin, which would close them at once. Close some first or pick higher leverage.")
+            c.execute("UPDATE paper_accounts SET leverage = %s WHERE user_id = %s", (body.leverage, user.id))
     return summary(user.id, symbol)
 
 

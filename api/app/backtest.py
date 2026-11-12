@@ -7,14 +7,14 @@ longs buy at bid + spread and sell at bid; shorts sell at bid and buy back at bi
 
 import math
 from collections import deque
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field, model_validator
 
-from . import config, db
+from . import config, db, fills
 from . import instruments as ins
 from .auth import UserOut, current_user
 from .custom import Rules
@@ -776,6 +776,9 @@ class BacktestIn(BaseModel):
     swap_short: float | None = Field(None, ge=-10_000, le=10_000, description="USD per unit per night held short")
     stop_loss_pct: float | None = Field(None, gt=0, le=50)
     take_profit_pct: float | None = Field(None, gt=0, le=200)
+    realistic_fills: bool = Field(False, description=(
+        "Wider spreads at the rollover and around high-impact releases, and stops that slip past their price "
+        "around releases (see app/fills.py)"))
 
     @property
     def market(self) -> ins.Instrument:
@@ -829,12 +832,19 @@ class BacktestIn(BaseModel):
         return self
 
 
-def run(cfg: BacktestIn, bars: list[dict]) -> dict:
+def run(cfg: BacktestIn, bars: list[dict], cond: "fills.Conditions | None" = None) -> dict:
+    """Run a test. `cond` (release times) makes fills realistic: on hourly bars the spread at each bar's
+    open follows the rollover and releases, and on any bar a stop slips when a release falls inside it."""
     if len(bars) < 2:
         raise ValueError("Not enough price data in that date range")
     target = signals(cfg.strategy, cfg.params, bars, cfg.rules)
     allow = {"both": (1, -1), "long_only": (1,), "short_only": (-1,)}[cfg.direction]
-    sp, u = cfg.spread, cfg.units
+    base_sp, u = cfg.spread, cfg.units
+    sp, slip = base_sp, 0.0
+    bar_len = 3600 if cfg.tf == "1h" else 86400
+    # The spread given is scaled the same way the market's own spread would be.
+    scale = base_sp / cfg.market.spread if cfg.market.spread else 1.0
+    slipped = 0
 
     cash = cfg.capital
     pos = 0  # 1 long, -1 short
@@ -874,6 +884,10 @@ def run(cfg: BacktestIn, bars: list[dict]) -> dict:
 
     for i in range(1, len(bars)):
         b, prev = bars[i], bars[i - 1]
+        if cond is not None and cond.on:
+            t0 = datetime.fromtimestamp(b["t"], timezone.utc)
+            sp = cond.spread(cfg.market, t0) * scale if cfg.tf == "1h" else base_sp
+            slip = base_sp * fills.NEWS_SLIP_X if cond.news_between(t0, t0 + timedelta(seconds=bar_len)) else 0.0
         # Overnight financing for each trading-day rollover the position was held through.
         if pos:
             nights = (trading_date(b["t"]) - trading_date(prev["t"])).days
@@ -898,14 +912,16 @@ def run(cfg: BacktestIn, bars: list[dict]) -> dict:
                 stop = entry * (1 - cfg.stop_loss_pct / 100) if cfg.stop_loss_pct else None
                 take = entry * (1 + cfg.take_profit_pct / 100) if cfg.take_profit_pct else None
                 if stop is not None and b["l"] <= stop:
-                    close(b["t"], min(b["o"], stop), "stop_loss")
+                    slipped += slip > 0
+                    close(b["t"], min(b["o"], stop) - slip, "stop_loss")
                 elif take is not None and b["h"] >= take:
                     close(b["t"], max(b["o"], take), "take_profit")
             else:  # short exits buy at the ask, i.e. bid + spread
                 stop = entry * (1 + cfg.stop_loss_pct / 100) if cfg.stop_loss_pct else None
                 take = entry * (1 - cfg.take_profit_pct / 100) if cfg.take_profit_pct else None
                 if stop is not None and b["h"] + sp >= stop:
-                    close(b["t"], max(b["o"] + sp, stop) - sp, "stop_loss")
+                    slipped += slip > 0
+                    close(b["t"], max(b["o"] + sp, stop) - sp + slip, "stop_loss")
                 elif take is not None and b["l"] + sp <= take:
                     close(b["t"], min(b["o"] + sp, take) - sp, "take_profit")
             if not pos:
@@ -936,6 +952,8 @@ def run(cfg: BacktestIn, bars: list[dict]) -> dict:
     rep["stats"]["time_in_market_pct"] = round(in_market / (len(bars) - 1) * 100, 2)
     rep["stats"]["bars"] = len(bars)
     rep["stats"]["wiped_out"] = wiped_out
+    if cond is not None and cond.on:
+        rep["stats"]["slipped_stops"] = slipped
     rep["period"] = {"start": bars[0]["t"], "end": bars[-1]["t"]}
     return rep
 
@@ -964,7 +982,13 @@ def strategies():
 @router.post("", status_code=201)
 def create(cfg: BacktestIn, user: UserOut = Depends(current_user)):
     try:
-        rep = run(cfg, load_bars(cfg.tf, cfg.start, cfg.end, cfg.symbol))
+        bars = load_bars(cfg.tf, cfg.start, cfg.end, cfg.symbol)
+        cond = None
+        if cfg.realistic_fills and bars:
+            with db.conn() as c:
+                cond = fills.load(c, datetime.fromtimestamp(bars[0]["t"], timezone.utc),
+                                  datetime.fromtimestamp(bars[-1]["t"], timezone.utc) + timedelta(days=1))
+        rep = run(cfg, bars, cond)
     except ValueError as e:
         raise HTTPException(422, str(e))
     params = cfg.model_dump(mode="json")
