@@ -168,6 +168,10 @@ class _Book:
         self.bids: dict[str, float] = {}
         # When spreads widen and stops slip (big releases, the rollover); sync loads the release times.
         self.cond = fills.Conditions(on=account.get("realistic_fills", True))
+        # A prop challenge's rule checker (app.prop), when the account is running one.
+        self.rules = None
+        # Why new trades are refused, e.g. a prop challenge that has ended. None when trading is open.
+        self.locked: str | None = None
 
     @property
     def rate(self) -> float:
@@ -192,6 +196,8 @@ class _Book:
 
     def open(self, side: str, units: float, price: float, at: datetime, sl, tp, kind: str,
              symbol: str = GOLD.symbol, trail: float | None = None) -> dict:
+        if self.locked:
+            raise HTTPException(409, self.locked)
         inst = _inst(symbol)
         if trail:
             # A trailing stop starts its distance from the fill, unless a tighter stop was given.
@@ -246,6 +252,8 @@ class _Book:
         inst = _inst(symbol)
         at, o_, hi, lo, cl = b["ts"], b["open"], b["high"], b["low"], b["close"]
         sp, slip = self.cond.spread(inst, at), self.cond.slip(inst, at)
+        if self.rules:
+            self.rules.before_bar(self, at)
         self.bids[inst.symbol] = cl
         for o in list(self.orders):
             if o["symbol"] != inst.symbol or o["created_at"] > at:
@@ -311,12 +319,18 @@ class _Book:
                     pi, bid = _of(p), self.bids.get(p["symbol"], p["entry_price"])
                     self.close(p, bid if p["side"] == "long" else bid + self.cond.spread(pi, at), at, "stop_out")
 
+        if self.rules:
+            self.rules.after_bar(self, b, inst)
+
 
 def sync(c, user_id: int, symbol: str = GOLD.symbol) -> tuple[dict, _Book, dict | None]:
     """Bring the account up to date with prices since it was last looked at, across every market it
     has positions or orders in. Returns the account, the book and the latest price of `symbol`."""
+    from . import prop  # imported here: app.prop builds on this module
+
     acct = _account(c, user_id, lock=True)
     book = _Book(c, user_id, acct)
+    prop.attach(c, acct, book)
     wanted = _inst(symbol).symbol
     markets = book.symbols() | {wanted}
     realistic = acct.get("realistic_fills", True)
@@ -344,6 +358,8 @@ def sync(c, user_id: int, symbol: str = GOLD.symbol) -> tuple[dict, _Book, dict 
     for s, price in prices.items():
         if price:
             book.bids[s] = price["bid"]
+    if book.rules:
+        book.rules.finish(book, datetime.now(timezone.utc))
     acct = c.execute("UPDATE paper_accounts SET balance = %s, checked_at = GREATEST(checked_at, %s) "
                      "WHERE user_id = %s RETURNING *", (round(book.balance, 2), checked, user_id)).fetchone()
     return acct, book, prices.get(wanted)
@@ -357,6 +373,8 @@ def _swap_now(inst: ins.Instrument, side: str, price: dict | None) -> float | No
 
 
 def summary(user_id: int, symbol: str = GOLD.symbol) -> dict:
+    from . import prop
+
     inst = _inst(symbol)
     with db.conn() as c:
         acct, book, price = sync(c, user_id, inst.symbol)
@@ -364,6 +382,7 @@ def summary(user_id: int, symbol: str = GOLD.symbol) -> dict:
                             "ORDER BY closed_at DESC, id DESC LIMIT 100", (user_id,)).fetchall()
         done = c.execute(f"SELECT {ORDER_COLS} FROM paper_orders WHERE user_id = %s AND status = 'cancelled' "
                          "ORDER BY done_at DESC LIMIT 20", (user_id,)).fetchall()
+        challenge = prop.brief(c, acct, book)
         counts = c.execute("SELECT count(*) AS n, count(*) FILTER (WHERE pnl > 0) AS wins, coalesce(sum(pnl), 0) AS net "
                            "FROM paper_positions WHERE user_id = %s AND closed_at IS NOT NULL", (user_id,)).fetchone()
     now = datetime.now(timezone.utc)
@@ -403,6 +422,8 @@ def summary(user_id: int, symbol: str = GOLD.symbol) -> dict:
         "orders": book.orders,
         "cancelled_orders": done,
         "history": history,
+        "challenge": challenge,
+        "locked": book.locked,
         "settings": {"spread": inst.spread, "realistic_fills": acct.get("realistic_fills", True),
                      "spread_now": price["spread"] if price else inst.spread, "wide": price["wide"] if price else None,
                      "news_spread_x": fills.NEWS_SPREAD_X, "rollover_spread_x": fills.ROLLOVER_SPREAD_X,
@@ -528,6 +549,8 @@ def place(o: OrderIn, user: UserOut = Depends(current_user)):
     inst = _inst(o.symbol)
     with db.conn() as c:
         acct, book, price = sync(c, user.id, inst.symbol)
+        if book.locked:
+            raise HTTPException(409, book.locked)
         price = price if price else _need_price(price, inst)
         bid, ask = price["bid"], price["ask"]
         if o.kind == "market":
@@ -671,13 +694,22 @@ def protect(pid: int, body: ProtectIn, user: UserOut = Depends(current_user)):
 
 @router.post("/reset")
 def reset(body: ResetIn, symbol: str = GOLD.symbol, user: UserOut = Depends(current_user)):
+    from . import prop
+
     with db.conn() as c:
-        _account(c, user.id, lock=True)
+        acct = _account(c, user.id, lock=True)
+        prop.leave(c, acct)
         c.execute("DELETE FROM paper_orders WHERE user_id = %s", (user.id,))
         c.execute("DELETE FROM paper_positions WHERE user_id = %s", (user.id,))
         c.execute("UPDATE paper_accounts SET starting_balance = %s, balance = %s, leverage = %s, checked_at = now(), "
                   "created_at = now() WHERE user_id = %s", (body.balance, body.balance, body.leverage, user.id))
     return summary(user.id, symbol)
+
+
+def _no_changes_in_challenge(acct: dict, what: str) -> None:
+    if acct.get("challenge_id"):
+        raise HTTPException(409, f"The account is running a prop challenge, so its {what} is fixed by the challenge's "
+                                 "rules. Leave the challenge to change it.")
 
 
 @router.patch("/settings")
@@ -689,6 +721,7 @@ def settings(body: LeverageIn, symbol: str = GOLD.symbol, user: UserOut = Depend
         if body.realistic_fills is not None:
             c.execute("UPDATE paper_accounts SET realistic_fills = %s WHERE user_id = %s", (body.realistic_fills, user.id))
         if body.leverage is not None:
+            _no_changes_in_challenge(acct, "leverage")
             if book.positions:
                 book.leverage = body.leverage
                 eq, used = book.equity(at=datetime.now(timezone.utc))
@@ -705,6 +738,7 @@ def funds(body: FundsIn, symbol: str = GOLD.symbol, user: UserOut = Depends(curr
     so the return shown is on everything put in."""
     with db.conn() as c:
         acct, book, price = sync(c, user.id)
+        _no_changes_in_challenge(acct, "money")
         if body.amount < 0:
             eq, used = book.equity(at=datetime.now(timezone.utc))
             free = min(eq - used, book.balance)

@@ -37,6 +37,14 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
   and a journal streak. They never reward profit. Shown on the signed-in home dashboard and the account page.
 - **Look and feel**: dark, light or follow-the-device themes and four accent colours (`web/src/lib/theme.ts`), a
   first-visit tour, fill confirmations, and shareable result images drawn in the browser (`ShareCard.tsx`).
+- **Prop challenge** (`api/app/prop.py`, `/paper/prop`): practise a funded-trader style evaluation on the paper
+  account. Starter ($10k, +8%, 6% daily and 12% overall loss limits), two-step (+10% then +5%, 5% / 10%) and
+  one-step (+10%, 3% / 6%) plans in $10k to $200k sizes, or custom rules. Limits are checked against equity at every
+  minute bar's worst price (open trades included, day rolls at 17:00 New York); breaking one closes everything and
+  fails the challenge. A phase passes at the target with nothing open and the minimum trading days met; each phase
+  starts on a fresh account. A live rule panel on the paper page warns about trades without stops or stops that would
+  break a limit, links the lesson for the rule at risk, and a pass gives a shareable certificate image. Balance and
+  leverage are locked during a challenge; starting over or leaving ends it.
 - **Trade log** (`api/app/trades.py`): manual entry or CSV import (MetaTrader 4/5 and most broker exports; gold
   rows only; re-imports skip known tickets). Produces the same report as a backtest (`api/app/report.py`).
 
