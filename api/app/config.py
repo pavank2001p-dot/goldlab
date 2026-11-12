@@ -22,6 +22,8 @@ SYMBOL = "XAUUSD"
 HISTORY_SINCE = date.fromisoformat(os.getenv("HISTORY_SINCE", "2003-05-01"))
 # Short-timeframe history kept for the chart: minute bars and one-second bars.
 MINUTE_DAYS = int(os.getenv("MINUTE_DAYS", "60"))
+# Markets other than gold keep fewer minute bars: they take most of the database (one row a minute each).
+MARKET_MINUTE_DAYS = int(os.getenv("MARKET_MINUTE_DAYS", "14"))
 SECOND_DAYS = int(os.getenv("SECOND_DAYS", "2"))
 # Markets other than gold: hourly history from this date (their feed mostly starts around 2017
 # for stocks), and which symbols also keep one-second bars (they take the most space).
