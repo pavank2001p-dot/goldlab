@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import SignInPrompt from "@/components/SignInPrompt";
 import TagChips from "@/components/coach/TagChips";
+import { GlyphWall, TwinCard } from "@/components/coach/Twin";
 import { Empty, Icon, PageHeader, SidePill } from "@/components/ui";
 import { toast } from "@/components/Toaster";
-import { api, fmtUsd, type CoachTag, type CoachTags, type CoachWeek, type Playbook } from "@/lib/api";
+import { api, fmtUsd, type CoachTag, type CoachTags, type CoachWeek, type Playbook, type Twin } from "@/lib/api";
 import { useUser } from "@/lib/useUser";
 
 /** ISO week ("2026-W46") of a date, and the week `n` weeks after it. */
@@ -157,7 +158,9 @@ export default function CoachPage() {
     setError(null);
     api.coachWeek(week).then(setW, (e) => setError(e instanceof Error ? e.message : "Couldn't load the report"));
   }, [user, week]);
+  const [twin, setTwin] = useState<Twin | null>(null);
   useEffect(() => { if (user) api.coachTags().then(setTags, () => {}); }, [user]);
+  useEffect(() => { if (user) api.coachTwin().then(setTwin, () => {}); }, [user]);
   if (user === null) return <SignInPrompt what="get coaching on your own practice trades" next="/coach" />;
   if (user === undefined) return null;
   const total = tags ? (Object.values(tags.counts).reduce((a, b) => a + b, 0)) : 0;
@@ -179,6 +182,8 @@ export default function CoachPage() {
               Close a few trades in <Link href="/paper" className="text-gold hover:underline">paper trading</Link> and the coach will tag them and write your week up.
             </Empty>
           ) : <Report w={w} labels={tags?.labels} />)}
+          {twin && <TwinCard t={twin} />}
+          {twin && <GlyphWall days={twin.days} />}
         </div>
         <aside className="space-y-4">
           <PlaybookEditor />
