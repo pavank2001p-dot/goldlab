@@ -28,6 +28,7 @@ const PATHS: Record<string, React.ReactNode> = {
   percent: <><path d="M19 5 5 19" /><circle cx="7" cy="7" r="2" /><circle cx="17" cy="17" r="2" /></>,
   layers: <path d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5" />,
   check: <path d="m5 12 4 4 10-10" />,
+  seal: <><path d="M12 3 4 7v5c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V7l-8-4Z" /><path d="m9 12 2 2 4-4" /></>,
   book: <path d="M4 5a2 2 0 0 1 2-2h5v17H6a2 2 0 0 0-2 2V5Zm16 0a2 2 0 0 0-2-2h-5v17h5a2 2 0 0 1 2 2V5Z" />,
 };
 

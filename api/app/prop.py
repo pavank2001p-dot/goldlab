@@ -23,7 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field, model_validator
 
-from . import db, paper
+from . import db, paper, record
 from . import instruments as ins
 from .auth import UserOut, current_user
 from .learn import BY_ID as LESSONS
@@ -169,6 +169,7 @@ class Rules:
         if ch["phase"] < len(ch["rules"]["targets"]):
             # The next phase starts on a fresh account of the same size.
             uid = ch["user_id"]
+            record.note_reset(self.c, uid, self.size)
             self.c.execute("DELETE FROM paper_orders WHERE user_id = %s", (uid,))
             self.c.execute("DELETE FROM paper_positions WHERE user_id = %s", (uid,))
             self.c.execute("UPDATE paper_accounts SET starting_balance = %s, created_at = %s, checked_at = %s "
@@ -399,6 +400,7 @@ def start(body: StartIn, user: UserOut = Depends(current_user)):
     with db.conn() as c:
         acct = paper._account(c, user.id, lock=True)
         leave(c, acct)
+        record.note_reset(c, user.id, size)
         c.execute("DELETE FROM paper_orders WHERE user_id = %s", (user.id,))
         c.execute("DELETE FROM paper_positions WHERE user_id = %s", (user.id,))
         ch = c.execute(

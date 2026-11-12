@@ -49,6 +49,7 @@ export const GROUPS: { label: string; items: Item[] }[] = [
     label: "You",
     items: [
       { href: "/risk", label: "Risk profile", icon: "risk", blurb: "Find the limits that suit you" },
+      { href: "/record", label: "Verified record", icon: "seal", blurb: "Your sealed track record, Skill Passport and shareable proof" },
       { href: "/coach", label: "Coach", icon: "check", blurb: "Mistakes on your own trades, your playbook and a weekly report" },
       { href: "/assistant", label: "Assistant", icon: "assistant", blurb: "Ask anything in plain language" },
     ],

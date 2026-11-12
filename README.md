@@ -53,6 +53,13 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
   starts on a fresh account. A live rule panel on the paper page warns about trades without stops or stops that would
   break a limit, links the lesson for the rule at risk, and a pass gives a shareable certificate image. Balance and
   leverage are locked during a challenge; starting over or leaving ends it.
+- **Verified record and Skill Passport** (`api/app/record.py`, `/record`, public `/verify/{id}`): every closed paper
+  trade, reset, deposit and finished prop challenge is sealed into an append-only ledger where each entry holds the
+  SHA-256 of the one before, so editing or removing any entry breaks the chain. Starting over doesn't erase it. Users
+  issue reports signed with a key derived from `JWT_SECRET` (HMAC-SHA256 over the snapshot and the ledger head);
+  the public page re-walks the chain, re-checks the signature and recomputes the stats, and shows Verified, Does not
+  check out, or Withdrawn. No email is shown. Skill Passport levels (Bronze, Silver, Gold) come from the same
+  ledger, reward process (stops kept, small losses, shallow drawdowns), and leave strategy agent trades out.
 - **Trade log** (`api/app/trades.py`): manual entry or CSV import (MetaTrader 4/5 and most broker exports; gold
   rows only; re-imports skip known tickets). Produces the same report as a backtest (`api/app/report.py`).
 
