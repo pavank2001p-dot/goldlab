@@ -558,6 +558,16 @@ export type Replay = {
   tf: ReplayTf; day: string; start: number; end: number; context: ReplayBar[]; bars: ReplayBar[];
   balance: number; leverage: number; range: { first: string; last: string };
 };
+export type SessionTf = ReplayTf;
+export type SessionSummary = {
+  id: number; name: string; tf: SessionTf; blind: boolean; finished: boolean; start: string | null; end: string | null;
+  progress: { shown: number; trades: number }; result: ReplayScore | null; created_at: string; updated_at: string;
+};
+export type Session = SessionSummary & {
+  state: Record<string, unknown>; bars: ReplayBar[]; context: ReplayBar[];
+  htf: { tf: string; seconds: number; context: ReplayBar[] }; balance: number; leverage: number;
+};
+
 export type BoardRow = { rank: number; nickname: string | null; return_pct: number; max_drawdown_pct: number; trades: number; me: boolean };
 export type Board = { players: number; top: BoardRow[]; mine: (BoardRow & { public: boolean }) | null };
 export type Challenge = {
@@ -592,6 +602,15 @@ export const api = {
     call<Replay>(`/practice/replay?tf=${o.tf}${o.day ? `&day=${o.day}` : ""}`),
   replaySettle: (b: { tf: ReplayTf; start: number; end: number; trades: ReplayTradeIn[] }) =>
     call<ReplayScore>("/practice/replay/settle", { method: "POST", body: JSON.stringify(b) }),
+  sessions: () => call<SessionSummary[]>("/practice/sessions"),
+  session: (id: number) => call<Session>(`/practice/sessions/${id}`),
+  newSession: (b: { tf: SessionTf; start?: string | null; end?: string | null; blind: boolean; name?: string }) =>
+    call<Session>("/practice/sessions", { method: "POST", body: JSON.stringify(b) }),
+  saveSession: (id: number, state: unknown) =>
+    call<{ ok: boolean }>(`/practice/sessions/${id}`, { method: "PUT", body: JSON.stringify({ state }) }),
+  finishSession: (id: number, trades: ReplayTradeIn[]) =>
+    call<SessionSummary>(`/practice/sessions/${id}/finish`, { method: "POST", body: JSON.stringify({ trades }) }),
+  deleteSession: (id: number) => call<void>(`/practice/sessions/${id}`, { method: "DELETE" }),
   challenge: () => call<Challenge>("/practice/challenge"),
   enterChallenge: (b: { trades: ReplayTradeIn[]; public: boolean; nickname: string | null }) =>
     call<ReplayScore & { board: Board }>("/practice/challenge", { method: "POST", body: JSON.stringify(b) }),

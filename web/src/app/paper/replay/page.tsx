@@ -65,6 +65,7 @@ export default function ReplayPage() {
           className="rounded-full bg-gradient-to-b from-gold-hi to-gold px-4 py-1.5 text-sm font-semibold text-black disabled:opacity-50">Load this day</button>
         <button type="button" disabled={busy} onClick={() => load({ tf })}
           className="rounded-full border border-border px-4 py-1.5 text-sm hover:border-gold/40">Surprise me</button>
+        <Link href="/paper/sessions" className="text-xs text-gold hover:underline">Longer ranges, a higher timeframe and blind mode →</Link>
         {data && <p className="ml-auto text-xs text-muted">{label}, {TF_LABEL[data.tf]} candles{tf !== "1h" ? ", 06:00 to 21:00 UTC" : ""}</p>}
       </div>
       {error && <p role="alert" className="text-sm text-down">{error}</p>}
