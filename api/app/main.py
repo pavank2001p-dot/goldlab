@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from . import achievements, agent, assistant, auth, backtest, calendar, config, custom, db, fit, ingest, learn, live, news, paper, planner, practice, prefs, prices, review, risk, scenarios, trades
+from . import achievements, agent, assistant, auth, backtest, calendar, config, custom, db, fit, ingest, learn, live, news, paper, planner, practice, prefs, prices, prop, review, risk, scenarios, trades
 
 log = logging.getLogger("api")
 
@@ -70,6 +70,7 @@ app.include_router(fit.router)
 app.include_router(planner.router)
 app.include_router(scenarios.router)
 app.include_router(paper.router)
+app.include_router(prop.router)
 app.include_router(agent.router)
 app.include_router(assistant.router)
 app.include_router(achievements.router)

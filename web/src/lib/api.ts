@@ -276,7 +276,7 @@ export type PaperPosition = {
   order_kind: "market" | "limit" | "stop" | "agent";
   closed_at: string | null;
   exit_price: number | null;
-  close_reason: "manual" | "stop_loss" | "take_profit" | "stop_out" | "agent" | null;
+  close_reason: "manual" | "stop_loss" | "take_profit" | "stop_out" | "agent" | "challenge_daily_loss" | "challenge_max_loss" | null;
   swap: number | null;
   pnl: number | null;
   mark?: number | null;
@@ -319,6 +319,10 @@ export type PaperState = {
   orders: PaperOrder[];
   cancelled_orders: PaperOrder[];
   history: PaperPosition[];
+  /** The prop challenge the account is running, or null in free practice. */
+  challenge?: PropChallenge | null;
+  /** Why new trades are refused (a challenge that has ended), or null. */
+  locked?: string | null;
   symbol?: string;
   market?: Omit<Market, "price" | "as_of" | "has_seconds" | "has_history">;
   settings: {
@@ -327,6 +331,66 @@ export type PaperState = {
     market_leverage?: number; market_max_leverage?: number;
   };
 };
+export type PropHelp = { tip: string; lesson: { id: string; title: string; takeaway: string } | null };
+export type PropCheck = {
+  key: "target" | "daily_loss" | "max_loss" | "min_days";
+  label: string;
+  status: "ok" | "warn" | "open" | "done";
+  value: number;
+  limit: number;
+  progress: number;
+  floor?: number;
+  text: string;
+};
+export type PropRules = { targets: number[]; daily_loss_pct: number; max_loss_pct: number; min_days: number; leverage: number; label?: string };
+export type PropPhaseResult = {
+  phase: number; balance: number; profit: number; profit_pct: number; trades: number; wins: number; trading_days: number;
+  best_day: number | null; worst_day: number | null; worst_daily_pct: number; max_drawdown_pct: number; started_at: string | null;
+};
+export type PropChallenge = {
+  id: number;
+  plan: string;
+  label: string;
+  size: number;
+  leverage: number;
+  status: "active" | "passed" | "failed" | "abandoned";
+  phase: number;
+  phases: number;
+  rules: PropRules;
+  started_at: string;
+  ended_at: string | null;
+  phase_started_at: string;
+  phase_results: PropPhaseResult[];
+  final: PropPhaseResult | null;
+  fail_rule: "daily_loss" | "max_loss" | null;
+  fail_detail: string | null;
+  fail_help: PropHelp | null;
+  // Live numbers, only while the challenge is running.
+  balance?: number;
+  equity?: number;
+  profit?: number;
+  profit_pct?: number;
+  target_pct?: number;
+  target_balance?: number;
+  trading_days?: number;
+  open_positions?: number;
+  day_start_balance?: number;
+  checks?: PropCheck[];
+  warnings?: ({ key: string; text: string } & PropHelp)[];
+  at_stops?: number | null;
+};
+export type PropPlan = {
+  id: "starter" | "two_step" | "one_step";
+  label: string; blurb: string; sizes: number[]; targets: number[];
+  daily_loss_pct: number; max_loss_pct: number; min_days: number; leverage: number;
+};
+export type PropOverview = { plans: PropPlan[]; current: PropChallenge | null; history: PropChallenge[]; max_leverage: number };
+export type PropStartInput = {
+  plan: PropPlan["id"] | "custom";
+  size: number;
+  custom?: Omit<PropRules, "label">;
+};
+
 export type PaperOrderInput = {
   symbol?: string;
   side: "long" | "short";
@@ -573,6 +637,9 @@ export const api = {
   paperFunds: (amount: number, symbol?: string) =>
     call<PaperState>(withSym("/paper/funds", symbol), { method: "POST", body: JSON.stringify({ amount }) }),
   paperReport: () => call<Report>("/paper/report"),
+  prop: () => call<PropOverview>("/prop"),
+  propStart: (body: PropStartInput) => call<{ current: PropChallenge }>("/prop/start", { method: "POST", body: JSON.stringify(body) }),
+  propLeave: () => call<{ history: PropChallenge[] }>("/prop/leave", { method: "POST" }),
   paperFit: () => call<Fit>("/paper/fit"),
   agent: () => call<AgentState>("/agent"),
   agentPast: (c: AgentConfig & { years: number }) => call<PastTest>("/agent/past", { method: "POST", body: JSON.stringify(c) }),

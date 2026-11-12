@@ -507,7 +507,9 @@ def step(user_id: int, now: datetime | None = None) -> bool:
                                           f"{candle} candle ({'+' if row['pnl'] >= 0 else '-'}${abs(row['pnl']):,.2f}).")
                 traded = True
             pid = None
-            if want:
+            if want and book.locked:
+                _log(c, user_id, "skip", book.locked)
+            elif want:
                 side = "long" if want == 1 else "short"
                 fill = price["ask"] if want == 1 else price["bid"]
                 eq, used = book.equity(price["bid"], now)
