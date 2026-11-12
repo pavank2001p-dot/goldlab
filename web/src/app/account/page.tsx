@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import Badges from "@/components/Badges";
 import { TourLink } from "@/components/Tour";
+import VerifyEmailBanner from "@/components/VerifyEmailBanner";
 import { Icon } from "@/components/ui";
 import { api, type Achievements } from "@/lib/api";
 import { useUser } from "@/lib/useUser";
@@ -41,9 +42,10 @@ export default function AccountPage() {
         </span>
         <div>
           <h1 className="text-2xl font-semibold">Hi {user.name || "there"}</h1>
-          <p className="text-sm text-muted">Signed in as {user.email}</p>
+          <p className="text-sm text-muted">Signed in as {user.email}{user.google && " with Google"}</p>
         </div>
       </div>
+      <VerifyEmailBanner user={user} />
       <section id="habits" className="mt-10 scroll-mt-24">
         <div className="flex items-baseline justify-between gap-3">
           <h2 className="text-lg font-semibold">Your habits</h2>
