@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, fmtUsd, type Achievements, type AgentState, type CalendarEvent, type PaperState, type User } from "@/lib/api";
 import { useBadgeToasts, Streak } from "./Badges";
+import { MirrorJar } from "./MoneyMirror";
 import PriceTicker from "./PriceTicker";
 import { CountUp, Icon } from "./ui";
 
@@ -182,6 +183,10 @@ export default function Dashboard({ user }: { user: User }) {
               ))}
             </ul>
           ) : <p className="text-sm text-muted">No major releases in the next week. A quieter calendar often means calmer prices.</p>}
+        </Tile>
+
+        <Tile title="Money Mirror" icon="wallet" tour="mirror" className="lg:col-span-2">
+          <MirrorJar returnPct={a ? a.return_pct : null} />
         </Tile>
 
         <Tile title="Your habits" icon="trophy" href="/account#habits" cta="All badges" tour="habits">
