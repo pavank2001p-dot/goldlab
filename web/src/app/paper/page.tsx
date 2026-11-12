@@ -742,6 +742,8 @@ export default function PaperPage() {
   const [setupDone, setSetupDone] = useState(true);
   useEffect(() => {
     try { setSetupDone(!!localStorage.getItem(SETUP_KEY)); } catch {}
+    // The Lab home links here with #history when closed trades are waiting for a review.
+    if (window.location.hash === "#history") setTab("history");
   }, []);
   const [error, setError] = useState<string | null>(null);
   const [grades, setGrades] = useState<Record<string, "A" | "B" | "C" | "D">>({});
