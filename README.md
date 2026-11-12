@@ -135,6 +135,14 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
   The gold price is also shown converted, for example INR per 10 grams or AED per gram, as spot before local taxes
   and duties. Rates are ECB reference rates via Frankfurter (`FX_URL`), cached six hours; AED and SAR use their
   dollar pegs. Trading and reports stay in US dollars per ounce.
+- **Product analytics** (`api/app/analytics.py`, `/admin/metrics`): first party, with no tracking scripts. The
+  funnel shows weekly sign-up cohorts, how many made a first paper trade (and on day one), and the day-7 return
+  (used the site again in days 7 to 13). Activity is one row per user per day; page views are counts per day,
+  page and referrer kind (search, social, other site, direct, internal) with no IP or cookie, and Do Not Track is
+  respected. Only accounts listed in `ADMIN_EMAILS` can open the metrics page.
+- **Search landing pages**: `/gold-trading-simulator`, `/xauusd-backtest` and `/prop-firm-practice-gold`, with
+  FAQ structured data, plus `sitemap.xml` and `robots.txt`. Set `NEXT_PUBLIC_SITE_URL` to the public address
+  (on Vercel the production domain is used if it isn't set).
 - **Disclaimer** page at `/disclaimer`, linked from the footer and the assistant.
 
 ## Run locally

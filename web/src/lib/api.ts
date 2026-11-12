@@ -615,11 +615,24 @@ export type DailyResult = {
   you: { streak: number; played: number; right: number } | null;
 };
 export type DailyCandle = { day: string; number: number; tf: string; horizon: number; bars: LevelBar[]; played: DailyResult | null };
+/** Product metrics for the site's admins: sign-up cohorts, active users and where page views come from. */
+export type FunnelCohort = {
+  week: string; signups: number; first_trade: number; first_trade_pct: number | null; first_trade_day1: number;
+  day7_eligible: number; day7_returned: number; day7_pct: number | null;
+};
+export type Funnel = {
+  cohorts: FunnelCohort[];
+  totals: Omit<FunnelCohort, "week">;
+  active: { today: number; week: number; month: number };
+  pages: { path: string; views: number; search: number; social: number; other: number; direct: number; internal: number }[];
+  page_days: number;
+};
 
 export const api = {
   daily: () => call<DailyCandle>("/daily"),
   playDaily: (choice: DailyChoice) => call<DailyResult>("/daily", { method: "POST", body: JSON.stringify({ choice }) }),
   prefs: () => call<Record<string, unknown>>("/prefs"),
+  funnel: (weeks = 8, days = 30) => call<Funnel>(`/analytics/funnel?weeks=${weeks}&days=${days}`),
   setPref: (key: "drawings" | "indicators" | "chart_events" | "trading" | "mirror", value: unknown) =>
     call<{ ok: boolean }>(`/prefs/${key}`, { method: "PUT", body: JSON.stringify({ value }) }),
   markers: (start: number, end: number, scheduled = true) =>

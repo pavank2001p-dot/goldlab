@@ -106,7 +106,11 @@ def _session_user(gl_session: str | None) -> dict:
 
 
 def current_user(gl_session: str | None = Cookie(default=None)) -> UserOut:
-    return _out(_session_user(gl_session))
+    row = _session_user(gl_session)
+    from . import analytics  # imported here: analytics depends on this module
+
+    analytics.touch(row["id"])
+    return _out(row)
 
 
 # ---- one-time email links ----------------------------------------------------------------------
