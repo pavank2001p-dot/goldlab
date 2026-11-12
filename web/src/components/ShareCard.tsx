@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Icon } from "./ui";
 
 export type ShareStat = { label: string; value: string; tone?: "up" | "down" };
-export type ShareInput = { kind: string; title: string; subtitle: string; stats: ShareStat[]; equity: number[] };
+export type ShareInput = { kind: string; title: string; subtitle: string; stats: ShareStat[]; equity: number[]; footnote?: string };
 
 const W = 1200, H = 630;
 
@@ -111,7 +111,7 @@ async function render(d: ShareInput): Promise<HTMLCanvasElement> {
 
   g.fillStyle = "#6b7480";
   g.font = `400 15px ${font}`;
-  g.fillText("Simulated on past gold prices with costs. Past results don't predict future ones. Education only, not advice.", 64, 592);
+  g.fillText(d.footnote ?? "Simulated on past gold prices with costs. Past results don't predict future ones. Education only, not advice.", 64, 592);
   return cv;
 }
 

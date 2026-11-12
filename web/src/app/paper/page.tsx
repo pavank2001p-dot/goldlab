@@ -14,6 +14,7 @@ import {
 import MarketPicker from "@/components/markets/MarketPicker";
 import { GOLD, unitsLabel, useMarket } from "@/lib/markets";
 import AccountSetup, { SETUP_KEY } from "@/components/paper/AccountSetup";
+import RulePanel from "@/components/prop/RulePanel";
 import LeveragePicker from "@/components/paper/LeveragePicker";
 import { toast } from "@/components/Toaster";
 import { useUser } from "@/lib/useUser";
@@ -43,6 +44,8 @@ const REASON: Record<string, string> = {
   take_profit: "Take profit hit",
   stop_out: "Margin stop-out",
   agent: "Closed by the agent",
+  challenge_daily_loss: "Challenge daily loss limit broken",
+  challenge_max_loss: "Challenge maximum loss broken",
 };
 const KIND_HELP: Record<Kind, string> = {
   market: "Fills now at the current price.",
@@ -628,6 +631,16 @@ function Settings({ state, busy, act, onClose }: {
   );
   return (
     <div id="account-settings" className="quiz-in mt-6 grid scroll-mt-24 gap-5 rounded-2xl border border-gold/30 bg-surface p-4 lg:grid-cols-[1.5fr_1fr_1fr]">
+      {state.challenge ? (
+        <section className="lg:col-span-2">
+          <h3 className="flex items-center gap-2 text-sm font-medium"><Icon name="trophy" className="h-4 w-4 text-gold" />Set by your prop challenge</h3>
+          <p className="mt-1 text-sm text-muted">
+            The account runs the {state.challenge.label} at {fmtUsd(state.challenge.size)} and 1:{state.challenge.leverage}, so its balance
+            and leverage can&apos;t change during the challenge, as at a prop firm.
+          </p>
+          <Link href="/paper/prop" className="mt-3 inline-block text-sm text-gold underline-offset-2 hover:underline">Challenge details, or leave the challenge</Link>
+        </section>
+      ) : <>
       <section>
         <h3 className="flex items-center gap-2 text-sm font-medium"><Icon name="layers" className="h-4 w-4 text-gold" />Leverage</h3>
         <p className="mt-1 text-xs text-muted">Applies to open positions too, as it does at a broker.</p>
@@ -663,10 +676,11 @@ function Settings({ state, busy, act, onClose }: {
             className="rounded-lg border border-border py-2 text-sm transition hover:border-muted disabled:opacity-50">Take out</button>
         </div>
       </section>
+      </>}
 
       <section>
         <h3 className="flex items-center gap-2 text-sm font-medium"><Icon name="clock" className="h-4 w-4 text-gold" />Start over</h3>
-        <p className="mt-1 text-xs text-muted">A fresh account with any balance and leverage. This deletes every paper position, order and result.</p>
+        <p className="mt-1 text-xs text-muted">A fresh account with any balance and leverage. This deletes every paper position, order and result{state.challenge ? ", and ends your prop challenge" : ""}.</p>
         <input value={balance} onChange={(e) => { setBalance(e.target.value); setConfirm(false); }} inputMode="decimal" className={`${input} mt-3`} aria-label="Starting balance in dollars" />
         <div className="mt-2 flex flex-wrap gap-1.5">
           {BALANCES.map((v) => (
@@ -713,6 +727,7 @@ export default function PaperPage() {
   const [grades, setGrades] = useState<Record<string, "A" | "B" | "C" | "D">>({});
   const [coachTags, setCoachTags] = useState<CoachTags | null>(null);
   const seen = useRef<Set<number> | null>(null);
+  const lastChallenge = useRef<string | null>(null);
   const openIds = useRef<Set<number> | null>(null);
 
   const say = useCallback((msg: string, t: "up" | "down" | "info" = "info") => toast(msg, { tone: t }), []);
@@ -733,6 +748,15 @@ export default function PaperPage() {
           toast(`Your ${p.order_kind} order filled`, { tone: "fill", body: `${p.side === "long" ? "Long" : "Short"} ${p.units} ${unitShort(marketOf(p.symbol), p.units)} of ${marketOf(p.symbol).name} at ${px(p.entry_price, marketOf(p.symbol).decimals)}` });
     }
     openIds.current = new Set(s.positions.map((p) => p.id));
+    // Announce a prop challenge phase passing, passing or failing since the last look.
+    const ch = s.challenge;
+    const key = ch ? `${ch.id}:${ch.status}:${ch.phase}` : null;
+    if (lastChallenge.current && ch && key !== lastChallenge.current && lastChallenge.current.startsWith(`${ch.id}:`)) {
+      if (ch.status === "failed") toast("Prop challenge failed", { tone: "down", body: ch.fail_detail ?? undefined });
+      else if (ch.status === "passed") toast("You passed the prop challenge", { tone: "fill", body: "Your certificate is ready to share on the challenge page." });
+      else if (ch.status === "active") toast(`Phase ${ch.phase - 1} passed`, { tone: "fill", body: `Phase ${ch.phase} starts on a fresh ${fmtUsd(ch.size)} account.` });
+    }
+    lastChallenge.current = key;
     setState(s.symbol && s.symbol !== symbol ? null : s);
     return s;
   }, [say, symbol, marketOf]);
@@ -807,6 +831,11 @@ export default function PaperPage() {
         right={
           <div className="flex flex-wrap items-center gap-2">
             <MarketPicker market={market} markets={markets} onChange={setSymbol} />
+            {!state?.challenge && (
+              <Link href="/paper/prop" className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm transition hover:border-gold/60 hover:text-gold">
+                <Icon name="trophy" className="h-4 w-4" />Prop challenge
+              </Link>
+            )}
             <Link href="/paper/agent" className="flex items-center gap-1.5 rounded-lg border border-gold/60 px-3 py-1.5 text-sm text-gold transition hover:bg-gold/10">
               <Icon name="assistant" className="h-4 w-4" />Strategy agent
             </Link>
@@ -822,7 +851,8 @@ export default function PaperPage() {
           </div>
         } />
 
-      {state && !setupDone && !resetOpen && state.account.closed_trades === 0 && !state.positions.length && !state.orders.length && (
+      {state?.challenge && <div className="mt-6"><RulePanel ch={state.challenge} compact /></div>}
+      {state && !state.challenge && !setupDone && !resetOpen && state.account.closed_trades === 0 && !state.positions.length && !state.orders.length && (
         <AccountSetup state={state} onDone={async (m) => { setSetupDone(true); if (m) { await load(); toast(m, { tone: "fill" }); } }} />
       )}
       {state?.account.margin_call && (
@@ -845,8 +875,8 @@ export default function PaperPage() {
           <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
             <div className="col-span-2 rounded-2xl border border-gold/40 bg-gradient-to-br from-gold/15 to-transparent p-3.5 lg:col-span-1">
               <p className="flex items-center gap-1.5 text-xs text-gold"><Icon name="wallet" className="h-3.5 w-3.5" />Account value (equity)
-                <button type="button" onClick={() => { setResetOpen(true); setTimeout(() => document.getElementById("account-settings")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }}
-                  className="ml-auto rounded-full border border-gold/40 px-2 py-0.5 text-[11px] text-gold transition hover:bg-gold/15">Edit balance</button>
+                {!state.challenge && <button type="button" onClick={() => { setResetOpen(true); setTimeout(() => document.getElementById("account-settings")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }}
+                  className="ml-auto rounded-full border border-gold/40 px-2 py-0.5 text-[11px] text-gold transition hover:bg-gold/15">Edit balance</button>}
               </p>
               <p className="mt-1 text-2xl font-semibold tabular-nums"><CountUp value={a.equity} format={(v) => fmtUsd(v)} /></p>
               <p className={`text-xs tabular-nums ${tone(a.return_pct)}`}>
@@ -955,6 +985,11 @@ export default function PaperPage() {
 
             <aside className="order-first space-y-3 lg:sticky lg:top-20 lg:order-none lg:self-start">
               <h2 className="flex items-center gap-2 font-medium"><Icon name="bolt" className="h-4 w-4 text-gold" />New order</h2>
+              {state.locked && (
+                <p role="status" className="rounded-xl border border-border bg-surface p-3 text-sm text-muted">
+                  {state.locked} <Link href="/paper/prop" className="text-gold underline-offset-2 hover:underline">Go to the challenge page</Link>
+                </p>
+              )}
               <Ticket state={state} market={market} profile={profile} busy={busy} setBusy={setBusy}
                 onPlaced={async (msg) => { await load(); setTab((t) => (t === "report" || t === "history" ? "positions" : t)); if (msg) say(msg, "up"); }} />
               <p className="text-xs leading-relaxed text-muted">
