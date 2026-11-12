@@ -53,6 +53,15 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
   starts on a fresh account. A live rule panel on the paper page warns about trades without stops or stops that would
   break a limit, links the lesson for the rule at risk, and a pass gives a shareable certificate image. Balance and
   leverage are locked during a challenge; starting over or leaving ends it.
+- **Daily Candle** (`api/app/daily.py`, home page): one real moment of gold history a day, the same for everyone. The
+  chart stops at an hour where the next 12 hours moved a lot (chosen once per day from 40 seeded guesses and stored);
+  the date and price level are hidden until the player picks buy, sell or wait. Then the next 12 hours play out, with
+  the real date, what $1,000 would have made, the worst move against the call and the crowd split. Signed-in plays
+  are kept (one a day) for a streak; signed-out plays are answered and remembered in the browser.
+- **Money Mirror** (`web/src/components/MoneyMirror.tsx`): the user names what they might really trade with, their
+  monthly pay and something they are saving for, in their own currency (saved as the `mirror` pref). The order ticket
+  then shows each stop as real money, hours of work and a share of the goal, and the home desk shows paper results so
+  far as a goal jar.
 - **Trade log** (`api/app/trades.py`): manual entry or CSV import (MetaTrader 4/5 and most broker exports; gold
   rows only; re-imports skip known tickets). Produces the same report as a backtest (`api/app/report.py`).
 

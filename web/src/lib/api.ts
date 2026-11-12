@@ -587,9 +587,22 @@ export type Lesson = LessonSummary & { body: string[]; next: string | null };
 export type LessonProgress = Record<string, { return_pct: number; trades: number; completed_at: string }>;
 export type ChartMarker = { t: number; title: string; kind: "fed" | "inflation" | "jobs" | "growth" | "dollar" | "shock" | "other"; impact: string; why: string; history: boolean };
 
+export type DailyChoice = "buy" | "sell" | "wait";
+export type LevelBar = { o: number; h: number; l: number; c: number };
+export type DailyResult = {
+  choice: DailyChoice; right: boolean; pnl_1000: number; against_pct: number;
+  end_price: number; move_pct: number; high_pct: number; low_pct: number; best: DailyChoice;
+  price: number; at: number; future: LevelBar[]; symbol: string;
+  crowd: { buy: number; sell: number; wait: number; total: number };
+  you: { streak: number; played: number; right: number } | null;
+};
+export type DailyCandle = { day: string; number: number; tf: string; horizon: number; bars: LevelBar[]; played: DailyResult | null };
+
 export const api = {
+  daily: () => call<DailyCandle>("/daily"),
+  playDaily: (choice: DailyChoice) => call<DailyResult>("/daily", { method: "POST", body: JSON.stringify({ choice }) }),
   prefs: () => call<Record<string, unknown>>("/prefs"),
-  setPref: (key: "drawings" | "indicators" | "chart_events" | "trading", value: unknown) =>
+  setPref: (key: "drawings" | "indicators" | "chart_events" | "trading" | "mirror", value: unknown) =>
     call<{ ok: boolean }>(`/prefs/${key}`, { method: "PUT", body: JSON.stringify({ value }) }),
   markers: (start: number, end: number, scheduled = true) =>
     call<ChartMarker[]>(`/calendar/markers?start=${start}&end=${end}&scheduled=${scheduled}`),
