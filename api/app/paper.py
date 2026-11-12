@@ -650,6 +650,10 @@ def protect(pid: int, body: ProtectIn, user: UserOut = Depends(current_user)):
             _check_protection(p["side"], _exit_price(p["side"], price["bid"], inst), sl, body.take_profit)
         row = c.execute(f"UPDATE paper_positions SET stop_loss = %s, take_profit = %s, trail = %s WHERE id = %s "
                         f"RETURNING {POS_COLS}", (sl, body.take_profit, trail, pid)).fetchone()
+        # The coach flags a stop moved further from the entry (or removed): giving a loser more room.
+        old = p["stop_loss"]
+        if old is not None and (sl is None or (sl < old if p["side"] == "long" else sl > old)):
+            c.execute("UPDATE paper_positions SET stop_widened = true WHERE id = %s", (pid,))
     return {"position": row}
 
 
