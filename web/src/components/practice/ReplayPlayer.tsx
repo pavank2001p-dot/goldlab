@@ -11,30 +11,105 @@ import { useThemeKey } from "@/lib/theme";
 import { toast } from "../Toaster";
 import { Icon } from "../ui";
 
-const SPEEDS = [1, 2, 4, 8];
+const SPEEDS = [1, 2, 4, 8, 16];
+const TF_NAME: Record<string, string> = { "1h": "Hourly", "4h": "4-hour", "1d": "Daily" };
 const field = "w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm tabular-nums outline-none focus:border-gold";
 
 type Open = Omit<ReplayTradeIn, "exit_bar">;
+/** Everything needed to resume a session where it was left. */
+export type PlayerState = { k: number; done: ReplaySettled[]; pos: Open | null; units: string; stopDist: string; targetDist: string };
+export type Higher = { tf: string; seconds: number; context: ReplayBar[] };
+
+/** Higher-timeframe candles built from the base candles shown so far; the last one is still forming. */
+function aggregate(bars: ReplayBar[], seconds: number): ReplayBar[] {
+  const out: ReplayBar[] = [];
+  for (const b of bars) {
+    const t = b.t - (b.t % seconds);
+    const last = out[out.length - 1];
+    if (last && last.t === t) { last.h = Math.max(last.h, b.h); last.l = Math.min(last.l, b.l); last.c = b.c; }
+    else out.push({ t, o: b.o, h: b.h, l: b.l, c: b.c });
+  }
+  return out;
+}
+
+function chartOptions(blind: boolean) {
+  const css = getComputedStyle(document.documentElement);
+  const v = (n: string) => css.getPropertyValue(n).trim();
+  return {
+    v,
+    opts: {
+      autoSize: true,
+      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: v("--muted"), attributionLogo: false },
+      grid: { vertLines: { visible: false }, horzLines: { color: v("--border") } },
+      rightPriceScale: { borderVisible: false },
+      timeScale: { borderVisible: false, timeVisible: true, rightOffset: 8, ...(blind ? { tickMarkFormatter: () => "" } : {}) },
+      localization: { locale: "en-US", ...(blind ? { timeFormatter: () => "" } : {}) },
+    },
+  };
+}
+
+/** The higher timeframe beside the replay, revealed in step with it. */
+function HigherChart({ higher, shown, blind, label }: { higher: Higher; shown: ReplayBar[]; blind: boolean; label: string }) {
+  const box = useRef<HTMLDivElement>(null);
+  const ref = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const themeKey = useThemeKey();
+  useEffect(() => {
+    const { v, opts } = chartOptions(blind);
+    const chart = createChart(box.current!, opts);
+    ref.current = chart.addSeries(CandlestickSeries, {
+      upColor: v("--up"), downColor: v("--down"), borderVisible: false, wickUpColor: v("--up"), wickDownColor: v("--down"), priceLineColor: v("--gold"),
+    });
+    chartRef.current = chart;
+    return () => { chart.remove(); ref.current = null; chartRef.current = null; };
+  }, [themeKey, blind]);
+  const data = useMemo(() => {
+    const own = aggregate(shown, higher.seconds);
+    const first = own[0]?.t ?? Infinity;
+    return [...higher.context.filter((b) => b.t < first), ...own];
+  }, [shown, higher]);
+  useEffect(() => {
+    ref.current?.setData(data.map((b) => ({ time: b.t as UTCTimestamp, open: b.o, high: b.h, low: b.l, close: b.c })));
+    chartRef.current?.timeScale().scrollToRealTime();
+  }, [data, themeKey, blind]);
+  return (
+    <div className="flex h-full flex-col">
+      <p className="border-b border-border px-3 py-1.5 text-xs text-muted">{label} · the last candle is still forming</p>
+      <div ref={box} className="min-h-0 flex-1" />
+    </div>
+  );
+}
 
 /** Reveals past candles one at a time and lets the user trade them with virtual money.
  *  With riskPct set (the challenge), every trade needs a stop that risks no more than that share of the balance. */
-export default function ReplayPlayer({ bars, context, balance, leverage, riskPct, onFinish, height = 420 }: {
+export default function ReplayPlayer({ bars, context, balance, leverage, riskPct, onFinish, height = 420, blind = false, higher, initial, onState }: {
   bars: ReplayBar[]; context: ReplayBar[]; balance: number; leverage: number; riskPct?: number;
   onFinish: (trades: ReplayTradeIn[], done: ReplaySettled[]) => void; height?: number;
+  /** Hide dates and times until the replay ends, so memory of what happened can't steer the trades. */
+  blind?: boolean;
+  /** A higher timeframe shown beside the replay, built from the same candles as they appear. */
+  higher?: Higher;
+  /** Where a saved session was left, and a callback with the state whenever it changes. */
+  initial?: Partial<PlayerState>;
+  onState?: (s: PlayerState) => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const chartRef = useRef<{ chart: IChartApi; series: ISeriesApi<"Candlestick">; markers: ISeriesMarkersPluginApi<Time> } | null>(null);
   const lines = useRef<IPriceLine[]>([]);
   const themeKey = useThemeKey();
-  const [k, setK] = useState(1); // bars revealed
+  const [k, setK] = useState(Math.min(Math.max(initial?.k ?? 1, 1), bars.length)); // bars revealed
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(2);
-  const [pos, setPos] = useState<Open | null>(null);
-  const [done, setDone] = useState<ReplaySettled[]>([]);
+  const [pos, setPos] = useState<Open | null>(initial?.pos ?? null);
+  const [done, setDone] = useState<ReplaySettled[]>(initial?.done ?? []);
   const [finished, setFinished] = useState(false);
-  const [units, setUnits] = useState("10");
-  const [stopDist, setStopDist] = useState(riskPct ? "5" : "");
-  const [targetDist, setTargetDist] = useState("");
+  const [units, setUnits] = useState(initial?.units ?? "10");
+  const [stopDist, setStopDist] = useState(initial?.stopDist ?? (riskPct ? "5" : ""));
+  const [targetDist, setTargetDist] = useState(initial?.targetDist ?? "");
+  const hide = blind && !finished;
+  useEffect(() => {
+    if (!finished) onState?.({ k, done, pos, units, stopDist, targetDist });
+  }, [k, done, pos, units, stopDist, targetDist, finished, onState]);
   const [riskInput, setRiskInput] = useState(String(Math.min(riskPct ?? 1, 1)));
   const [error, setError] = useState<string | null>(null);
 
@@ -45,26 +120,18 @@ export default function ReplayPlayer({ bars, context, balance, leverage, riskPct
   const equity = cash + openPnl;
   const wins = done.filter((t) => t.pnl > 0).length;
 
-  // Chart, rebuilt with the theme.
+  // Chart, rebuilt with the theme (and when a blind replay ends, to show its dates).
   useEffect(() => {
     const el = box.current!;
-    const css = getComputedStyle(document.documentElement);
-    const v = (n: string) => css.getPropertyValue(n).trim();
-    const chart = createChart(el, {
-      autoSize: true,
-      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: v("--muted"), attributionLogo: false },
-      grid: { vertLines: { visible: false }, horzLines: { color: v("--border") } },
-      rightPriceScale: { borderVisible: false },
-      timeScale: { borderVisible: false, timeVisible: true, rightOffset: 8 },
-      localization: { locale: "en-US" },
-    });
+    const { v, opts } = chartOptions(hide);
+    const chart = createChart(el, opts);
     const series = chart.addSeries(CandlestickSeries, {
       upColor: v("--up"), downColor: v("--down"), borderVisible: false, wickUpColor: v("--up"), wickDownColor: v("--down"),
       priceLineColor: v("--gold"),
     });
     chartRef.current = { chart, series, markers: createSeriesMarkers(series, []) };
     return () => { chart.remove(); chartRef.current = null; lines.current = []; };
-  }, [themeKey]);
+  }, [themeKey, hide]);
 
   // Candles, markers and the open trade's lines.
   useEffect(() => {
@@ -96,7 +163,7 @@ export default function ReplayPlayer({ bars, context, balance, leverage, riskPct
     }
     if (k <= 2 || finished) c.chart.timeScale().fitContent();
     else c.chart.timeScale().scrollToRealTime();
-  }, [k, done, pos, bars, context, themeKey, finished]);
+  }, [k, done, pos, bars, context, themeKey, finished, hide]);
 
   // Ends the replay, closing any open trade at the close of the bar given.
   const finish = useCallback((openTrade: Open | null, closed: ReplaySettled[], at: number) => {
@@ -185,7 +252,8 @@ export default function ReplayPlayer({ bars, context, balance, leverage, riskPct
   });
 
   const pct = (k / bars.length) * 100;
-  const when = new Date(bars[i].t * 1000).toLocaleString("en-GB", { timeZone: "UTC", weekday: "short", hour: "2-digit", minute: "2-digit" });
+  const when = hide ? "Dates hidden" : new Date(bars[i].t * 1000).toLocaleString("en-GB", { timeZone: "UTC", weekday: "short", hour: "2-digit", minute: "2-digit", ...(higher ? { day: "numeric", month: "short", year: "numeric" } : {}) }) + " UTC";
+  const shownBars = useMemo(() => bars.slice(0, k), [bars, k]);
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
@@ -203,10 +271,19 @@ export default function ReplayPlayer({ bars, context, balance, leverage, riskPct
                 className={`rounded-full px-2 py-0.5 tabular-nums ${speed === s ? "bg-gold text-black" : "text-muted hover:text-foreground"}`}>{s}×</button>
             ))}
           </div>
-          <span className="ml-auto text-xs tabular-nums text-muted">{when} UTC · candle {k} of {bars.length}</span>
+          <span className="ml-auto text-xs tabular-nums text-muted">{when} · candle {k} of {bars.length}</span>
         </div>
         <div className="h-1 bg-border/60"><div className="h-full bg-gold transition-[width] duration-200" style={{ width: `${pct}%` }} /></div>
-        <div ref={box} style={{ "--h": `${height}px` } as React.CSSProperties} className="h-[300px] w-full lg:h-[var(--h)]" />
+        {higher ? (
+          <div style={{ "--h": `${height}px` } as React.CSSProperties} className="grid lg:h-[var(--h)] lg:grid-cols-[3fr_2fr]">
+            <div ref={box} className="h-[300px] w-full lg:h-full" />
+            <div className="h-[220px] border-t border-border lg:h-full lg:border-l lg:border-t-0">
+              <HigherChart higher={higher} shown={shownBars} blind={hide} label={`${TF_NAME[higher.tf] ?? higher.tf} candles`} />
+            </div>
+          </div>
+        ) : (
+          <div ref={box} style={{ "--h": `${height}px` } as React.CSSProperties} className="h-[300px] w-full lg:h-[var(--h)]" />
+        )}
         <p className="border-t border-border px-3 py-2 text-[11px] text-muted">
           Keys: space plays or pauses, → shows the next candle, B buys, S sells, C closes. Fills are at the candle close, with no spread.
         </p>

@@ -75,6 +75,10 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
   orders (`oco_with`), one-click trading (skips the review step; saved to the account), and sizing by risk % right in
   the order ticket from the stop distance. Closed paper trades get the same report and profile fit as the
   trade log. No real money or broker is involved.
+- **Manual backtesting** (`api/app/sessions.py`, `/paper/sessions`): replay any date range candle by candle at 5m, 15m
+  or 1h (up to 3,000 candles), with the 1h, 4h or daily chart beside it built from the same candles as they appear.
+  Blind mode hides dates and times until the session ends, and progress saves as you go, so a session can be paused
+  and resumed on any device. Finished sessions are settled on the server with the same rules as the replay.
 - **Risk quiz** (`api/app/risk.py`): 17 questions in five parts place a user as conservative, moderate or aggressive,
   with risk-per-trade, drawdown and leverage limits.
 - **Profile fit** (`api/app/fit.py`): every backtest and the trade log are checked against the user's

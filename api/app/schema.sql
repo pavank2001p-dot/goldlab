@@ -318,3 +318,20 @@ CREATE TABLE IF NOT EXISTS prop_challenges (
 CREATE INDEX IF NOT EXISTS prop_challenges_user_idx ON prop_challenges (user_id, started_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS prop_challenges_active_idx ON prop_challenges (user_id) WHERE status = 'active';
 ALTER TABLE paper_accounts ADD COLUMN IF NOT EXISTS challenge_id BIGINT;
+
+-- Manual backtesting sessions (app/sessions.py): a replay over any range, paused and resumed from saved state.
+CREATE TABLE IF NOT EXISTS replay_sessions (
+    id         BIGSERIAL PRIMARY KEY,
+    user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name       TEXT NOT NULL DEFAULT '',
+    tf         TEXT NOT NULL,
+    start_at   TIMESTAMPTZ NOT NULL,
+    end_at     TIMESTAMPTZ NOT NULL,
+    blind      BOOLEAN NOT NULL DEFAULT false,
+    state      JSONB,                              -- candles shown, trades, open trade, ticket settings
+    finished   BOOLEAN NOT NULL DEFAULT false,
+    result     JSONB,                              -- the server's settlement once finished
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS replay_sessions_user_idx ON replay_sessions (user_id, updated_at DESC);
