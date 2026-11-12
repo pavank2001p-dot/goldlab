@@ -22,6 +22,8 @@ SYMBOL = "XAUUSD"
 HISTORY_SINCE = date.fromisoformat(os.getenv("HISTORY_SINCE", "2003-05-01"))
 # Short-timeframe history kept for the chart: minute bars and one-second bars.
 MINUTE_DAYS = int(os.getenv("MINUTE_DAYS", "60"))
+# Markets other than gold keep fewer minute bars: they take most of the database (one row a minute each).
+MARKET_MINUTE_DAYS = int(os.getenv("MARKET_MINUTE_DAYS", "14"))
 SECOND_DAYS = int(os.getenv("SECOND_DAYS", "2"))
 # Markets other than gold: hourly history from this date (their feed mostly starts around 2017
 # for stocks), and which symbols also keep one-second bars (they take the most space).
@@ -41,6 +43,23 @@ CALENDAR_FEED_URL = os.getenv("CALENDAR_FEED_URL", "https://nfs.faireconomy.medi
 # Week 4: AI assistant. Uses ANTHROPIC_API_KEY; each user gets a fixed number of questions per UTC day.
 ASSISTANT_MODEL = os.getenv("ASSISTANT_MODEL", "claude-opus-5-5")
 ASSISTANT_DAILY_LIMIT = int(os.getenv("ASSISTANT_DAILY_LIMIT", "20"))
+
+# Account emails and Google sign-in.
+# Public address of the site (no trailing slash). Links in emails and the Google redirect use it.
+APP_URL = os.getenv("APP_URL", "http://localhost:3000").rstrip("/")
+# Email: "resend", "smtp" or "console" (prints the email to the API log; the default with no key).
+EMAIL_PROVIDER = os.getenv("EMAIL_PROVIDER", "resend" if os.getenv("RESEND_API_KEY") else "console").strip().lower()
+EMAIL_FROM = os.getenv("EMAIL_FROM", "Trading Lab <onboarding@resend.dev>")
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+SMTP_HOST = os.getenv("SMTP_HOST", "")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+VERIFY_TOKEN_HOURS = int(os.getenv("VERIFY_TOKEN_HOURS", "48"))
+RESET_TOKEN_MINUTES = int(os.getenv("RESET_TOKEN_MINUTES", "60"))
+# Google sign-in stays hidden until both are set. Authorised redirect URI: {APP_URL}/api/auth/google/callback
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 
 if COOKIE_SECURE and JWT_SECRET.startswith("dev-only"):
     raise RuntimeError("Set JWT_SECRET to a long random value in production")

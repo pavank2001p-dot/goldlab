@@ -1,5 +1,6 @@
 "use client";
 
+import { MirrorLine } from "@/components/MoneyMirror";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import FitPanel from "@/components/FitPanel";
@@ -93,6 +94,14 @@ function Quote({ price, market }: { price: PaperState["price"]; market: Market }
         <p className="text-[11px] uppercase tracking-wide text-muted">Buy at (ask)</p>
         <p className={`text-xl font-semibold tabular-nums transition-colors ${cls}`}>{px(price.ask, market.decimals)}</p>
       </div>
+      {price.wide && price.open && (
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-gold/15 px-2.5 py-1 text-xs text-gold"
+          title="Spreads widen at real brokers around these times; stops can also fill a little past their price around releases.">
+          <Icon name="bolt" className="h-3 w-3" />
+          {price.wide === "news" ? "Big release: spread widened" : "Daily rollover: spread widened"}
+          {price.spread != null ? ` to ${px(price.spread, market.decimals)}` : ""}
+        </span>
+      )}
       <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ${price.open ? "bg-up/15 text-up" : "bg-border text-muted"}`}>
         <span className={`h-1.5 w-1.5 rounded-full ${price.open ? "breathe bg-up" : "bg-muted"}`} />
         {price.open ? (price.source === "live" ? "Live" : `Updated ${ago(price.age_seconds)}`) : `Market closed · last price ${ago(price.age_seconds)}`}
@@ -497,6 +506,7 @@ function Ticket({ state, market, profile, onPlaced, busy, setBusy }: {
           </div>
         )}
       </div>
+      <MirrorLine riskPct={riskPct} />
 
       {error && <p className="text-sm text-down">{error}</p>}
       {closedForMarket && (
@@ -657,6 +667,16 @@ function Settings({ state, busy, act, onClose }: {
           <input value={custom} onChange={(e) => setCustom(e.target.value)} inputMode="numeric" placeholder={`Other, up to ${st.max_leverage}`} className={`${input} w-44`} aria-label="Other leverage" />
           <button disabled={busy || !custom} className="rounded-lg border border-border px-3 text-xs transition hover:border-gold disabled:opacity-50">Set</button>
         </form>
+        <label className="mt-4 flex cursor-pointer items-start gap-2 text-sm">
+          <input type="checkbox" disabled={busy} checked={st.realistic_fills ?? true} className="mt-1 accent-[var(--gold)]"
+            onChange={(e) => act(() => api.paperRealisticFills(e.target.checked), e.target.checked ? "Realistic fills on" : "Realistic fills off")} />
+          <span>Realistic fills
+            <span className="block text-xs text-muted">
+              Like a real broker, spreads widen about {st.rollover_spread_x ?? 3}× at the 5pm New York rollover and {st.news_spread_x ?? 4}× around
+              high-impact releases, and stops can fill a little past their price during a release.
+            </span>
+          </span>
+        </label>
       </section>
 
       <section>

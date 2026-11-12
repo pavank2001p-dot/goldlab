@@ -14,12 +14,20 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
 
 - **Chart** (`web/src/components/PriceChart.tsx`, `api/app/prices.py`, `api/app/live.py`): 13 timeframes
   from 1 second to 1 month, zoom, full screen and a live price. Hourly and daily bars go back to `HISTORY_SINCE` (2003-05-01);
-  minute bars cover the last `MINUTE_DAYS` (60) and one-second bars the last `SECOND_DAYS` (2), from
+  minute bars cover the last `MINUTE_DAYS` (60) for gold and `MARKET_MINUTE_DAYS` (14) for other markets, and one-second bars the last `SECOND_DAYS` (2), from
   Dukascopy. Other timeframes are aggregated on request. Live quotes stream from Finnhub's websocket
   (OANDA:XAU_USD) when `FINNHUB_API_KEY` is set (turn off with `LIVE_PRICES=false`); they move the newest
   candle and are saved as 1s/1m/1h bars until Dukascopy's data for that hour replaces them. The **All**
   button shows every month since 1833 on a log scale (see Data below).
-- **Accounts**: email and password sign-up, cookie sessions.
+- **Accounts** (`api/app/auth.py`, `api/app/mailer.py`): email and password sign-up, cookie sessions, email
+  confirmation, password reset by email link and Google sign-in. Links are single-use and stored only as a
+  SHA-256 hash; confirm links last `VERIFY_TOKEN_HOURS` (48), reset links `RESET_TOKEN_MINUTES` (60), and each
+  kind is sent at most once a minute per account. A reset ends every other session. "Forgot password" answers
+  the same whether or not the account exists. Google sign-in (OpenID Connect code flow with PKCE) links to an
+  existing account with the same Google-confirmed email; if that account's email was never confirmed, its
+  password is removed so whoever registered it first can't get back in. Unconfirmed accounts aren't locked out
+  of anything; the account page asks them to confirm. Email goes through `EMAIL_PROVIDER`: `resend`
+  (recommended), `smtp` (any SMTP service) or `console`, which prints emails to the API log for local work.
 - **Backtests** (`api/app/backtest.py`): 23 strategies. Trend following: moving-average crossover, triple moving
   average, price vs moving average, channel breakout, MACD, Supertrend, Parabolic SAR, ADX, Keltner breakout, momentum,
   Ichimoku cloud, Heikin-Ashi, Aroon, Bollinger squeeze breakout and inside-bar breakout. Mean reversion: RSI, RSI(2)
@@ -45,6 +53,15 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
   starts on a fresh account. A live rule panel on the paper page warns about trades without stops or stops that would
   break a limit, links the lesson for the rule at risk, and a pass gives a shareable certificate image. Balance and
   leverage are locked during a challenge; starting over or leaving ends it.
+- **Daily Candle** (`api/app/daily.py`, home page): one real moment of gold history a day, the same for everyone. The
+  chart stops at an hour where the next 12 hours moved a lot (chosen once per day from 40 seeded guesses and stored);
+  the date and price level are hidden until the player picks buy, sell or wait. Then the next 12 hours play out, with
+  the real date, what $1,000 would have made, the worst move against the call and the crowd split. Signed-in plays
+  are kept (one a day) for a streak; signed-out plays are answered and remembered in the browser.
+- **Money Mirror** (`web/src/components/MoneyMirror.tsx`): the user names what they might really trade with, their
+  monthly pay and something they are saving for, in their own currency (saved as the `mirror` pref). The order ticket
+  then shows each stop as real money, hours of work and a share of the goal, and the home desk shows paper results so
+  far as a goal jar.
 - **Trade log** (`api/app/trades.py`): manual entry or CSV import (MetaTrader 4/5 and most broker exports; gold
   rows only; re-imports skip known tickets). Produces the same report as a backtest (`api/app/report.py`).
 
@@ -75,6 +92,10 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
   orders (`oco_with`), one-click trading (skips the review step; saved to the account), and sizing by risk % right in
   the order ticket from the stop distance. Closed paper trades get the same report and profile fit as the
   trade log. No real money or broker is involved.
+- **Manual backtesting** (`api/app/sessions.py`, `/paper/sessions`): replay any date range candle by candle at 5m, 15m
+  or 1h (up to 3,000 candles), with the 1h, 4h or daily chart beside it built from the same candles as they appear.
+  Blind mode hides dates and times until the session ends, and progress saves as you go, so a session can be paused
+  and resumed on any device. Finished sessions are settled on the server with the same rules as the replay.
 - **Risk quiz** (`api/app/risk.py`): 17 questions in five parts place a user as conservative, moderate or aggressive,
   with risk-per-trade, drawdown and leverage limits.
 - **Profile fit** (`api/app/fit.py`): every backtest and the trade log are checked against the user's
@@ -171,6 +192,11 @@ latest bars; set `ENABLE_SCHEDULER=true` to have the API do this every `UPDATE_I
 2. Variables: `DATABASE_URL=${{Postgres.DATABASE_URL}}`, `JWT_SECRET=<long random string>`,
    `COOKIE_SECURE=true`, `PRICE_SOURCE=dukascopy`, `ENABLE_SCHEDULER=true`, and for news and the
    assistant `FINNHUB_API_KEY` and `ANTHROPIC_API_KEY`. Optional: `ASSISTANT_DAILY_LIMIT` (default 20).
+   For account emails: `APP_URL=https://<your-site>`, `RESEND_API_KEY` and `EMAIL_FROM` (an address on a
+   domain verified in Resend, e.g. `Trading Lab <no-reply@yourdomain.com>`). For Google sign-in:
+   `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` from a Google Cloud OAuth client (type "Web application")
+   whose authorised redirect URI is `https://<your-site>/api/auth/google/callback`. The Google button only
+   appears once both are set.
 3. First boot starts the backfill from 2003 in the background; the chart fills in as it runs. A database
    first filled from 2010 is extended back to `HISTORY_SINCE` once, on the next scheduled update.
 

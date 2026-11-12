@@ -441,7 +441,8 @@ def load_fine(source: str, inst: Instrument = GOLD) -> int:
     now = datetime.now(UTC)
     total = 0
     for tf, days, step, fetch in (
-        ("1m", config.MINUTE_DAYS, 60, dukascopy_minutes),
+        ("1m", config.MINUTE_DAYS if inst.symbol == GOLD.symbol else min(config.MINUTE_DAYS, config.MARKET_MINUTE_DAYS),
+         60, dukascopy_minutes),
         ("1s", config.SECOND_DAYS if _keeps_seconds(inst) else 0, 1, dukascopy_seconds),
     ):
         if days <= 0:

@@ -5,6 +5,25 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Accounts made with Google have no password until they set one through a reset link.
+ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS google_sub TEXT;
+-- Bumped on password reset so older sessions stop working.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0;
+CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub_idx ON users (google_sub) WHERE google_sub IS NOT NULL;
+
+-- One-time links sent by email. Only a SHA-256 of the token is stored.
+CREATE TABLE IF NOT EXISTS auth_tokens (
+    token_hash TEXT PRIMARY KEY,
+    user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    purpose    TEXT NOT NULL CHECK (purpose IN ('verify', 'reset')),
+    email      TEXT NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    used_at    TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS auth_tokens_user_idx ON auth_tokens (user_id, purpose, created_at DESC);
 
 -- One row per bar. tf is '1s', '1m', '1h' or '1d'; ts is the bar's open time in UTC.
 CREATE TABLE IF NOT EXISTS candles (
@@ -289,6 +308,9 @@ CREATE TABLE IF NOT EXISTS coach_reports (
     PRIMARY KEY (user_id, week)
 );
 
+-- Realistic fills (app/fills.py): wider spreads and stop slippage around big releases and the daily rollover.
+ALTER TABLE paper_accounts ADD COLUMN IF NOT EXISTS realistic_fills BOOLEAN NOT NULL DEFAULT true;
+
 -- Prop challenges: evaluation rules (profit target, daily and overall loss limits, minimum trading days)
 -- run on the paper account. paper_accounts.challenge_id is the challenge the account is in, if any.
 CREATE TABLE IF NOT EXISTS prop_challenges (
@@ -315,3 +337,38 @@ CREATE TABLE IF NOT EXISTS prop_challenges (
 CREATE INDEX IF NOT EXISTS prop_challenges_user_idx ON prop_challenges (user_id, started_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS prop_challenges_active_idx ON prop_challenges (user_id) WHERE status = 'active';
 ALTER TABLE paper_accounts ADD COLUMN IF NOT EXISTS challenge_id BIGINT;
+
+-- Manual backtesting sessions (app/sessions.py): a replay over any range, paused and resumed from saved state.
+CREATE TABLE IF NOT EXISTS replay_sessions (
+    id         BIGSERIAL PRIMARY KEY,
+    user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name       TEXT NOT NULL DEFAULT '',
+    tf         TEXT NOT NULL,
+    start_at   TIMESTAMPTZ NOT NULL,
+    end_at     TIMESTAMPTZ NOT NULL,
+    blind      BOOLEAN NOT NULL DEFAULT false,
+    state      JSONB,                              -- candles shown, trades, open trade, ticket settings
+    finished   BOOLEAN NOT NULL DEFAULT false,
+    result     JSONB,                              -- the server's settlement once finished
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS replay_sessions_user_idx ON replay_sessions (user_id, updated_at DESC);
+
+-- Daily Candle (app/daily.py): one hidden moment of gold history a day, chosen once and kept.
+CREATE TABLE IF NOT EXISTS daily_candles (
+    day       DATE PRIMARY KEY,
+    symbol    TEXT NOT NULL,
+    frozen_ts BIGINT NOT NULL                     -- the last hourly bar shown before the choice
+);
+
+-- One answer per signed-in player per day, for the streak and the crowd split.
+CREATE TABLE IF NOT EXISTS daily_candle_plays (
+    user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    day        DATE NOT NULL,
+    choice     TEXT NOT NULL CHECK (choice IN ('buy', 'sell', 'wait')),
+    correct    BOOLEAN NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, day)
+);
+CREATE INDEX IF NOT EXISTS daily_candle_plays_day_idx ON daily_candle_plays (day);

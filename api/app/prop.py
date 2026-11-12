@@ -110,7 +110,7 @@ class Rules:
         for p in book.positions:
             pi = paper._of(p)
             if p["symbol"] == inst.symbol and p["opened_at"] < at:
-                x = b["low"] if p["side"] == "long" else b["high"] + inst.spread
+                x = b["low"] if p["side"] == "long" else b["high"] + book.cond.spread(inst, at)
             else:
                 x = paper._exit_price(p["side"], book.bids.get(p["symbol"], p["entry_price"]), pi)
             exits[p["id"]] = x

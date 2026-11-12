@@ -30,6 +30,7 @@ export const GROUPS: { label: string; items: Item[] }[] = [
       { href: "/backtest", label: "Backtest", icon: "backtest", blurb: "Run one strategy on past prices" },
       { href: "/strategies/builder", label: "Strategy builder", icon: "bolt", blurb: "Combine indicators into your own rules" },
       { href: "/scenarios", label: "Scenarios", icon: "scenarios", blurb: "The range a trade could take from today" },
+      { href: "/paper/sessions", label: "Manual backtesting", icon: "clock", blurb: "Replay any dates with a higher timeframe, blind if you like" },
     ],
   },
   {

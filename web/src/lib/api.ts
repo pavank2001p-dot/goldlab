@@ -1,4 +1,4 @@
-export type User = { id: number; email: string; name: string };
+export type User = { id: number; email: string; name: string; email_verified: boolean; has_password: boolean; google: boolean };
 export type Bar = { t: number; o: number; h: number; l: number; c: number; v: number };
 export type Timeframe = "1h" | "1d";
 export type ChartTf = "1s" | "5s" | "15s" | "30s" | "1m" | "5m" | "15m" | "30m" | "1h" | "4h" | "1d" | "1w" | "1mo";
@@ -126,6 +126,8 @@ export type Stats = {
   time_in_market_pct?: number;
   bars?: number;
   wiped_out?: boolean;
+  /** With realistic fills: stops that slipped because a big release fell inside their bar. */
+  slipped_stops?: number;
 };
 
 export type Report = {
@@ -151,6 +153,8 @@ export type BacktestParams = {
   stop_loss_pct?: number | null;
   take_profit_pct?: number | null;
   size_pct?: number | null;
+  /** Wider spreads at the rollover and around big releases, and stops that slip around releases. */
+  realistic_fills?: boolean;
 };
 
 export type Backtest = Report & { id: number; created_at: string; params: BacktestParams; period?: { start: number; end: number } };
@@ -261,6 +265,8 @@ export type Scenario = {
 
 export type PaperPrice = {
   symbol?: string; bid: number; ask: number; t: number; age_seconds: number; open: boolean; in_hours?: boolean; source: "live" | "bars";
+  /** The spread right now, and why it is wider than usual, if it is. */
+  spread?: number; wide?: "news" | "rollover" | null;
 };
 export type PaperPosition = {
   id: number;
@@ -334,6 +340,7 @@ export type PaperState = {
     spread: number; swap_long: number | null; swap_short: number | null; margin_rate_pct: number; stop_out_pct: number; margin_call_pct?: number;
     leverage: number; leverages: number[]; max_leverage: number; max_balance: number;
     market_leverage?: number; market_max_leverage?: number;
+    realistic_fills?: boolean; spread_now?: number; wide?: "news" | "rollover" | null; news_spread_x?: number; rollover_spread_x?: number;
   };
 };
 export type PropHelp = { tip: string; lesson: { id: string; title: string; takeaway: string } | null };
@@ -566,6 +573,16 @@ export type Replay = {
   tf: ReplayTf; day: string; start: number; end: number; context: ReplayBar[]; bars: ReplayBar[];
   balance: number; leverage: number; range: { first: string; last: string };
 };
+export type SessionTf = ReplayTf;
+export type SessionSummary = {
+  id: number; name: string; tf: SessionTf; blind: boolean; finished: boolean; start: string | null; end: string | null;
+  progress: { shown: number; trades: number }; result: ReplayScore | null; created_at: string; updated_at: string;
+};
+export type Session = SessionSummary & {
+  state: Record<string, unknown>; bars: ReplayBar[]; context: ReplayBar[];
+  htf: { tf: string; seconds: number; context: ReplayBar[] }; balance: number; leverage: number;
+};
+
 export type BoardRow = { rank: number; nickname: string | null; return_pct: number; max_drawdown_pct: number; trades: number; me: boolean };
 export type Board = { players: number; top: BoardRow[]; mine: (BoardRow & { public: boolean }) | null };
 export type Challenge = {
@@ -585,9 +602,22 @@ export type Lesson = LessonSummary & { body: string[]; next: string | null };
 export type LessonProgress = Record<string, { return_pct: number; trades: number; completed_at: string }>;
 export type ChartMarker = { t: number; title: string; kind: "fed" | "inflation" | "jobs" | "growth" | "dollar" | "shock" | "other"; impact: string; why: string; history: boolean };
 
+export type DailyChoice = "buy" | "sell" | "wait";
+export type LevelBar = { o: number; h: number; l: number; c: number };
+export type DailyResult = {
+  choice: DailyChoice; right: boolean; pnl_1000: number; against_pct: number;
+  end_price: number; move_pct: number; high_pct: number; low_pct: number; best: DailyChoice;
+  price: number; at: number; future: LevelBar[]; symbol: string;
+  crowd: { buy: number; sell: number; wait: number; total: number };
+  you: { streak: number; played: number; right: number } | null;
+};
+export type DailyCandle = { day: string; number: number; tf: string; horizon: number; bars: LevelBar[]; played: DailyResult | null };
+
 export const api = {
+  daily: () => call<DailyCandle>("/daily"),
+  playDaily: (choice: DailyChoice) => call<DailyResult>("/daily", { method: "POST", body: JSON.stringify({ choice }) }),
   prefs: () => call<Record<string, unknown>>("/prefs"),
-  setPref: (key: "drawings" | "indicators" | "chart_events" | "trading", value: unknown) =>
+  setPref: (key: "drawings" | "indicators" | "chart_events" | "trading" | "mirror", value: unknown) =>
     call<{ ok: boolean }>(`/prefs/${key}`, { method: "PUT", body: JSON.stringify({ value }) }),
   markers: (start: number, end: number, scheduled = true) =>
     call<ChartMarker[]>(`/calendar/markers?start=${start}&end=${end}&scheduled=${scheduled}`),
@@ -600,6 +630,15 @@ export const api = {
     call<Replay>(`/practice/replay?tf=${o.tf}${o.day ? `&day=${o.day}` : ""}`),
   replaySettle: (b: { tf: ReplayTf; start: number; end: number; trades: ReplayTradeIn[] }) =>
     call<ReplayScore>("/practice/replay/settle", { method: "POST", body: JSON.stringify(b) }),
+  sessions: () => call<SessionSummary[]>("/practice/sessions"),
+  session: (id: number) => call<Session>(`/practice/sessions/${id}`),
+  newSession: (b: { tf: SessionTf; start?: string | null; end?: string | null; blind: boolean; name?: string }) =>
+    call<Session>("/practice/sessions", { method: "POST", body: JSON.stringify(b) }),
+  saveSession: (id: number, state: unknown) =>
+    call<{ ok: boolean }>(`/practice/sessions/${id}`, { method: "PUT", body: JSON.stringify({ state }) }),
+  finishSession: (id: number, trades: ReplayTradeIn[]) =>
+    call<SessionSummary>(`/practice/sessions/${id}/finish`, { method: "POST", body: JSON.stringify({ trades }) }),
+  deleteSession: (id: number) => call<void>(`/practice/sessions/${id}`, { method: "DELETE" }),
   challenge: () => call<Challenge>("/practice/challenge"),
   enterChallenge: (b: { trades: ReplayTradeIn[]; public: boolean; nickname: string | null }) =>
     call<ReplayScore & { board: Board }>("/practice/challenge", { method: "POST", body: JSON.stringify(b) }),
@@ -632,6 +671,14 @@ export const api = {
   login: (email: string, password: string) =>
     call<User>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   logout: () => call<void>("/auth/logout", { method: "POST" }),
+  authConfig: () => call<{ google: boolean }>("/auth/config"),
+  forgotPassword: (email: string) =>
+    call<{ sent: boolean }>("/auth/password/forgot", { method: "POST", body: JSON.stringify({ email }) }),
+  resetPassword: (token: string, password: string) =>
+    call<User>("/auth/password/reset", { method: "POST", body: JSON.stringify({ token, password }) }),
+  verifyEmail: (token: string) =>
+    call<{ verified: boolean; email: string }>("/auth/verify", { method: "POST", body: JSON.stringify({ token }) }),
+  resendVerification: () => call<{ sent: boolean; already_verified?: boolean }>("/auth/verify/resend", { method: "POST" }),
   markets: () => call<MarketList>("/prices/markets"),
   summary: (symbol?: string) => call<Summary>(withSym("/prices/summary", symbol)),
   live: (symbol?: string) => call<LiveQuote>(withSym("/prices/live", symbol)),
@@ -679,6 +726,8 @@ export const api = {
     }),
   paperReset: (balance: number, leverage: number, symbol?: string) =>
     call<PaperState>(withSym("/paper/reset", symbol), { method: "POST", body: JSON.stringify({ balance, leverage }) }),
+  paperRealisticFills: (on: boolean, symbol?: string) =>
+    call<PaperState>(withSym("/paper/settings", symbol), { method: "PATCH", body: JSON.stringify({ realistic_fills: on }) }),
   paperLeverage: (leverage: number, symbol?: string) =>
     call<PaperState>(withSym("/paper/settings", symbol), { method: "PATCH", body: JSON.stringify({ leverage }) }),
   paperFunds: (amount: number, symbol?: string) =>

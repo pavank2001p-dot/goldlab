@@ -65,3 +65,19 @@ def test_historical_progress_ignores_live_bars(client, monkeypatch):
     ingest.load_fine("dukascopy")
     second = dict(calls)
     assert (datetime.now(UTC) - second["1m"]).total_seconds() < 2 * 3600 + 60
+
+
+def test_other_markets_keep_fewer_minute_bars(client, monkeypatch):
+    """Gold keeps MINUTE_DAYS of minute bars; other markets keep MARKET_MINUTE_DAYS, which keeps the database small."""
+    from app import config, instruments
+
+    starts = {}
+    monkeypatch.setattr(config, "MINUTE_DAYS", 60)
+    monkeypatch.setattr(config, "MARKET_MINUTE_DAYS", 14)
+    monkeypatch.setattr(ingest, "dukascopy_minutes", lambda s, e, i=None: starts.setdefault(i.symbol, s) and iter([]))
+    monkeypatch.setattr(ingest, "dukascopy_seconds", lambda s, e, i=None: iter([]))
+    other = next(i for i in instruments.ENABLED if i.symbol != ingest.GOLD.symbol)
+    ingest.load_fine("dukascopy", ingest.GOLD)
+    ingest.load_fine("dukascopy", other)
+    assert 59 <= (datetime.now(UTC) - starts[ingest.GOLD.symbol]).days <= 60
+    assert 13 <= (datetime.now(UTC) - starts[other.symbol]).days <= 14
