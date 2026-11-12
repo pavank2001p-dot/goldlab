@@ -8,6 +8,7 @@ import { Icon } from "./ui";
 import { api } from "@/lib/api";
 import { useUser } from "@/lib/useUser";
 import { APP_NAME, labName, useMarket } from "@/lib/markets";
+import { msg, useT, type T } from "@/lib/i18n";
 
 // Pages that follow the market picker, so the header names that market's lab there.
 const MARKET_PAGES = ["/chart", "/paper", "/backtest"];
@@ -17,41 +18,41 @@ type Item = { href: string; label: string; icon: string; blurb: string };
 /** Twelve tools grouped into four plain steps, so the bar stays short and each menu says what a page is for. */
 export const GROUPS: { label: string; items: Item[] }[] = [
   {
-    label: "Market",
+    label: msg("Market"),
     items: [
-      { href: "/chart", label: "Chart", icon: "candles", blurb: "Any market live, and gold back to 1833" },
-      { href: "/news", label: "News and calendar", icon: "news", blurb: "What's moving gold, and the Fed dates ahead" },
+      { href: "/chart", label: msg("Chart"), icon: "candles", blurb: msg("Any market live, and gold back to 1833") },
+      { href: "/news", label: msg("News and calendar"), icon: "news", blurb: msg("What's moving gold, and the Fed dates ahead") },
     ],
   },
   {
-    label: "Test ideas",
+    label: msg("Test ideas"),
     items: [
-      { href: "/strategies", label: "Strategy finder", icon: "trophy", blurb: "Strategies that stayed inside your limits" },
-      { href: "/backtest", label: "Backtest", icon: "backtest", blurb: "Run one strategy on past prices" },
-      { href: "/strategies/builder", label: "Strategy builder", icon: "bolt", blurb: "Combine indicators into your own rules" },
-      { href: "/scenarios", label: "Scenarios", icon: "scenarios", blurb: "The range a trade could take from today" },
-      { href: "/paper/sessions", label: "Manual backtesting", icon: "clock", blurb: "Replay any dates with a higher timeframe, blind if you like" },
+      { href: "/strategies", label: msg("Strategy finder"), icon: "trophy", blurb: msg("Strategies that stayed inside your limits") },
+      { href: "/backtest", label: msg("Backtest"), icon: "backtest", blurb: msg("Run one strategy on past prices") },
+      { href: "/strategies/builder", label: msg("Strategy builder"), icon: "bolt", blurb: msg("Combine indicators into your own rules") },
+      { href: "/scenarios", label: msg("Scenarios"), icon: "scenarios", blurb: msg("The range a trade could take from today") },
+      { href: "/paper/sessions", label: msg("Manual backtesting"), icon: "clock", blurb: msg("Replay any dates with a higher timeframe, blind if you like") },
     ],
   },
   {
-    label: "Practise",
+    label: msg("Practise"),
     items: [
-      { href: "/paper", label: "Paper trading", icon: "wallet", blurb: "Trade with virtual money, no risk" },
-      { href: "/learn", label: "Lessons", icon: "book", blurb: "Short stories from gold's history, then trade that week" },
-      { href: "/paper/replay", label: "Replay a day", icon: "clock", blurb: "Trade a past day candle by candle" },
-      { href: "/paper/prop", label: "Prop challenge", icon: "risk", blurb: "Hit a profit target inside daily and overall loss limits" },
-      { href: "/paper/challenge", label: "Weekly challenge", icon: "trophy", blurb: "Same day for everyone, with an opt-in leaderboard" },
-      { href: "/paper/agent", label: "Strategy agent", icon: "bolt", blurb: "Let a strategy trade on paper and learn why" },
-      { href: "/trades", label: "Trade log", icon: "trades", blurb: "Review your own real trades" },
+      { href: "/paper", label: msg("Paper trading"), icon: "wallet", blurb: msg("Trade with virtual money, no risk") },
+      { href: "/learn", label: msg("Lessons"), icon: "book", blurb: msg("Short stories from gold's history, then trade that week") },
+      { href: "/paper/replay", label: msg("Replay a day"), icon: "clock", blurb: msg("Trade a past day candle by candle") },
+      { href: "/paper/prop", label: msg("Prop challenge"), icon: "risk", blurb: msg("Hit a profit target inside daily and overall loss limits") },
+      { href: "/paper/challenge", label: msg("Weekly challenge"), icon: "trophy", blurb: msg("Same day for everyone, with an opt-in leaderboard") },
+      { href: "/paper/agent", label: msg("Strategy agent"), icon: "bolt", blurb: msg("Let a strategy trade on paper and learn why") },
+      { href: "/trades", label: msg("Trade log"), icon: "trades", blurb: msg("Review your own real trades") },
     ],
   },
   {
-    label: "You",
+    label: msg("You"),
     items: [
-      { href: "/risk", label: "Risk profile", icon: "risk", blurb: "Find the limits that suit you" },
-      { href: "/record", label: "Verified record", icon: "seal", blurb: "Your sealed track record, Skill Passport and shareable proof" },
-      { href: "/coach", label: "Coach", icon: "check", blurb: "Mistakes on your own trades, your playbook and a weekly report" },
-      { href: "/assistant", label: "Assistant", icon: "assistant", blurb: "Ask anything in plain language" },
+      { href: "/risk", label: msg("Risk profile"), icon: "risk", blurb: msg("Find the limits that suit you") },
+      { href: "/record", label: msg("Verified record"), icon: "seal", blurb: msg("Your sealed track record, Skill Passport and shareable proof") },
+      { href: "/coach", label: msg("Coach"), icon: "check", blurb: msg("Mistakes on your own trades, your playbook and a weekly report") },
+      { href: "/assistant", label: msg("Assistant"), icon: "assistant", blurb: msg("Ask anything in plain language") },
     ],
   },
 ];
@@ -62,7 +63,7 @@ function active(path: string, href: string) {
   return path === href || path.startsWith(href + "/");
 }
 
-function Menu({ group, path }: { group: (typeof GROUPS)[number]; path: string }) {
+function Menu({ group, path, t }: { group: (typeof GROUPS)[number]; path: string; t: T }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const on = group.items.some((i) => active(path, i.href));
@@ -83,7 +84,7 @@ function Menu({ group, path }: { group: (typeof GROUPS)[number]; path: string })
     <div ref={ref} className="relative" onMouseLeave={() => setOpen(false)}>
       <button type="button" onClick={() => setOpen(!open)} onMouseEnter={() => setOpen(true)} aria-expanded={open}
         className={`flex items-center gap-1 rounded-full px-3.5 py-1.5 transition-colors ${on ? "bg-surface-2 text-foreground" : "text-muted hover:text-foreground"}`}>
-        {group.label}
+        {t(group.label)}
         <Icon name="down" className={`h-3 w-3 transition-transform duration-300 ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
@@ -96,8 +97,8 @@ function Menu({ group, path }: { group: (typeof GROUPS)[number]; path: string })
                   <Icon name={i.icon} className="h-4 w-4" />
                 </span>
                 <span>
-                  <span className="block text-sm font-medium text-foreground">{i.label}</span>
-                  <span className="block text-xs leading-snug text-muted">{i.blurb}</span>
+                  <span className="block text-sm font-medium text-foreground">{t(i.label)}</span>
+                  <span className="block text-xs leading-snug text-muted">{t(i.blurb)}</span>
                 </span>
               </Link>
             ))}
@@ -114,6 +115,7 @@ export default function Header() {
   const router = useRouter();
   const [mobile, setMobile] = useState(false);
   const [market] = useMarket();
+  const { t } = useT();
   const lab = MARKET_PAGES.some((p) => path === p || (path.startsWith(`${p}/`) && p !== "/paper")) ? labName(market) : null;
   useEffect(() => setMobile(false), [path]);
   useEffect(() => {
@@ -130,19 +132,19 @@ export default function Header() {
 
   const account = user === undefined ? null : user ? (
     <>
-      <Link href="/account" title={user.name || user.email} aria-label="Account"
+      <Link href="/account" title={user.name || user.email} aria-label={t("Account")}
         className="flex h-8 w-8 items-center justify-center rounded-full border border-border text-muted transition-colors hover:text-foreground">
         <Icon name="account" className="h-4 w-4" />
       </Link>
       <button onClick={logout} className="hidden rounded-full px-3 py-1.5 text-muted transition-colors hover:text-foreground sm:block">
-        Log out
+        {t("Log out")}
       </button>
     </>
   ) : (
     <>
-      <Link href="/login" className="hidden text-muted transition-colors hover:text-foreground sm:block">Log in</Link>
+      <Link href="/login" className="hidden text-muted transition-colors hover:text-foreground sm:block">{t("Log in")}</Link>
       <Link href="/signup" className="rounded-full bg-gold px-4 py-1.5 font-medium text-black transition-opacity hover:opacity-90">
-        Sign up free
+        {t("Sign up free")}
       </Link>
     </>
   );
@@ -156,12 +158,12 @@ export default function Header() {
           {lab && <span key={lab} className="rise-in hidden rounded-full border border-gold/40 px-2 py-0.5 text-[11px] font-medium text-gold sm:inline">{lab}</span>}
         </Link>
         <nav aria-label="Main" data-tour="menus" className="hidden items-center gap-1 text-sm md:flex">
-          {GROUPS.map((g) => <Menu key={g.label} group={g} path={path} />)}
+          {GROUPS.map((g) => <Menu key={g.label} group={g} path={path} t={t} />)}
         </nav>
         <div className="ml-auto flex items-center gap-2 text-sm">
           <ThemeMenu />
           {account}
-          <button type="button" data-tour="menus" onClick={() => setMobile(!mobile)} aria-expanded={mobile} aria-label={mobile ? "Close menu" : "Open menu"}
+          <button type="button" data-tour="menus" onClick={() => setMobile(!mobile)} aria-expanded={mobile} aria-label={mobile ? t("Close menu") : t("Open menu")}
             className="flex h-8 w-8 items-center justify-center rounded-full border border-border text-muted md:hidden">
             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
               {mobile ? <path d="M6 6l12 12M18 6 6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
@@ -173,7 +175,7 @@ export default function Header() {
         <nav aria-label="Main" className="fan-in max-h-[calc(100dvh-57px)] overflow-y-auto border-t border-border/60 bg-background px-4 pb-8 pt-2 md:hidden">
           {GROUPS.map((g) => (
             <div key={g.label} className="mt-4">
-              <p className="px-2 text-xs font-medium uppercase tracking-wider text-muted">{g.label}</p>
+              <p className="px-2 text-xs font-medium uppercase tracking-wider text-muted">{t(g.label)}</p>
               <div className="mt-1.5">
                 {g.items.map((i) => (
                   <Link key={i.href} href={i.href} aria-current={active(path, i.href) ? "page" : undefined}
@@ -182,8 +184,8 @@ export default function Header() {
                       <Icon name={i.icon} className="h-4 w-4" />
                     </span>
                     <span>
-                      <span className="block text-sm font-medium">{i.label}</span>
-                      <span className="block text-xs text-muted">{i.blurb}</span>
+                      <span className="block text-sm font-medium">{t(i.label)}</span>
+                      <span className="block text-xs text-muted">{t(i.blurb)}</span>
                     </span>
                   </Link>
                 ))}
@@ -191,10 +193,10 @@ export default function Header() {
             </div>
           ))}
           {user && (
-            <button onClick={logout} className="mt-6 w-full rounded-full border border-border py-2.5 text-sm text-muted">Log out</button>
+            <button onClick={logout} className="mt-6 w-full rounded-full border border-border py-2.5 text-sm text-muted">{t("Log out")}</button>
           )}
           {user === null && (
-            <Link href="/login" className="mt-6 block w-full rounded-full border border-border py-2.5 text-center text-sm text-muted">Log in</Link>
+            <Link href="/login" className="mt-6 block w-full rounded-full border border-border py-2.5 text-center text-sm text-muted">{t("Log in")}</Link>
           )}
         </nav>
       )}

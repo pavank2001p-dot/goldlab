@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type LiveQuote, type Market, type Summary } from "@/lib/api";
 import { GOLD, fmtMarketPrice, ticker } from "@/lib/markets";
+import { useT } from "@/lib/i18n";
+import { UNIT_NAMES, convert, fmtLocal, useLocalPrice } from "@/lib/localPrice";
 
 export default function PriceTicker({ market = GOLD }: { market?: Market }) {
   const symbol = market.symbol;
@@ -10,6 +12,8 @@ export default function PriceTicker({ market = GOLD }: { market?: Market }) {
   const [s, setS] = useState<Summary | null>(null);
   const [q, setQ] = useState<LiveQuote | null>(null);
   const last = useRef<number | null>(null);
+  const { t, lang } = useT();
+  const { pref, fx, local } = useLocalPrice();
   useEffect(() => {
     setS(null);
     setQ(null);
@@ -47,6 +51,8 @@ export default function PriceTicker({ market = GOLD }: { market?: Market }) {
     );
   const up = (s.change_24h ?? 0) >= 0;
   const asOf = s.as_of ? new Date(s.as_of * 1000) : null;
+  // Only gold quoted in dollars per ounce converts cleanly into a local price per gram or tola.
+  const localPrice = local && symbol === GOLD.symbol ? convert(price, pref, fx) : null;
   return (
     <div>
       <div className="flex flex-wrap items-baseline gap-3">
@@ -65,8 +71,18 @@ export default function PriceTicker({ market = GOLD }: { market?: Market }) {
           </span>
         )}
       </div>
+      {localPrice != null && (
+        <p className="mt-1 text-lg font-medium tabular-nums" title={t("Spot price at today's exchange rate, before local taxes, duties and making charges.")}>
+          {t("≈ {price} per {unit}", { price: fmtLocal(localPrice, pref.currency, lang), unit: t(UNIT_NAMES[pref.unit]) })}
+          <span className="ms-2 text-xs font-normal text-muted">
+            {fx?.source === "fallback"
+              ? t("Rough exchange rate; today's rate couldn't be loaded.")
+              : t("Spot price at today's exchange rate, before local taxes, duties and making charges.")}
+          </span>
+        </p>
+      )}
       <p className="mt-1 text-xs text-muted">
-        {fresh ? <>Live quote. </> : asOf && <>Last hourly bar {asOf.toLocaleString()}. </>}
+        {fresh ? <>{t("Live quote.")} </> : asOf && <>{t("Last hourly bar {time}.", { time: asOf.toLocaleString() })} </>}
         {s.source === "sample" && (
           <span className="text-gold">
             {symbol === GOLD.symbol

@@ -133,6 +133,15 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
   Asked to build a strategy, it writes its own builder rules, tests them with `test_rules` (results for the whole
   period, the earlier 70% and the last 30% alone, next to buy and hold), adjusts a few times, then saves the version
   it describes with `save_strategy` and links to it in the builder (`/strategies/builder?id=<id>`).
+- **Language and local gold price** (`web/src/lib/i18n.tsx`, `web/src/lib/localPrice.ts`, `api/app/fx.py`): the
+  settings menu (the moon or sun button) picks a language, a currency and a gold unit (troy ounce, gram, 10 grams,
+  tola, kilogram). The English text in the code is the translation key, so untranslated text stays in English.
+  To add a language, copy `web/src/i18n/hi.ts`, translate the values, and add it to `CATALOGS` and `LANGS`;
+  `npm run i18n:check` (also run in CI) lists strings a catalog is missing. Right-to-left languages flip the layout;
+  charts stay left to right. Hindi and Arabic are AI drafts marked as such until a native speaker checks them.
+  The gold price is also shown converted, for example INR per 10 grams or AED per gram, as spot before local taxes
+  and duties. Rates are ECB reference rates via Frankfurter (`FX_URL`), cached six hours; AED and SAR use their
+  dollar pegs. Trading and reports stay in US dollars per ounce.
 - **Disclaimer** page at `/disclaimer`, linked from the footer and the assistant.
 
 ## Run locally
