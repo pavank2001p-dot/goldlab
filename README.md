@@ -60,6 +60,15 @@ api/   FastAPI + Postgres (Railway). Auth, price data, and later backtests, news
   the public page re-walks the chain, re-checks the signature and recomputes the stats, and shows Verified, Does not
   check out, or Withdrawn. No email is shown. Skill Passport levels (Bronze, Silver, Gold) come from the same
   ledger, reward process (stops kept, small losses, shallow drawdowns), and leave strategy agent trades out.
+- **Daily Candle** (`api/app/daily.py`, home page): one real moment of gold history a day, the same for everyone. The
+  chart stops at an hour where the next 12 hours moved a lot (chosen once per day from 40 seeded guesses and stored);
+  the date and price level are hidden until the player picks buy, sell or wait. Then the next 12 hours play out, with
+  the real date, what $1,000 would have made, the worst move against the call and the crowd split. Signed-in plays
+  are kept (one a day) for a streak; signed-out plays are answered and remembered in the browser.
+- **Money Mirror** (`web/src/components/MoneyMirror.tsx`): the user names what they might really trade with, their
+  monthly pay and something they are saving for, in their own currency (saved as the `mirror` pref). The order ticket
+  then shows each stop as real money, hours of work and a share of the goal, and the home desk shows paper results so
+  far as a goal jar.
 - **Trade log** (`api/app/trades.py`): manual entry or CSV import (MetaTrader 4/5 and most broker exports; gold
   rows only; re-imports skip known tickets). Produces the same report as a backtest (`api/app/report.py`).
 

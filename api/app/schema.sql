@@ -384,3 +384,21 @@ CREATE TABLE IF NOT EXISTS record_reports (
     revoked_at   TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS record_reports_user_idx ON record_reports (user_id, issued_at DESC);
+
+-- Daily Candle (app/daily.py): one hidden moment of gold history a day, chosen once and kept.
+CREATE TABLE IF NOT EXISTS daily_candles (
+    day       DATE PRIMARY KEY,
+    symbol    TEXT NOT NULL,
+    frozen_ts BIGINT NOT NULL                     -- the last hourly bar shown before the choice
+);
+
+-- One answer per signed-in player per day, for the streak and the crowd split.
+CREATE TABLE IF NOT EXISTS daily_candle_plays (
+    user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    day        DATE NOT NULL,
+    choice     TEXT NOT NULL CHECK (choice IN ('buy', 'sell', 'wait')),
+    correct    BOOLEAN NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, day)
+);
+CREATE INDEX IF NOT EXISTS daily_candle_plays_day_idx ON daily_candle_plays (day);

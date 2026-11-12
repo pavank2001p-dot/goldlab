@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import { useUser } from "./useUser";
 
-type Key = "drawings" | "indicators" | "chart_events" | "trading";
+type Key = "drawings" | "indicators" | "chart_events" | "trading" | "mirror";
 
 // One fetch of the account's settings per signed-in user per page load.
 let cache: { user: number; prefs: Promise<Record<string, unknown>> } | null = null;
