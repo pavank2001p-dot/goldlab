@@ -344,6 +344,24 @@ export type PaperOrderInput = {
   oco_with?: number | null;
 };
 
+export type CoachTag = "no_stop" | "stop_widened" | "revenge" | "oversized" | "red_folder" | "stop_out";
+export type CoachTags = {
+  labels: Record<CoachTag, { label: string; explain: string }>;
+  by_trade: Record<string, CoachTag[]>;
+  counts: Record<CoachTag, number>;
+  trades: number;
+  clean: number;
+};
+export type Playbook = { rules: string[]; custom: boolean; max: number };
+export type PreTrade = { rules: string[]; warnings: { key: string; text: string }[]; risk_limit_pct: number };
+type WeekSummary = { trades: number; net: number; win_rate_pct: number | null; clean_trades: number; tags: Partial<Record<CoachTag, number>> };
+export type CoachWeek = {
+  week: string; finished: boolean; source: "ai" | "rules"; created_at: string;
+  headline: string; went_well: string[]; work_on: string; next_week_goal: string;
+  facts: { this_week: WeekSummary; week_before: WeekSummary };
+  trades: { id: number; symbol: string; side: "long" | "short"; pnl: number; tags: CoachTag[]; closed_at: string }[];
+};
+
 export type PlanStats = {
   total_return_pct: number | null;
   cagr_pct: number | null;
@@ -585,6 +603,11 @@ export const api = {
     call<PaperState>(withSym("/paper/settings", symbol), { method: "PATCH", body: JSON.stringify({ leverage }) }),
   paperFunds: (amount: number, symbol?: string) =>
     call<PaperState>(withSym("/paper/funds", symbol), { method: "POST", body: JSON.stringify({ amount }) }),
+  coachTags: () => call<CoachTags>("/coach/tags"),
+  coachPlaybook: () => call<Playbook>("/coach/playbook"),
+  coachSavePlaybook: (rules: string[]) => call<Playbook>("/coach/playbook", { method: "PUT", body: JSON.stringify({ rules }) }),
+  coachPreTrade: () => call<PreTrade>("/coach/pretrade"),
+  coachWeek: (week?: string) => call<CoachWeek>(week ? `/coach/weekly?week=${week}` : "/coach/weekly"),
   paperReport: () => call<Report>("/paper/report"),
   paperFit: () => call<Fit>("/paper/fit"),
   agent: () => call<AgentState>("/agent"),

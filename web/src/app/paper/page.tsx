@@ -21,6 +21,8 @@ import AlertsCard from "@/components/practice/AlertsCard";
 import Insights from "@/components/practice/Insights";
 import TradeReview from "@/components/practice/TradeReview";
 import { usePref } from "@/lib/prefs";
+import TagChips from "@/components/coach/TagChips";
+import type { CoachTags, PreTrade } from "@/lib/api";
 
 type Side = "long" | "short";
 type Kind = "market" | "limit" | "stop";
@@ -524,6 +526,7 @@ function Ticket({ state, market, profile, onPlaced, busy, setBusy }: {
               <Check ok={reward >= risk}>The target would make {(reward / risk).toFixed(1)} times what the stop would lose.</Check>
             )}
           </ul>
+          <PreTradeCheck />
           <p className="text-xs text-muted">Virtual money only. You can change anything, or simply not place it.</p>
           <div className="grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setReview(false)} className="rounded-full border border-border py-2.5 text-sm transition-colors hover:bg-surface-2">
@@ -554,6 +557,41 @@ function Ticket({ state, market, profile, onPlaced, busy, setBusy }: {
         <input type="checkbox" className="sr-only" checked={oneClick} onChange={(e) => setPrefs({ oneClick: e.target.checked })} />
       </label>
     </form>
+  );
+}
+
+/** The user's own playbook as a checklist, plus the coach's warnings for right now (a recent loss, a big release). */
+function PreTradeCheck() {
+  const [d, setD] = useState<PreTrade | null>(null);
+  const [ticked, setTicked] = useState<Set<number>>(new Set());
+  useEffect(() => { api.coachPreTrade().then(setD, () => {}); }, []);
+  if (!d) return null;
+  return (
+    <div className="space-y-2 border-t border-calm/20 pt-3">
+      {d.warnings.map((w) => (
+        <p key={w.key} className="flex gap-2 rounded-lg bg-gold/10 p-2 text-xs text-gold"><Icon name="bolt" className="mt-0.5 h-3.5 w-3.5 shrink-0" />{w.text}</p>
+      ))}
+      {d.rules.length > 0 && (
+        <>
+          <p className="flex justify-between text-xs text-muted">
+            <span>Your playbook</span>
+            <Link href="/coach" className="text-gold hover:underline">Edit</Link>
+          </p>
+          <ul className="space-y-1">
+            {d.rules.map((r, i) => (
+              <li key={i}>
+                <label className="flex cursor-pointer gap-2 text-xs">
+                  <input type="checkbox" className="mt-0.5 accent-[var(--gold)]" checked={ticked.has(i)}
+                    onChange={() => setTicked((t) => { const n = new Set(t); if (n.has(i)) n.delete(i); else n.add(i); return n; })} />
+                  <span className={ticked.has(i) ? "" : "text-muted"}>{r}</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+          {ticked.size < d.rules.length && <p className="text-[11px] text-muted">{d.rules.length - ticked.size} of your rules not ticked yet.</p>}
+        </>
+      )}
+    </div>
   );
 }
 
@@ -673,6 +711,7 @@ export default function PaperPage() {
   }, []);
   const [error, setError] = useState<string | null>(null);
   const [grades, setGrades] = useState<Record<string, "A" | "B" | "C" | "D">>({});
+  const [coachTags, setCoachTags] = useState<CoachTags | null>(null);
   const seen = useRef<Set<number> | null>(null);
   const openIds = useRef<Set<number> | null>(null);
 
@@ -711,7 +750,8 @@ export default function PaperPage() {
   const closedCount = state?.account.closed_trades ?? 0;
   useEffect(() => {
     if (user && tab === "history") api.reviewGrades().then(setGrades, () => {});
-  }, [user, tab]);
+    if (user && tab === "history") api.coachTags().then(setCoachTags, () => {});
+  }, [user, tab, closedCount]);
   useEffect(() => {
     if (user && tab === "report") api.paperReport().then(setReport, () => {});
   }, [user, tab, closedCount]);
@@ -897,6 +937,7 @@ export default function PaperPage() {
                       <span className="text-xs text-muted tabular-nums">{px(h.entry_price, marketOf(h.symbol).decimals)} → {px(h.exit_price, marketOf(h.symbol).decimals)}</span>
                       <span className="rounded-full bg-border px-2 py-0.5 text-[11px] text-muted">{REASON[h.close_reason ?? ""]}</span>
                       <span className="text-xs text-muted">{h.closed_at && when(h.closed_at)}</span>
+                      <TagChips tags={coachTags?.by_trade[String(h.id)]} labels={coachTags?.labels} />
                       <span className={`ml-auto font-medium tabular-nums ${tone(h.pnl)}`}>{signed(h.pnl)}</span>
                       <TradeReview id={h.id} grade={grades[String(h.id)]} onGraded={(g) => setGrades((m) => ({ ...m, [String(h.id)]: g }))} />
                     </div>
