@@ -288,3 +288,6 @@ CREATE TABLE IF NOT EXISTS coach_reports (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (user_id, week)
 );
+
+-- Realistic fills (app/fills.py): wider spreads and stop slippage around big releases and the daily rollover.
+ALTER TABLE paper_accounts ADD COLUMN IF NOT EXISTS realistic_fills BOOLEAN NOT NULL DEFAULT true;

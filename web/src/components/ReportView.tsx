@@ -85,6 +85,12 @@ export default function ReportView({ report, kind }: { report: Report; kind: "ba
           starting capital; try fewer ounces per trade or a stop loss.
         </p>
       )}
+      {s.slipped_stops != null && (
+        <p className="text-xs text-muted">
+          Realistic fills: spreads widen at the rollover and around big releases.{" "}
+          {s.slipped_stops ? `${s.slipped_stops} stop${s.slipped_stops === 1 ? "" : "s"} slipped past ${s.slipped_stops === 1 ? "its" : "their"} price during a release.` : "No stop was hit during a release."}
+        </p>
+      )}
       <div className="grid gap-3 @4xl:grid-cols-[1fr_220px]">
         <div className="grid grid-cols-2 gap-3 @xl:grid-cols-4">
           <Stat icon="wallet" label="Net profit" num={s.net_profit} fmt={(v) => fmtUsd(v)} tone={tone(s.net_profit)} />

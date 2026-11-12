@@ -27,6 +27,7 @@ const DEFAULTS: Omit<BacktestParams, "strategy" | "params"> = {
   stop_loss_pct: null,
   take_profit_pct: null,
   size_pct: null,
+  realistic_fills: true,
 };
 
 /** A market's usual trade size and broker costs. A swap charged as a yearly % of the position is left empty
@@ -280,6 +281,11 @@ export default function BacktestPage() {
             <Field label={`Swap long ($/${market.unit}/night)`}><Num value={form.swap_long} placeholder={`${market.swap_long_pct}% a year`} onChange={(v) => set({ swap_long: v })} /></Field>
             <Field label={`Swap short ($/${market.unit}/night)`}><Num value={form.swap_short} placeholder={`${market.swap_short_pct}% a year`} onChange={(v) => set({ swap_short: v })} /></Field>
           </div>
+          <label className="mt-3 flex items-start gap-2 text-sm">
+            <input type="checkbox" checked={form.realistic_fills ?? true} className="mt-1 accent-[var(--gold)]"
+              onChange={(e) => set({ realistic_fills: e.target.checked })} />
+            <span>Realistic fills<span className="block text-xs text-muted">Wider spreads at the 5pm New York rollover (hourly candles) and around high-impact releases, and stops that slip past their price when a release lands inside their candle.</span></span>
+          </label>
           <p className="mt-2 text-xs text-muted">
             Defaults are rough estimates for {market.name}. An empty swap charges the yearly rate shown on the position&apos;s value.
             Check your broker&apos;s spread and swap rates.
