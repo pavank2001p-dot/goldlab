@@ -355,6 +355,36 @@ CREATE TABLE IF NOT EXISTS replay_sessions (
 );
 CREATE INDEX IF NOT EXISTS replay_sessions_user_idx ON replay_sessions (user_id, updated_at DESC);
 
+-- Verified track record (app/record.py): an append-only, hash-chained ledger of closed paper trades, resets,
+-- deposits and finished prop challenges. Starting the paper account over doesn't touch it.
+CREATE TABLE IF NOT EXISTS record_entries (
+    user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    seq        INTEGER NOT NULL,
+    kind       TEXT NOT NULL CHECK (kind IN ('start', 'trade', 'reset', 'funds', 'prop')),
+    data       JSONB NOT NULL,
+    prev_hash  TEXT NOT NULL,
+    hash       TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, seq)
+);
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS sealed BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE prop_challenges ADD COLUMN IF NOT EXISTS sealed BOOLEAN NOT NULL DEFAULT false;
+CREATE INDEX IF NOT EXISTS paper_positions_unsealed_idx ON paper_positions (user_id) WHERE closed_at IS NOT NULL AND NOT sealed;
+
+-- Signed snapshots of the record that anyone with the link can check at /verify/{id}.
+CREATE TABLE IF NOT EXISTS record_reports (
+    id           TEXT PRIMARY KEY,
+    user_id      BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    display_name TEXT NOT NULL,
+    issued_at    TIMESTAMPTZ NOT NULL,
+    upto_seq     INTEGER NOT NULL,
+    head_hash    TEXT NOT NULL,
+    snapshot     JSONB NOT NULL,
+    signature    TEXT NOT NULL,
+    revoked_at   TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS record_reports_user_idx ON record_reports (user_id, issued_at DESC);
+
 -- Daily Candle (app/daily.py): one hidden moment of gold history a day, chosen once and kept.
 CREATE TABLE IF NOT EXISTS daily_candles (
     day       DATE PRIMARY KEY,

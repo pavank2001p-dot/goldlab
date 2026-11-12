@@ -29,6 +29,28 @@ const withSym = (path: string, symbol?: string) => {
   return q ? `${path}${path.includes("?") ? "&" : "?"}${q}` : path;
 };
 
+export type RecordStats = {
+  trades: number; agent_trades: number; days: number; first: string | null; last: string | null;
+  return_pct: number; max_dd: number; win_rate_pct: number; profit_factor: number | null;
+  avg_win_pct: number | null; avg_loss_pct: number | null; worst_loss: number; stop_pct: number; kept_stop_pct: number;
+  markets: [string, number][]; prop_passed: number; prop_failed: number; resets: number;
+};
+export type PassportCheck = { key: string; label: string; now: string; ok: boolean };
+export type PassportLevel = { key: "bronze" | "silver" | "gold"; name: string; title: string; blurb: string; checks: PassportCheck[]; done: number; total: number };
+export type Passport = { level: PassportLevel | null; next: PassportLevel | null; levels: { key: string; name: string; title: string; blurb: string }[] };
+export type RecordReport = { id: string; display_name: string; issued_at: string; upto_seq: number; head_hash: string; revoked: boolean; level: string | null; trades: number };
+export type RecordEntry = { seq: number; kind: string; at: string | null; hash: string; prev_hash: string; summary: string };
+export type RecordOverview = {
+  stats: RecordStats; passport: Passport; chain: { ok: boolean; head: string | null; entries: number; broken_at: number | null };
+  recent: RecordEntry[]; reports: RecordReport[];
+};
+export type RecordTrade = { seq: number; symbol: string; side: "long" | "short"; opened_at: string; closed_at: string; entry_price: number; exit_price: number; stop: boolean; agent: boolean; pct: number; reason: string | null };
+export type VerifiedReport = {
+  id: string; status: "verified" | "altered" | "revoked"; display_name: string; issued_at: string;
+  checks?: { chain: boolean; signature: boolean; stats: boolean }; entries?: number; head_hash?: string;
+  stats?: RecordStats; passport?: Passport; trades?: RecordTrade[];
+};
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -742,6 +764,10 @@ export const api = {
   coachPreTrade: () => call<PreTrade>("/coach/pretrade"),
   coachWeek: (week?: string) => call<CoachWeek>(week ? `/coach/weekly?week=${week}` : "/coach/weekly"),
   paperReport: () => call<Report>("/paper/report"),
+  record: () => call<RecordOverview>("/record"),
+  recordIssue: (display_name: string) => call<RecordReport>("/record/reports", { method: "POST", body: JSON.stringify({ display_name }) }),
+  recordRevoke: (id: string) => call<void>(`/record/reports/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  recordVerify: (id: string) => call<VerifiedReport>(`/record/verify/${encodeURIComponent(id)}`),
   prop: () => call<PropOverview>("/prop"),
   propStart: (body: PropStartInput) => call<{ current: PropChallenge }>("/prop/start", { method: "POST", body: JSON.stringify(body) }),
   propLeave: () => call<{ history: PropChallenge[] }>("/prop/leave", { method: "POST" }),

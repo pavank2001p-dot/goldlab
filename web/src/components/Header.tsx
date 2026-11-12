@@ -50,6 +50,7 @@ export const GROUPS: { label: string; items: Item[] }[] = [
     label: msg("You"),
     items: [
       { href: "/risk", label: msg("Risk profile"), icon: "risk", blurb: msg("Find the limits that suit you") },
+      { href: "/record", label: msg("Verified record"), icon: "seal", blurb: msg("Your sealed track record, Skill Passport and shareable proof") },
       { href: "/coach", label: msg("Coach"), icon: "check", blurb: msg("Mistakes on your own trades, your playbook and a weekly report") },
       { href: "/assistant", label: msg("Assistant"), icon: "assistant", blurb: msg("Ask anything in plain language") },
     ],

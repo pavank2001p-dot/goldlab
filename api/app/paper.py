@@ -24,7 +24,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, model_validator
 
-from . import config, db, fills
+from . import config, db, fills, record
 from . import instruments as ins
 from .auth import UserOut, current_user
 from .fit import _profile, assess
@@ -362,6 +362,7 @@ def sync(c, user_id: int, symbol: str = GOLD.symbol) -> tuple[dict, _Book, dict 
         book.rules.finish(book, datetime.now(timezone.utc))
     acct = c.execute("UPDATE paper_accounts SET balance = %s, checked_at = GREATEST(checked_at, %s) "
                      "WHERE user_id = %s RETURNING *", (round(book.balance, 2), checked, user_id)).fetchone()
+    record.seal(c, user_id)
     return acct, book, prices.get(wanted)
 
 
@@ -699,6 +700,7 @@ def reset(body: ResetIn, symbol: str = GOLD.symbol, user: UserOut = Depends(curr
     with db.conn() as c:
         acct = _account(c, user.id, lock=True)
         prop.leave(c, acct)
+        record.note_reset(c, user.id, body.balance)
         c.execute("DELETE FROM paper_orders WHERE user_id = %s", (user.id,))
         c.execute("DELETE FROM paper_positions WHERE user_id = %s", (user.id,))
         c.execute("UPDATE paper_accounts SET starting_balance = %s, balance = %s, leverage = %s, checked_at = now(), "
@@ -748,6 +750,7 @@ def funds(body: FundsIn, symbol: str = GOLD.symbol, user: UserOut = Depends(curr
             raise HTTPException(422, f"The account can hold at most ${MAX_BALANCE:,.0f}")
         c.execute("UPDATE paper_accounts SET balance = balance + %s, starting_balance = GREATEST(starting_balance + %s, 1) "
                   "WHERE user_id = %s", (body.amount, body.amount, user.id))
+        record.note_funds(c, user.id, body.amount)
     return summary(user.id, symbol)
 
 

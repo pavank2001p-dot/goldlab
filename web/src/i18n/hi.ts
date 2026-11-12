@@ -31,6 +31,8 @@ const hi: Record<string, string> = {
   "Review your own real trades": "अपने असली ट्रेड की समीक्षा करें",
   "Risk profile": "जोखिम प्रोफ़ाइल",
   "Find the limits that suit you": "अपने लिए सही सीमाएँ खोजें",
+  "Verified record": "सत्यापित रिकॉर्ड",
+  "Your sealed track record, Skill Passport and shareable proof": "आपका सील किया गया ट्रैक रिकॉर्ड, स्किल पासपोर्ट और शेयर करने लायक सबूत",
   "Assistant": "सहायक",
   "Ask anything in plain language": "आसान भाषा में कुछ भी पूछें",
   "Manual backtesting": "मैनुअल बैकटेस्टिंग",
